@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - app-network
+
+  api-gateway:
+    build:
+      context: ./backend/api_gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - IMAGE_SERVICE_URL=http://image-service:8001
+      - LLM_SERVICE_URL=http://llm-service:8002
+      - WORKFLOW_SERVICE_URL=http://workflow-service:8003
+      - SECRET_KEY=yoursecretkey
+    depends_on:
+      - image-service
+      - llm-service
+      - workflow-service
+    networks:
+      - app-network
+
+  image-service:
+    build:
+      context: ./backend/image_service
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - image_uploads:/app/uploads
+      - image_processed:/app/processed
+    networks:
+      - app-network
+
+  llm-service:
+    build:
+      context: ./backend/llm_service
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - IMAGE_SERVICE_URL=http://image-service:8001
+    volumes:
+      - llm_results:/app/results
+    networks:
+      - app-network
+
+  workflow-service:
+    build:
+      context: ./backend/workflow_service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      - IMAGE_SERVICE_URL=http://image-service:8001
+      - LLM_SERVICE_URL=http://llm-service:8002
+    volumes:
+      - workflow_storage:/app/storage
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  image_uploads:
+  image_processed:
+  llm_results:
+  workflow_storage: 
