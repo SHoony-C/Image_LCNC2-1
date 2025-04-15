@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div class="image-measurement-popup" v-if="showPopup" @click="closePopup">
-      <div class="measurement-container" @click.stop>
+      <div ref="container" class="measurement-container" @click.stop>
         <div class="measurement-header">
           <h3>이미지 측정 도구</h3>
           <div class="header-controls">
@@ -31,13 +31,28 @@
         
         <div class="measurement-content">
           <div class="image-container" ref="imageContainer">
-            <img :src="imageUrl" alt="Measurement Image" ref="measurementImage" 
+            <!-- 원본 이미지는 로드되지만 화면에 표시되지 않음 -->
+            <img 
+              ref="measurementImage" 
+              :src="imageUrl" 
+              crossorigin="anonymous"
+              alt="Original Image" 
+              @load="handleImageLoad" 
+              style="visibility: hidden; position: absolute; width: 1px; height: 1px;" 
+              />
+            <!-- 변환된 그레이스케일 이미지가 있을 때만 표시 -->
+            <img 
+              ref="displayedImage"
+              v-if="convertedImage" 
+              :src="convertedImage" 
+              crossorigin="anonymous"
+              alt="Grayscale Image"
               @mousedown.prevent="startMeasurement" 
               @mousemove.prevent="updateMeasurement" 
               @mouseup.prevent="endMeasurement"
               @mouseleave.prevent="endMeasurement"
               draggable="false"
-              @load="initSVG">
+            />
             <svg class="measurement-overlay" ref="overlay"></svg>
           </div>
           
@@ -198,6 +213,9 @@ export default {
   emits: ['close'],
   data() {
     return {
+      convertedImage: null,
+      isGrayscale: false,
+      greyCanvas: null,
       isDrawing: false,
       isMeasuring: false,
       isEditing: false,
@@ -221,6 +239,7 @@ export default {
       tempSubItemId: '',
       threshold: 128,
       brightnessThreshold: 128,
+      sampleCountPerSegment: 20,
       svgInitialized: false,
       
       nextId: 1,
@@ -258,14 +277,22 @@ export default {
     }
   },
   mounted() {
-    this.initSVG()
-    document.addEventListener('keydown', this.handleEscKey)
+    // showPopup가 이미 true이면 바로 initSVG() 호출, 아니면 watch에서 호출합니다.
+    if (this.showPopup) {
+      this.$nextTick(() => {
+        this.initSVG();
+      });
+    }
+    window.addEventListener('resize', this.onWindowResize);
   },
   beforeUnmount() {
-    document.removeEventListener('keydown', this.handleEscKey)
+    window.removeEventListener('resize', this.onWindowResize);
   },
   methods: {
-    
+    onWindowResize() {
+      this.initSVG();
+      this.updateOverlay();
+  },
     calculateBrightnessAtPointImproved(x, y) {
   try {
     const img = this.$refs.measurementImage;
@@ -333,27 +360,28 @@ export default {
       }
     },
     initSVG() {
-      console.log('Initializing SVG')
       this.$nextTick(() => {
-        const container = this.$refs.imageContainer
-        const img = this.$refs.measurementImage
-        
-        if (!container || !img) {
-          console.error('Container or image not found')
-          return
-        }
-        
-        if (img.complete) {
-          console.log('Image already loaded')
-          this.setupSVG(container)
-        } else {
-          console.log('Waiting for image to load')
-          img.onload = () => {
-            console.log('Image loaded')
-            this.setupSVG(container)
-          }
-        }
-      })
+    const container = this.$refs.container;
+    if (!container) {
+      console.error("컨테이너(ref='container')가 존재하지 않습니다.");
+      return;
+    }
+    this.svg = this.$refs.overlay;
+    if (!this.svg) {
+      console.error("SVG 오버레이(ref='overlay')가 존재하지 않습니다.");
+      return;
+    }
+    
+
+    // 컨테이너 크기를 안전하게 읽기
+    this.svg.setAttribute('width', container.offsetWidth);
+    this.svg.setAttribute('height', container.offsetHeight);
+    this.svg.style.position = 'absolute';
+    this.svg.style.top = '0';
+    this.svg.style.left = '0';
+    this.svgInitialized = true;
+    this.updateOverlay();
+  });
     },
     setupSVG(container) {
       console.log('Setting up SVG')
@@ -380,78 +408,7 @@ export default {
       
       this.updateOverlay()
     },
-    startMeasurement(event) {
-      console.log('=== startMeasurement 호출 ===')
-      
-      if (!this.svg || !this.svgInitialized) {
-        console.error('SVG not initialized')
-        this.initSVG()
-        return
-      }
-      
-      event.preventDefault()
-      event.stopPropagation()
-      
-      const container = this.$refs.imageContainer
-      if (!container) {
-        console.error('Container not found')
-        return
-      }
-      
-      const rect = container.getBoundingClientRect()
-      const x = event.clientX - rect.left
-      const y = event.clientY - rect.top
-      
-      console.log('마우스 위치:', { x, y })
-      
-      if (event.shiftKey && !this.isSettingReference) {
-        const measurement = this.findMeasurementAtPoint(x, y)
-        if (measurement) {
-          this.selectedMeasurement = measurement
-          this.isEditing = true
-          console.log('측정선 편집 선택', measurement)
-          return
-        }
-      }
-      
-      this.isDrawing = true
-      this.isMeasuring = true
-      
-      if (this.isSettingReference) {
-        this.currentMeasurement = {
-          type: 'reference',
-          points: [{ x, y }],
-          value: 0
-        }
-      } else {
-        // 시작 지점 밝기 계산
-        const brightness = this.calculateBrightness(x, y)
-        console.log('시작 지점 밝기:', brightness)
-        
-        this.currentMeasurement = {
-          type: this.measurementMode,
-          points: [{ x, y }],
-          value: 0,
-          itemId: this.nextId.toString(),
-          subItemId: `${this.subItemPrefix}1`,
-          brightness: brightness,
-          // 실선으로 표시하지 않도록 기본값 설정
-          drawAsSolid: false
-        }
-      }
-      
-      this.startPoint = { x, y }
-      this.currentMeasurement.points.push({ x, y })
-      
-      console.log('측정 시작', {
-        isMeasuring: this.isMeasuring,
-        isDrawing: this.isDrawing,
-        startPoint: this.startPoint,
-        currentMeasurement: this.currentMeasurement
-      })
-      
-      this.updateOverlay()
-    },
+
     applyMeasurementInfo() {
       if (this.selectedMeasurementIndex >= 0 && this.selectedMeasurementIndex < this.measurements.length) {
         const measurement = this.measurements[this.selectedMeasurementIndex];
@@ -511,122 +468,7 @@ export default {
         return 128
       }
     },
-    updateMeasurement(event) {
-      console.log('updateMeasurement called', {
-        isMeasuring: this.isMeasuring, 
-        isEditing: this.isEditing,
-        currentMeasurement: this.currentMeasurement ? 'exists' : 'null'
-      })
-      
-      if (!this.isMeasuring && !this.isEditing) return
-      
-      event.preventDefault()
-      event.stopPropagation()
-      
-      const container = this.$refs.imageContainer
-      if (!container) {
-        console.error('Container not found')
-        return
-      }
-      
-      const rect = container.getBoundingClientRect()
-      const x = event.clientX - rect.left
-      const y = event.clientY - rect.top
-      
-      if (this.isEditing && this.selectedMeasurement) {
-        if (this.selectedPointIndex !== undefined) {
-          this.selectedMeasurement.points[this.selectedPointIndex] = { x, y }
-        } else {
-          const points = this.selectedMeasurement.points
-          let closestPoint = null
-          let minDistance = Infinity
-          
-          points.forEach((point, index) => {
-            const dx = point.x - x
-            const dy = point.y - y
-            const distance = Math.sqrt(dx * dx + dy * dy)
-            if (distance < minDistance) {
-              minDistance = distance
-              closestPoint = { point, index }
-            }
-          })
-          
-          if (closestPoint && minDistance <= 10) {
-            points[closestPoint.index] = { x, y }
-          }
-        }
-        this.calculateMeasurement(this.selectedMeasurement)
-      } else if (this.isMeasuring && this.currentMeasurement) {
-        if (this.currentMeasurement.points.length > 1) {
-          this.currentMeasurement.points[this.currentMeasurement.points.length - 1] = { x, y }
-          
-          if (this.currentMeasurement.points.length >= 2) {
-            this.calculateMeasurement(this.currentMeasurement)
-          }
-        }
-        this.startPoint = { x, y }
-        
-        if (this.$refs.measurementImage) {
-          this.currentMeasurement.brightness = this.calculateBrightness(x, y)
-        }
-      }
-      
-      this.updateOverlay()
-    },
-    endMeasurement(event) {
-      console.log('endMeasurement called', {
-        isMeasuring: this.isMeasuring,
-        isEditing: this.isEditing
-      })
-      
-      event.preventDefault()
-      event.stopPropagation()
-      
-      if (this.isEditing) {
-        this.isEditing = false
-        this.selectedMeasurement = null
-        this.selectedPointIndex = undefined
-        this.segmentMeasurements();
-        this.updateOverlay()
-        return
-      }
-      
-      if (!this.isMeasuring || !this.currentMeasurement) {
-        return
-      }
-      
-      this.isMeasuring = false
-      this.isDrawing = false
-      
-      if (this.currentMeasurement.points.length >= 2) {
-        this.calculateMeasurement(this.currentMeasurement)
-        
-        if (this.isSettingReference) {
-          this.referenceScale = this.currentMeasurement.value
-          this.scaleUnit = this.referenceLength / this.referenceScale
-          this.isSettingReference = false
-          console.log('Reference scale set', {
-            referenceScale: this.referenceScale,
-            scaleUnit: this.scaleUnit
-          })
-        } else {
-          console.log('Adding measurement', this.currentMeasurement)
-          const measurementCopy = JSON.parse(JSON.stringify(this.currentMeasurement))
-          this.measurements.push(measurementCopy)
-          
-          this.nextId++;
-          
-          // 새 측정이 추가되면 세그먼트 생성
-          this.$nextTick(() => {
-            this.segmentMeasurements();
-          });
-        }
-      }
-      
-      this.currentMeasurement = null
-      this.startPoint = null
-      this.updateOverlay()
-    },
+    
     calculateMeasurement(measurement) {
       const points = measurement.points
       const start = points[0]
@@ -672,121 +514,7 @@ export default {
       const det = v1.x * v2.y - v1.y * v2.x
       return Math.atan2(det, dot) * (180 / Math.PI)
     },
-    updateOverlay() {
-      console.log('=== updateOverlay 호출 ===');
-      console.log('SVG 초기화 상태:', this.svgInitialized);
-      console.log('측정선 개수:', this.measurements.length);
-      console.log('세그먼트 개수:', this.segmentedMeasurements.length);
-      
-      if (!this.svg || !this.svgInitialized) return;
-      
-      while (this.svg.firstChild) {
-        this.svg.removeChild(this.svg.firstChild);
-      }
-      
-      // 1. 전체 측정선을 먼저 파란색 점선으로 그림
-      this.measurements.forEach((measurement, midx) => {
-        console.log(`측정선 ${midx + 1} 그리기 - ID: ${measurement.itemId}-${measurement.subItemId}`);
-        
-        const points = measurement.points;
-        if (!points || points.length < 2) return;
-        
-        // 전체 경로를 파란색 점선으로 그림
-        const fullPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        let d = `M ${points[0].x} ${points[0].y}`;
-        
-        for (let i = 1; i < points.length; i++) {
-          d += ` L ${points[i].x} ${points[i].y}`;
-        }
-        
-        fullPath.setAttribute('d', d);
-        fullPath.setAttribute('stroke', measurement === this.selectedMeasurement ? '#8b5cf6' : '#3b82f6');
-        fullPath.setAttribute('stroke-width', '2');
-        fullPath.setAttribute('fill', 'none');
-        fullPath.setAttribute('stroke-dasharray', '5,5');
-        
-        this.svg.appendChild(fullPath);
-        
-        // 2. 밝기 임계값을 초과하는 세그먼트만 빨간색 실선으로 그림
-        const matchingSegments = this.segmentedMeasurements.filter(
-          segment => segment.originalMeasurement === measurement && segment.isMatching
-        );
-        
-        console.log(`측정선 ${midx + 1}의 매칭 세그먼트: ${matchingSegments.length}개`);
-        
-        // 빨간색 실선으로 임계값을 초과하는 부분 그리기
-        matchingSegments.forEach((segment, sidx) => {
-          if (segment.points.length < 2) return;
-          
-          const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          let d = `M ${segment.points[0].x} ${segment.points[0].y}`;
-          
-          for (let i = 1; i < segment.points.length; i++) {
-            d += ` L ${segment.points[i].x} ${segment.points[i].y}`;
-          }
-          
-          path.setAttribute('d', d);
-          
-          const isSelected = measurement === this.selectedMeasurement;
-          
-          path.setAttribute('stroke', isSelected ? '#8b5cf6' : '#ff0000');
-          path.setAttribute('stroke-width', '3');
-          path.setAttribute('fill', 'none');
-          path.setAttribute('stroke-dasharray', ''); // 실선
-          
-          this.svg.appendChild(path);
-          
-          console.log(`세그먼트 ${sidx + 1} 그림 - 길이: ${segment.value.toFixed(2)}px, 밝기: ${segment.brightness.toFixed(0)}`);
-        });
-        
-        // 3. 끝점에 원 표시
-        points.forEach((point, pointIndex) => {
-          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          circle.setAttribute('cx', point.x);
-          circle.setAttribute('cy', point.y);
-          circle.setAttribute('r', '4');
-          circle.setAttribute('fill', pointIndex === 0 ? '#00ff00' : '#ff0000');
-          circle.setAttribute('cursor', 'move');
-          circle.setAttribute('pointer-events', 'all');
-          this.svg.appendChild(circle);
-        });
-      });
-      
-      // 4. 현재 그리고 있는 측정선 표시
-      if (this.isMeasuring && this.currentMeasurement && this.currentMeasurement.points.length >= 1) {
-        console.log('현재 측정선 그리기');
-        const points = this.currentMeasurement.points;
-        
-        // 파란색 점선으로 그림
-        const dottedPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        let d = `M ${points[0].x} ${points[0].y}`;
-        
-        for (let i = 1; i < points.length; i++) {
-          d += ` L ${points[i].x} ${points[i].y}`;
-        }
-        
-        dottedPath.setAttribute('d', d);
-        dottedPath.setAttribute('stroke', '#3b82f6');
-        dottedPath.setAttribute('stroke-width', '2');
-        dottedPath.setAttribute('fill', 'none');
-        dottedPath.setAttribute('stroke-dasharray', '5,5');
-        
-        this.svg.appendChild(dottedPath);
-        
-        // 현재 포인트 표시
-        points.forEach((point, i) => {
-          const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          circle.setAttribute('cx', point.x);
-          circle.setAttribute('cy', point.y);
-          circle.setAttribute('r', '4');
-          circle.setAttribute('fill', i === 0 ? '#00ff00' : '#ff0000');
-          circle.setAttribute('cursor', 'move');
-          this.svg.appendChild(circle);
-        });
-      }
-      
-      console.log('오버레이 업데이트 완료');
-    },
+   
     clearCurrentMeasurement() {
       this.currentMeasurement = null
       this.startPoint = null
@@ -796,9 +524,11 @@ export default {
       this.measurements.splice(index, 1)
     },
     formatValue(value) {
-      let scaledValue = value;
+        // 숫자인지 확인하고, 아니라면 0을 기본값으로 사용
+      const numericValue = typeof value === 'number' ? value : 0;
+      let scaledValue = numericValue;
       if (this.selectedUnit !== 'pixel' && this.referenceScale) {
-        scaledValue = (value * this.scaleUnit);
+        scaledValue = numericValue * this.scaleUnit;
       }
       return `${scaledValue.toFixed(2)} ${this.selectedUnit}`;
     },
@@ -1049,8 +779,239 @@ export default {
       this.selectedMeasurement = measurement;
       this.selectedBrightnessThreshold = this.brightnessThreshold;
       this.updateOverlay();
+    },
+
+    convertToGrayscale(imgElement) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = imgElement.naturalWidth;
+      canvas.height = imgElement.naturalHeight;
+      
+      // 배경을 흰색으로 채움
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // 원본 이미지 그리기
+      ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
+      
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const gray = r * 0.299 + g * 0.587 + b * 0.114;
+        data[i] = gray;
+        data[i + 1] = gray;
+        data[i + 2] = gray;
+      }
+      ctx.putImageData(imageData, 0, 0);
+      
+      // 저장: 이후 픽셀 샘플링은 이 캔버스(greyCanvas)를 기준으로 진행
+      this.greyCanvas = canvas;
+      
+      return canvas.toDataURL('image/png');
+    },
+    handleImageLoad(event) {
+      console.log("handleImageLoad 호출됨");
+      const img = event.target;
+      this.convertedImage = this.convertToGrayscale(img);
+      console.log("그레이스케일 변환 완료:", this.convertedImage);
+      this.initOverlay();
+    },
+    initOverlay() {
+      this.$nextTick(() => {
+        const container = this.$refs.displayedImage;
+        const svg = this.$refs.overlay;
+        if (container && svg) {
+          svg.setAttribute('width', container.offsetWidth);
+          svg.setAttribute('height', container.offsetHeight);
+        }
+      });
+    },
+    // 캔버스에서 (x, y) 좌표(캔버스 기준)의 픽셀 데이터를 읽어옴
+    getPixelDataAt(canvas, x, y) {
+      const ctx = canvas.getContext('2d');
+      try {
+        const imageData = ctx.getImageData(Math.round(x), Math.round(y), 1, 1);
+        console.log(`getPixelDataAt(${Math.round(x)}, ${Math.round(y)}):`, imageData.data);
+        return imageData.data; // [R, G, B, A]
+      } catch (e) {
+        console.error("getPixelDataAt 에러:", e);
+        return null;
+      }
+    },
+    // relative 좌표(0~1 기준)를 받아, 그레이스케일 캔버스 기준 절대 좌표로 변환 후 밝기를 읽어옴
+    calculateBrightnessAtPointAbsolute(xRel, yRel) {
+      if (!this.greyCanvas) {
+        console.error("calculateBrightnessAtPointAbsolute: greyCanvas가 없습니다.");
+        return 128;
+      }
+      const xCanvas = xRel * this.greyCanvas.width;
+      const yCanvas = yRel * this.greyCanvas.height;
+      const pixelData = this.getPixelDataAt(this.greyCanvas, xCanvas, yCanvas);
+      if (!pixelData) return 128;
+      const brightness = pixelData[0]; // 그레이스케일이면 R == G == B
+      console.log(`calculateBrightnessAtPointAbsolute (xRel:${xRel.toFixed(2)}, yRel:${yRel.toFixed(2)}) -> (x:${xCanvas.toFixed(1)}, y:${yCanvas.toFixed(1)}) brightness: ${brightness}`);
+      return brightness;
+    },
+    // 측정 선 시작: 컨테이너 기준 상대 좌표 저장 (0~1)
+    startMeasurement(event) {
+      // 실제 보이는 이미지 요소의 크기를 기준으로 좌표 계산
+      const imgEl = this.$refs.displayedImage;
+      if (!imgEl) return;
+      const rect = imgEl.getBoundingClientRect();
+      const xRel = (event.clientX - rect.left) / rect.width;
+      const yRel = (event.clientY - rect.top) / rect.height;
+      console.log("startMeasurement:", { xRel, yRel, rect });
+      this.isMeasuring = true;
+      this.currentMeasurement = { points: [{ xRel, yRel }] };
+    },
+    updateMeasurement(event) {
+      if (!this.isMeasuring || !this.currentMeasurement) return;
+      const imgEl = this.$refs.displayedImage;
+      if (!imgEl) return;
+      const rect = imgEl.getBoundingClientRect();
+      const xRel = (event.clientX - rect.left) / rect.width;
+      const yRel = (event.clientY - rect.top) / rect.height;
+      if (this.currentMeasurement.points.length === 1) {
+        this.currentMeasurement.points.push({ xRel, yRel });
+      } else {
+        this.currentMeasurement.points[1] = { xRel, yRel };
+      }
+      this.updateOverlay();
+    },
+    // 측정 선 종료: 측정 선 데이터를 저장하고 오버레이 업데이트
+    endMeasurement() {
+      if (this.isMeasuring && this.currentMeasurement && this.currentMeasurement.points.length === 2) {
+        this.measurements.push(this.currentMeasurement);
+      }
+      this.isMeasuring = false;
+      this.currentMeasurement = null;
+      this.updateOverlay();
+    },
+    // 측정 선(두 점만 있는 직선)을 일정 간격(샘플 개수)으로 샘플링하여, 각 포인트의 컨테이너 상 절대 좌표와 brightness를 리턴하는 함수
+    sampleMeasurementPoints(measurement, sampleCountPerSegment = 20) {
+      console.log('sampleMeasurementPoints 시작');
+      const samples = [];
+      const pts = measurement.points;
+      // 여기서 pts는 2개의 상대 좌표 (0~1)로 저장되어 있음
+      console.log("측정 데이터 포인트 개수:", pts.length);
+      console.log("sampleCountPerSegment:", sampleCountPerSegment);
+      if (pts.length < 2) {
+        console.log("포인트가 2개 미만임");
+        return samples;
+      }
+      
+      // 컨테이너 사이즈 (화면상 선 표시용)
+      const container = this.$refs.imageContainer;
+      const containerWidth = container.offsetWidth;
+      const containerHeight = container.offsetHeight;
+      
+      // 컨테이너 기준 절대 좌표 (화면 상에서의 선)로 계산
+      const absStart = { 
+        x: pts[0].xRel * containerWidth, 
+        y: pts[0].yRel * containerHeight 
+      };
+      const absEnd = { 
+        x: pts[1].xRel * containerWidth, 
+        y: pts[1].yRel * containerHeight 
+      };
+      const dx = absEnd.x - absStart.x;
+      const dy = absEnd.y - absStart.y;
+      
+      for (let j = 0; j <= sampleCountPerSegment; j++) {
+        const ratio = j / sampleCountPerSegment;
+        // 컨테이너 기준 절대 좌표에서 샘플 포인트 계산
+        const sampleXContainer = absStart.x + dx * ratio;
+        const sampleYContainer = absStart.y + dy * ratio;
+        // 다시 이 절대 좌표를 컨테이너 기준 상대 좌표로 변환
+        const sampleXRel = sampleXContainer / containerWidth;
+        const sampleYRel = sampleYContainer / containerHeight;
+        const brightness = this.calculateBrightnessAtPointAbsolute(sampleXRel, sampleYRel);
+        samples.push({ x: sampleXContainer, y: sampleYContainer, brightness });
+        console.log(`샘플 ${j}/${sampleCountPerSegment}: (x:${sampleXContainer.toFixed(1)}, y:${sampleYContainer.toFixed(1)}) -> brightness: ${brightness}`);
+      }
+      return samples;
+    },
+    // SVG 오버레이 업데이트: 전체 측정 선 (파란 점선)과 내부에서 임계 조건(밝기 임계값을 넘나드는) 구간(빨간 실선) 표시
+    updateOverlay() {
+      const svg = this.$refs.overlay;
+      const container = this.$refs.imageContainer;
+      if (!svg || !container) return;
+      const rect = container.getBoundingClientRect();
+      const width = rect.width, height = rect.height;
+      svg.setAttribute('width', width);
+      svg.setAttribute('height', height);
+      while (svg.firstChild) { svg.removeChild(svg.firstChild); }
+      
+      // 전체 측정 선 (파란 점선) 그리기
+      this.measurements.forEach(measurement => {
+        if (measurement.points.length < 2) return;
+        const absPoints = measurement.points.map(pt => ({
+          x: pt.xRel * width,
+          y: pt.yRel * height
+        }));
+        const overallPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        let dOverall = `M ${absPoints[0].x} ${absPoints[0].y}`;
+        for (let i = 1; i < absPoints.length; i++) {
+          dOverall += ` L ${absPoints[i].x} ${absPoints[i].y}`;
+        }
+        overallPath.setAttribute("d", dOverall);
+        overallPath.setAttribute("stroke", "blue");
+        overallPath.setAttribute("stroke-width", "2");
+        overallPath.setAttribute("fill", "none");
+        overallPath.setAttribute("stroke-dasharray", "5,5");
+        svg.appendChild(overallPath);
+        
+        // 내부 세그먼트: 측정 선 내부를 샘플링하여, 연속된 샘플 중 brightness > threshold인 그룹을 찾아 빨간 선으로 표시
+        const samples = this.sampleMeasurementPoints(measurement, this.sampleCountPerSegment);
+        const redSegments = [];
+        let currentGroup = [];
+        samples.forEach(sample => {
+          const condition = sample.brightness > this.brightnessThreshold;
+          if (condition) {
+            currentGroup.push(sample);
+          } else {
+            if (currentGroup.length > 1) {
+              redSegments.push(currentGroup);
+            }
+            currentGroup = [];
+          }
+        });
+        if (currentGroup.length > 1) { redSegments.push(currentGroup); }
+        
+        redSegments.forEach(group => {
+          const groupStart = group[0];
+          const groupEnd = group[group.length - 1];
+          const segmentPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          const dSeg = `M ${groupStart.x} ${groupStart.y} L ${groupEnd.x} ${groupEnd.y}`;
+          segmentPath.setAttribute("d", dSeg);
+          segmentPath.setAttribute("stroke", "red");
+          segmentPath.setAttribute("stroke-width", "3");
+          segmentPath.setAttribute("fill", "none");
+          svg.appendChild(segmentPath);
+        });
+      });
+      
+      // 진행 중인 측정 선 (마우스 이동 중인 선) 그리기 (빨간 선)
+      if (this.isMeasuring && this.currentMeasurement && this.currentMeasurement.points.length === 2) {
+        const currAbsPoints = this.currentMeasurement.points.map(pt => ({
+          x: pt.xRel * width,
+          y: pt.yRel * height
+        }));
+        const currPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        let dCurr = `M ${currAbsPoints[0].x} ${currAbsPoints[0].y} L ${currAbsPoints[1].x} ${currAbsPoints[1].y}`;
+        currPath.setAttribute("d", dCurr);
+        currPath.setAttribute("stroke", "red");
+        currPath.setAttribute("stroke-width", "3");
+        currPath.setAttribute("fill", "none");
+        svg.appendChild(currPath);
+      }
     }
   },
+  
+
+  ////Methods 종료////
+
   watch: {
     showPopup(newVal) {
       if (newVal) {
