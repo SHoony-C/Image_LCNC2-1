@@ -1,30 +1,43 @@
 <template>
   <Teleport to="body">
-    <div
-      class="image-measurement-popup"
-      v-if="showPopup"
-      @click.self="closePopup"
-    >
-      <div ref="container" class="measurement-container" @click.stop>
+    <div class="image-measurement-popup" v-if="showPopup" @click.self="closePopup">
+      <div class="measurement-container" @click.stop>
         <div class="measurement-header">
           <h3>이미지 측정 도구</h3>
           <div class="header-controls">
+            <div class="control-group">
+              <label>배율:</label>
+              <input 
+                type="number" 
+                v-model.number="magnification" 
+                class="control-input"
+                min="1"
+                max="1000"
+                step="1"
+              >
+              <span class="control-unit">x</span>
+            </div>
+            <div class="control-group" v-if="measurementMode.startsWith('area')">
+              <label>선 개수:</label>
+              <input 
+                type="number" 
+                v-model.number="lineCount" 
+                class="control-input"
+                min="2"
+                max="100"
+                step="1"
+              >
+              <span class="control-unit">개</span>
+            </div>
             <div class="measurement-options">
-              <button class="option-btn" :class="{ active: isSettingReference }" 
-                @click="isSettingReference = !isSettingReference" title="Set Reference Scale">
-                <i class="fas fa-ruler"></i>
-              </button>
-              <button class="option-btn" :class="{ active: measurementMode === 'line' && !isSettingReference }" 
-                @click="measurementMode = 'line'; isSettingReference = false" title="선 길이 측정">
+              <button class="option-btn" :class="{ active: measurementMode === 'line' }" @click="setMode('line')" title="단일 선 측정">
                 <i class="fas fa-ruler-horizontal"></i>
               </button>
-              <button class="option-btn" :class="{ active: measurementMode === 'area' && !isSettingReference }" 
-                @click="measurementMode = 'area'; isSettingReference = false" title="면적 측정">
-                <i class="fas fa-draw-polygon"></i>
+              <button class="option-btn" :class="{ active: measurementMode === 'area-vertical' }" @click="setMode('area-vertical')" title="세로 방향 영역 측정">
+                <i class="fas fa-grip-lines-vertical"></i>
               </button>
-              <button class="option-btn" :class="{ active: measurementMode === 'angle' && !isSettingReference }" 
-                @click="measurementMode = 'angle'; isSettingReference = false" title="각도 측정">
-                <i class="fas fa-ruler-combined"></i>
+              <button class="option-btn" :class="{ active: measurementMode === 'area-horizontal' }" @click="setMode('area-horizontal')" title="가로 방향 영역 측정">
+                <i class="fas fa-grip-lines"></i>
               </button>
             </div>
             <button class="close-btn" @click="closePopup">
@@ -32,170 +45,81 @@
             </button>
           </div>
         </div>
-        
+
         <div class="measurement-content">
-          <div class="image-container" ref="imageContainer">
-            <!-- 원본 이미지는 로드되지만 화면에 표시되지 않음 -->
-            <img 
-              ref="measurementImage" 
-              :src="imageUrl" 
-              crossorigin="anonymous"
-              alt="Original Image" 
-              @load="handleImageLoad" 
-              style="visibility: hidden; position: absolute; width: 1px; height: 1px;" 
-              />
-              <div
-              ref="imageContainer"
-              class="image-container"
-              @mousedown.prevent.stop="startMeasurement"
-              @mousemove.prevent.stop="updateMeasurement"
-              @mouseup.prevent.stop="endMeasurement"
-              @mouseleave.prevent.stop="endMeasurement"
-            >
-              <img
-                v-if="convertedImage"
-                ref="displayedImage"
-                :src="convertedImage"
-                crossorigin="anonymous"
-                alt="Grayscale Image"
-                draggable="false"
-              />
-              <svg ref="overlay" class="measurement-overlay"></svg>
-            </div>
-            <svg class="measurement-overlay" ref="overlay"></svg>
+          <div class="image-container" ref="container">
+            <img ref="sourceImage" :src="imageUrl" crossorigin="anonymous" style="display: none;" @load="handleImageLoad" />
+            <canvas ref="canvas" class="measurement-canvas"
+                   @mousedown.prevent.stop="startMeasurement"
+                   @mousemove.prevent.stop="updateMeasurement"
+                   @mouseup.prevent.stop="endMeasurement"
+                   @mouseleave.prevent.stop="endMeasurement"
+                   @click="handleCanvasClick"></canvas>
           </div>
-          
-          <div class="measurement-controls">
-            <div class="scale-reference" v-if="isSettingReference">
-              <h4>Set Reference Scale</h4>
-              <p>Draw a line on a known distance</p>
-              <div class="scale-input-group">
-                <input 
-                  type="number" 
-                  v-model.number="referenceLength"
-                  placeholder="Known length"
-                >
-                <select v-model="selectedUnit">
-                  <option value="pixel">pixels</option>
-                  <option value="mm">mm</option>
-                  <option value="cm">cm</option>
-                  <option value="m">m</option>
-                </select>
-              </div>
-            </div>
-            
-            <div class="id-range-panel">
-              <h4>ID 범위 설정</h4>
-              <div class="input-grid">
-                <div class="input-group">
-                  <label>시작 ID:</label>
-                  <input type="number" v-model.number="idRangeStart" min="1" step="1">
+
+          <div class="right-panel">
+            <div class="panel-section">
+              <div class="id-input-panel">
+                <h5>ID 설정</h5>
+                <div class="id-input-container">
+                  <div class="input-group">
+                    <label>Item ID</label>
+                    <input type="text" v-model="newItemId" class="form-control" placeholder="Item ID 입력">
+                  </div>
+                  <div class="input-group">
+                    <label>Sub ID</label>
+                    <input type="text" v-model="newSubId" class="form-control" placeholder="Sub ID 입력 (예: s1)">
+                  </div>
                 </div>
-                <div class="input-group">
-                  <label>끝 ID:</label>
-                  <input type="number" v-model.number="idRangeEnd" min="1" step="1">
-                </div>
-                <div class="input-group">
-                  <label>SubItem 접두사:</label>
-                  <input type="text" v-model="subItemPrefix" maxlength="3">
-                </div>
-                <div class="button-group">
-                  <button class="apply-btn" @click="applyIdRange" :disabled="!isValidIdRange">
-                    <i class="fas fa-check"></i> ID 적용
-                  </button>
-                </div>
-              </div>
-            </div>
-            
-            <div class="threshold-panel" v-if="selectedMeasurement">
-              <h4>선택된 측정 ({{ selectedMeasurement.itemId }}-{{ selectedMeasurement.subItemId }})</h4>
-              <div class="input-group">
-                <label>선택 측정 밝기 임계값:</label>
-                <input 
-                  type="range" 
-                  v-model.number="selectedBrightnessThreshold" 
-                  min="0" 
-                  max="255" 
-                  @input="updateSelectedThreshold(selectedBrightnessThreshold)"
-                >
-                <span>{{ selectedBrightnessThreshold }}</span>
-              </div>
-            </div>
-            
-            <div class="threshold-input">
-              <div class="threshold-header">
-                <label>전체 밝기 임계값:</label>
-                <button 
-                  class="toggle-btn" 
-                  :class="{ 'toggled': invertThreshold }"
-                  @click="toggleInvertThreshold"
-                  title="밝기/어두움 모드 전환"
-                >
-                  <i class="fas" :class="invertThreshold ? 'fa-moon' : 'fa-sun'"></i>
-                  {{ invertThreshold ? '어두운 영역 인식' : '밝은 영역 인식' }}
+                <button class="btn-apply" @click="applySelectedIds" :disabled="selectedRows.length === 0">
+                  선택한 행에 ID 적용
                 </button>
               </div>
-              <input type="range" v-model.number="brightnessThreshold" min="0" max="255">
-              <span>{{ brightnessThreshold }}</span>
-            </div>
-            
-            <div class="scale-input">
-              <label>스케일 설정:</label>
-              <div class="scale-input-group">
-                <input type="number" v-model="scaleValue" min="0.1" step="0.1">
-                <span>픽셀 =</span>
-                <input type="number" v-model="scaleUnit" min="0.1" step="0.1">
-                <span>{{ selectedUnit }}</span>
-              </div>
-            </div>
-            
-            <div class="measurement-results" v-if="measurements.length > 0">
-              <div class="results-header">
-                <h4>측정 결과</h4>
-                <div class="segment-count">
-                  <span>세그먼트 수: {{ segmentCount }}</span>
-                </div>
-              </div>
-              
-              <div class="results-table-container" v-if="segmentedMeasurements.length">
-                <table class="results-table">
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Sub ID</th>
-                      <th>값</th>
-                      <th>작업</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(seg, idx) in segmentedMeasurements"
-                      :key="idx"                     
-                      :class="{
-                        'bright': seg.brightness > brightnessThreshold,
-                        'dark': seg.brightness <= brightnessThreshold
-                      }"
-                    >
-                      <td>{{ seg.itemId }}</td>
-                      <td>{{ seg.subItemId }}</td>
-                      <td>{{ formatValue(seg.value) }}</td>
 
-                      <td>
-                        <button @click.stop="removeSegment(idx)">삭제</button>
-
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
+              <div class="results-panel">
+                <h5>측정 결과</h5>
+                <div class="results-summary">
+                  <span>총 측정: {{ filteredMeasurements.length }}</span>
+                </div>
+                <div class="results-table-container">
+                  <table class="results-table">
+                    <thead>
+                      <tr>
+                        <th>Item ID</th>
+                        <th>Sub ID</th>
+                        <th>값</th>
+                        <th>조작</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(segment, index) in filteredMeasurements" 
+                          :key="segment.subItemId"
+                          :class="{ 'selected-row': selectedRows.includes(segment) }"
+                          @mousedown="handleRowMouseDown(segment, index)"
+                          @mouseenter="handleRowMouseEnter(segment, index)"
+                          @mouseup="handleRowMouseUp">
+                        <td>{{ segment.itemId }}</td>
+                        <td>{{ segment.subItemId }}</td>
+                        <td>{{ segment.value.toFixed(2) }}</td>
+                        <td class="action-buttons">
+                          <button class="option-btn" @click.stop="deleteSegment(segment)">
+                            <i class="fas fa-trash"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              
-              <div class="segment-info" v-if="segmentCount > 0">
-                <div class="segment-header">
-                  <h5>세그먼트 목록</h5>
-                </div>
-                <div class="segment-count-by-type">
-                  <div class="bright-count">빨간 세그먼트: {{ matchingSegments.length }}</div>
-                  <div class="dark-count">파란 세그먼트: {{ nonMatchingSegments.length }}</div>
-                </div>
+            </div>
+
+            <div class="measurement-controls">
+              <div class="control-group">
+                <label class="control-label">밝기 임계값: {{ brightnessThreshold }}</label>
+                <input type="range" v-model="brightnessThreshold" min="0" max="255" class="threshold-slider" />
+                <button class="option-btn" @click="toggleReverse">
+                  {{ isReversed ? '어두운 영역' : '밝은 영역' }}
+                </button>
               </div>
             </div>
           </div>
@@ -221,831 +145,672 @@ export default {
   emits: ['close'],
   data() {
     return {
-      convertedImage: null,
-      isGrayscale: false,
-      greyCanvas: null,
-      isDrawing: false,
+      image: null,
+      canvas: null,
+      ctx: null,
       isMeasuring: false,
-      isEditing: false,
-      measurementMode: 'line',
-      selectedUnit: 'pixel',
-      scaleValue: 1,
-      scaleUnit: 1,
-      referenceLength: 100,
-      referenceScale: null,
-      isSettingReference: false,
-      
       currentMeasurement: null,
-      selectedMeasurement: null,
-      selectedMeasurementIndex: -1,
-      selectedPointIndex: undefined,
-      startPoint: null,
-      svg: null,
-      itemId: '',
-      subItemId: '',
-      tempItemId: '',
-      tempSubItemId: '',
-      threshold: 128,
-      brightnessThreshold: 128,
-      sampleCountPerSegment: 20,
-      svgInitialized: false,
-      
-      nextId: 1,
-      idRangeStart: 1,
-      idRangeEnd: 10,
-      subItemPrefix: 'S',
-      selectedBrightnessThreshold: 128,
-      showBrightSegments: true,
       measurements: [],
       segmentedMeasurements: [],
-      invertThreshold: false,
-      rAFpending: false,
-    }
-  },
-  computed: {
-    brightMeasurements() {
-      return this.measurements.filter(m => this.isBrightAccordingToThreshold(m.brightness));
-    },
-    darkMeasurements() {
-      return this.measurements.filter(m => !this.isBrightAccordingToThreshold(m.brightness));
-    },
-    segmentCount() {
-      return this.segmentedMeasurements.length;
-    },
-    isValidIdRange() {
-      return this.idRangeStart > 0 && this.idRangeEnd >= this.idRangeStart;
-    },
-    matchingSegments() {
-      return this.segmentedMeasurements.filter(segment => 
-        this.isBrightAccordingToThreshold(segment.brightness)
-      );
-    },
-    nonMatchingSegments() {
-      return this.segmentedMeasurements.filter(segment => 
-        !this.isBrightAccordingToThreshold(segment.brightness)
-      );
-    }
+      nextId: 1,
+      subItemPrefix: 'S',
+      brightnessThreshold: 200,
+      isReversed: false,
+      measurementMode: 'line',
+      isSettingReference: false,
+      scale: 1,
+      magnification: 1,
+      imageData: null,
+      imageRatio: 1,
+      prevWidth: 1,
+      prevHeight: 1,
+      brightSubIdCounter: 1,
+      darkSubIdCounter: 1,
+      selectedRows: [],
+      selectionStart: null,
+      newItemId: '',
+      newSubId: '',
+      selectedMeasurement: null,
+      measurementHistory: [],
+      selectedSegment: null,
+      undoHistory: [],
+      redoHistory: [],
+      areaStart: null,
+      areaEnd: null,
+      lineSpacing: 50,
+      lineCount: 10,
+    };
   },
   mounted() {
-    // showPopup가 이미 true이면 바로 initSVG() 호출, 아니면 watch에서 호출합니다.
-    if (this.showPopup) {
-      this.$nextTick(() => {
-        this.initSVG();
-      });
-    }
+    this.loadImage();
     window.addEventListener('resize', this.onWindowResize);
+    window.addEventListener('keydown', this.handleKeyDown);
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.onWindowResize);
+    window.removeEventListener('keydown', this.handleKeyDown);
+  },
+  computed: {
+    filteredMeasurements() {
+      return this.segmentedMeasurements.filter(segment => 
+        this.isReversed ? !segment.isBright : segment.isBright
+      );
+    },
+    brightSegmentsCount() {
+      return this.filteredMeasurements.length;
+    },
+    darkSegmentsCount() {
+      return this.segmentedMeasurements.filter(s => !s.isBright).length;
+    }
+  },
+  watch: {
+    imageUrl: {
+      immediate: true,
+      handler(newUrl) {
+        if (newUrl) {
+          this.$nextTick(() => {
+            this.loadImage();
+          });
+        }
+      }
+    },
+    magnification: {
+      handler() {
+        // 배율 변경 시 모든 측정값 업데이트
+        this.updateAllMeasurements();
+      }
+    }
   },
   methods: {
+    async loadImage() {
+      this.image = new Image();
+      this.image.crossOrigin = 'anonymous';
+      this.image.src = this.imageUrl;
+      
+      await new Promise((resolve) => {
+        this.image.onload = () => {
+          this.updateCanvasSize();
+          resolve();
+        };
+      });
+    },
+    async handleImageLoad() {
+      const img = this.$refs.sourceImage;
+      
+      // 원본 이미지 비율 저장
+      this.imageRatio = img.naturalWidth / img.naturalHeight;
+      
+      // 이미지 데이터 추출을 위한 임시 캔버스
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = img.naturalWidth;
+      tempCanvas.height = img.naturalHeight;
+      const tempCtx = tempCanvas.getContext('2d');
+      
+      tempCtx.drawImage(img, 0, 0);
+      this.imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+      
+      this.updateCanvasSize();
+    },
+    updateCanvasSize() {
+      const img = this.$refs.sourceImage;
+      const canvas = this.$refs.canvas;
+      const container = this.$refs.container;
+      
+      const containerRatio = container.clientWidth / container.clientHeight;
+      
+      let canvasWidth, canvasHeight;
+      if (containerRatio > this.imageRatio) {
+        canvasHeight = container.clientHeight;
+        canvasWidth = canvasHeight * this.imageRatio;
+      } else {
+        canvasWidth = container.clientWidth;
+        canvasHeight = canvasWidth / this.imageRatio;
+      }
+      
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+      
+      // 컨텍스트 재설정 및 이미지 다시 그리기
+      this.ctx = canvas.getContext('2d');
+      this.ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      // 기존 측정값들의 좌표 조정
+      this.adjustMeasurements(canvasWidth / this.prevWidth, canvasHeight / this.prevHeight);
+      
+      this.prevWidth = canvasWidth;
+      this.prevHeight = canvasHeight;
+      
+      this.render();
+    },
+    adjustMeasurements(scaleX, scaleY) {
+      if (!isFinite(scaleX) || !isFinite(scaleY)) return;
+      
+      // 모든 측정값의 좌표 조정
+      this.measurements.forEach(measurement => {
+        measurement.start.x *= scaleX;
+        measurement.start.y *= scaleY;
+        measurement.end.x *= scaleX;
+        measurement.end.y *= scaleY;
+      });
+
+      this.segmentedMeasurements.forEach(segment => {
+        segment.start.x *= scaleX;
+        segment.start.y *= scaleY;
+        segment.end.x *= scaleX;
+        segment.end.y *= scaleY;
+      });
+    },
     onWindowResize() {
-      this.initSVG();
-      this.updateOverlay();
-  },
-    calculateBrightnessAtPointImproved(x, y) {
-  try {
-    const img = this.$refs.measurementImage;
-    if (!img) return 128;
-
-    // 1. 캔버스 생성 및 이미지 그리기
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = img.naturalWidth || img.width;
-    canvas.height = img.naturalHeight || img.height;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-    // 2. 좌표 변환: DOM상의 좌표(x, y)를 실제 이미지의 픽셀 좌표로 변환
-    // img.width/height는 DOM 상의 크기와 달라도, naturalWidth/Height를 이용해 원본 크기로 맞춥니다.
-    const scaleX = canvas.width / img.width;
-    const scaleY = canvas.height / img.height;
-    let scaledX = Math.round(x * scaleX);
-    let scaledY = Math.round(y * scaleY);
-
-    // 3. 안티앨리어싱 및 경계 효과 제거: 내부 영역에서 샘플링하도록 마진 적용 (예: 2픽셀)
-    const margin = 2;
-    scaledX = Math.min(Math.max(scaledX, margin), canvas.width - margin - 1);
-    scaledY = Math.min(Math.max(scaledY, margin), canvas.height - margin - 1);
-
-    // 4. 스무딩: 3x3 커널 내의 픽셀들을 평균내어 단일 픽셀 노이즈와 경계 효과 완화
-    let totalR = 0, totalG = 0, totalB = 0, count = 0;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const px = scaledX + dx;
-        const py = scaledY + dy;
-        const pixel = ctx.getImageData(px, py, 1, 1).data;
-        totalR += pixel[0];
-        totalG += pixel[1];
-        totalB += pixel[2];
-        count++;
-      }
-    }
-    const avgR = totalR / count;
-    const avgG = totalG / count;
-    const avgB = totalB / count;
-    const brightness = (avgR + avgG + avgB) / 3;
-
-    return brightness;
-  } catch (e) {
-    console.error("calculateBrightnessAtPointImproved 에러:", e);
-    return 128;
-  }
-},
-    isBrightAccordingToThreshold(brightness) {
-      return this.invertThreshold 
-        ? brightness <= this.brightnessThreshold 
-        : brightness > this.brightnessThreshold;
-    },
-    toggleInvertThreshold() {
-      this.invertThreshold = !this.invertThreshold;
-      this.segmentMeasurements();
-      this.updateOverlay();
-    },
-    handleEscKey(event) {
-      if (event.key === 'Escape') {
-        this.closePopup()
+      if (this.$refs.canvas) {
+        this.updateCanvasSize();
       }
     },
-    initSVG() {
-      this.$nextTick(() => {
-    const container = this.$refs.container;
-    if (!container) {
-      console.error("컨테이너(ref='container')가 존재하지 않습니다.");
-      return;
-    }
-    this.svg = this.$refs.overlay;
-    if (!this.svg) {
-      console.error("SVG 오버레이(ref='overlay')가 존재하지 않습니다.");
-      return;
-    }
-    
-
-    // 컨테이너 크기를 안전하게 읽기
-    this.svg.setAttribute('width', container.offsetWidth);
-    this.svg.setAttribute('height', container.offsetHeight);
-    this.svg.style.position = 'absolute';
-    this.svg.style.top = '0';
-    this.svg.style.left = '0';
-    this.svgInitialized = true;
-    this.updateOverlay();
-  });
+    calculateValue(start, end) {
+      if (!start || !end) return 0;
+      const img = this.$refs.sourceImage;
+      const canvas = this.$refs.canvas;
+      
+      // 캔버스 좌표를 원본 이미지 좌표로 변환
+      const startX = (start.x / canvas.width) * img.naturalWidth;
+      const startY = (start.y / canvas.height) * img.naturalHeight;
+      const endX = (end.x / canvas.width) * img.naturalWidth;
+      const endY = (end.y / canvas.height) * img.naturalHeight;
+      
+      // 원본 이미지 좌표에서의 거리 계산 및 배율 적용
+      const dx = endX - startX;
+      const dy = endY - startY;
+      return parseFloat((Math.sqrt(dx * dx + dy * dy) * this.magnification).toFixed(2));
     },
-    setupSVG(container) {
-      console.log('Setting up SVG')
-      this.svg = this.$refs.overlay
-      if (!this.svg) {
-        console.error('SVG element not found')
-        return
+    startMeasurement(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const pos = this.getLocalPos(e);
+
+      if (this.measurementMode === 'line') {
+        this.currentMeasurement = {
+          start: pos,
+          end: pos,
+          itemId: this.nextId.toString(),
+          subItemId: `${this.nextId}-${this.subItemPrefix}1`,
+          value: 0,
+          brightness: this.calculateBrightness(pos.x, pos.y)
+        };
+      } else {
+        this.areaStart = pos;
+        this.areaEnd = pos;
       }
       
-      this.svg.setAttribute('width', container.offsetWidth)
-      this.svg.setAttribute('height', container.offsetHeight)
-      
-      this.svg.style.position = 'absolute'
-      this.svg.style.top = '0'
-      this.svg.style.left = '0'
-      this.svg.style.pointerEvents = 'none'
-      this.svg.style.zIndex = '2'
-      
-      this.svgInitialized = true
-      console.log('SVG initialized', {
-        width: container.offsetWidth,
-        height: container.offsetHeight
-      })
-      
-      this.updateOverlay()
+      this.isMeasuring = true;
+      this.render();
     },
+    updateMeasurement(e) {
+      if (!this.isMeasuring) return;
+      const pos = this.getLocalPos(e);
 
-    applyMeasurementInfo() {
-      if (this.selectedMeasurementIndex >= 0 && this.selectedMeasurementIndex < this.measurements.length) {
-        const measurement = this.measurements[this.selectedMeasurementIndex];
-        measurement.itemId = this.tempItemId || 'Item';
-        measurement.subItemId = this.tempSubItemId || 'Sub';
-        
-        this.$forceUpdate();
-        this.updateOverlay();
+      if (this.measurementMode === 'line' && this.currentMeasurement) {
+        this.currentMeasurement.end = pos;
+        this.currentMeasurement.value = this.calculateValue(this.currentMeasurement.start, this.currentMeasurement.end);
+      } else if (this.areaStart) {
+        this.areaEnd = pos;
       }
+      
+      this.render();
     },
-    selectMeasurementForEdit(index) {
-      this.selectedMeasurementIndex = index;
-      if (index >= 0 && index < this.measurements.length) {
-        const measurement = this.measurements[index];
-        this.tempItemId = measurement.itemId || '';
-        this.tempSubItemId = measurement.subItemId || '';
+    endMeasurement() {
+      if (!this.isMeasuring) return;
+      this.isMeasuring = false;
+
+      if (this.measurementMode === 'line') {
+        if (this.currentMeasurement && 
+            this.calculateValue(this.currentMeasurement.start, this.currentMeasurement.end) > 5) {
+          const measurement = {
+            ...this.currentMeasurement,
+            value: this.calculateValue(this.currentMeasurement.start, this.currentMeasurement.end),
+            brightness: this.calculateAverageBrightness(this.currentMeasurement.start, this.currentMeasurement.end)
+          };
+          this.measurements.push(measurement);
+          this.nextId++;
+          this.createSegments(measurement);
+        }
+        this.currentMeasurement = null;
+      } else if (this.areaStart && this.areaEnd) {
+        this.createAreaMeasurements();
+        this.areaStart = null;
+        this.areaEnd = null;
       }
-    },
-    findMeasurementAtPoint(x, y) {
-      const threshold = 10
-      return this.measurements.find(measurement => {
-        const points = measurement.points
-        return points.some(point => {
-          const dx = point.x - x
-          const dy = point.y - y
-          return Math.sqrt(dx * dx + dy * dy) <= threshold
-        })
-      })
+      
+      this.render();
     },
     calculateBrightness(x, y) {
-      try {
-        const img = this.$refs.measurementImage
-        if (!img) return 128
-        
-        const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
-        
-        canvas.width = img.naturalWidth || img.width
-        canvas.height = img.naturalHeight || img.height
-        
-        const scaleX = canvas.width / img.width
-        const scaledX = Math.round(x * scaleX)
-        const scaleY = canvas.height / img.height
-        const scaledY = Math.round(y * scaleY)
-        
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
-        
-        try {
-          const pixel = ctx.getImageData(scaledX, scaledY, 1, 1).data
-          return (pixel[0] + pixel[1] + pixel[2]) / 3
-        } catch (e) {
-          console.error('Failed to get image data', e)
-          return 128
+      if (!this.imageData) return 128;
+      
+      const canvas = this.$refs.canvas;
+      const img = this.$refs.sourceImage;
+      
+      // 캔버스 좌표를 원본 이미지 좌표로 변환
+      const imageX = Math.floor((x / canvas.width) * img.naturalWidth);
+      const imageY = Math.floor((y / canvas.height) * img.naturalHeight);
+      
+      // 주변 픽셀을 포함한 밝기 계산 (3x3 영역)
+      let totalBrightness = 0;
+      let pixelCount = 0;
+      
+      for (let offsetY = -1; offsetY <= 1; offsetY++) {
+        for (let offsetX = -1; offsetX <= 1; offsetX++) {
+          const sampleX = imageX + offsetX;
+          const sampleY = imageY + offsetY;
+          
+          if (sampleX >= 0 && sampleX < img.naturalWidth && 
+              sampleY >= 0 && sampleY < img.naturalHeight) {
+            const index = (sampleY * img.naturalWidth + sampleX) * 4;
+            if (index >= 0 && index < this.imageData.data.length) {
+              // 흑백 이미지의 경우 R 채널만 사용
+              totalBrightness += this.imageData.data[index];
+              pixelCount++;
+            }
+          }
         }
-      } catch (e) {
-        console.error('Failed to calculate brightness', e)
-        return 128
-      }
-    },
-    calculateDistance(start, end) {
-      const dx = end.x - start.x
-      const dy = end.y - start.y
-      return Math.sqrt(dx * dx + dy * dy)
-    },
-    calculateArea(points) {
-      let area = 0
-      for (let i = 0; i < points.length; i++) {
-        const j = (i + 1) % points.length
-        area += points[i].x * points[j].y
-        area -= points[j].x * points[i].y
-      }
-      return Math.abs(area / 2)
-    },
-    calculateAngle(points) {
-      if (points.length < 3) return 0
-      
-      const p1 = points[0]
-      const p2 = points[1]
-      const p3 = points[2]
-      
-      const v1 = { x: p2.x - p1.x, y: p2.y - p1.y }
-      const v2 = { x: p3.x - p2.x, y: p3.y - p2.y }
-      
-      const dot = v1.x * v2.x + v1.y * v2.y
-      const det = v1.x * v2.y - v1.y * v2.x
-      return Math.atan2(det, dot) * (180 / Math.PI)
-    },
-   
-    clearCurrentMeasurement() {
-      this.currentMeasurement = null
-      this.startPoint = null
-      this.svg.innerHTML = ''
-    },
-    deleteMeasurement(index) {
-      this.measurements.splice(index, 1)
-    },
-    formatValue(value) {
-        // 숫자인지 확인하고, 아니라면 0을 기본값으로 사용
-      const numericValue = typeof value === 'number' ? value : 0;
-      let scaledValue = numericValue;
-      if (this.selectedUnit !== 'pixel' && this.referenceScale) {
-        scaledValue = numericValue * this.scaleUnit;
-      }
-      return `${scaledValue.toFixed(2)} ${this.selectedUnit}`;
-    },
-    formatMeasurement(measurement) {
-      let value = measurement.value
-      
-      if (measurement.type !== 'reference' && this.selectedUnit !== 'pixel' && this.referenceScale) {
-        value = (value * this.scaleUnit)
       }
       
-      return `${measurement.itemId}|${measurement.subItemId}|${value.toFixed(2)}`
+      return pixelCount > 0 ? Math.round(totalBrightness / pixelCount) : 128;
+    },
+    calculateAverageBrightness(start, end) {
+      if (!start || !end) return 0;
+      const samples = 3000; // 샘플링 포인트 수 증가
+      let totalBrightness = 0;
+      let validSamples = 0;
+      
+      for (let i = 0; i <= samples; i++) {
+        const t = i / samples;
+        const x = start.x + (end.x - start.x) * t;
+        const y = start.y + (end.y - start.y) * t;
+        const brightness = this.calculateBrightness(x, y);
+        if (brightness !== 128) { // 유효한 픽셀만 계산에 포함
+          totalBrightness += brightness;
+          validSamples++;
+        }
+      }
+      
+      return validSamples > 0 ? totalBrightness / validSamples : 0;
+    },
+    getLocalPos(e) {
+      const canvas = this.$refs.canvas;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    },
+    createSegments(measurement) {
+      const samples = 3000; // 샘플링 포인트 수
+      const segments = [];
+      let prevBrightness = null;
+      let startPoint = null;
+      
+      const points = [];
+      for (let i = 0; i <= samples; i++) {
+        const t = i / samples;
+        const point = {
+          x: measurement.start.x + (measurement.end.x - measurement.start.x) * t,
+          y: measurement.start.y + (measurement.end.y - measurement.start.y) * t
+        };
+        const brightness = this.calculateBrightness(point.x, point.y);
+        points.push({ ...point, brightness });
+      }
+      
+      // 이동 평균으로 노이즈 제거
+      const windowSize = 5;
+      const smoothedPoints = points.map((point, i) => {
+        if (i < windowSize/2 || i > points.length - windowSize/2 - 1) return point;
+        
+        let sum = 0;
+        for (let j = -Math.floor(windowSize/2); j <= Math.floor(windowSize/2); j++) {
+          sum += points[i + j].brightness;
+        }
+        return { ...point, brightness: sum / windowSize };
+      });
+      
+      // 세그먼트 생성
+      smoothedPoints.forEach((point, index) => {
+        const isBright = point.brightness > this.brightnessThreshold;
+        
+        if (index === 0) {
+          startPoint = point;
+          prevBrightness = isBright;
+        } else {
+          // 밝기가 변경되었거나 마지막 포인트인 경우
+          if (isBright !== prevBrightness || index === smoothedPoints.length - 1) {
+            if (startPoint) {
+              segments.push({
+                start: { x: startPoint.x, y: startPoint.y },
+                end: { x: point.x, y: point.y },
+                brightness: prevBrightness ? 255 : 0,
+                isBright: prevBrightness,
+                itemId: measurement.itemId,
+                subItemId: `s${prevBrightness ? this.brightSubIdCounter++ : this.darkSubIdCounter++}`,
+                value: this.calculateValue({ x: startPoint.x, y: startPoint.y }, { x: point.x, y: point.y })
+              });
+            }
+            startPoint = point;
+            prevBrightness = isBright;
+          }
+        }
+      });
+      
+      this.segmentedMeasurements.push(...segments);
+    },
+    render() {
+      if (!this.ctx) return;
+      
+      const canvas = this.$refs.canvas;
+      const img = this.$refs.sourceImage;
+      
+      // 캔버스 초기화
+      this.ctx.clearRect(0, 0, canvas.width, canvas.height);
+      this.ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      // 측정선 그리기
+      this.ctx.lineWidth = 2;
+      this.ctx.setLineDash([5, 5]);
+      
+      // 파란 점선으로 모든 측정선 그리기
+      this.measurements.forEach(measurement => {
+        this.ctx.strokeStyle = 'blue';  // 항상 파란색으로 설정
+        this.ctx.beginPath();
+        this.ctx.moveTo(measurement.start.x, measurement.start.y);
+        this.ctx.lineTo(measurement.end.x, measurement.end.y);
+        this.ctx.stroke();
+      });
+      
+      // 현재 측정 중인 선 또는 영역 그리기
+      if (this.isMeasuring) {
+        if (this.measurementMode === 'line' && this.currentMeasurement) {
+          this.ctx.strokeStyle = 'blue';  // 측정 중인 선도 파란색으로
+          this.ctx.beginPath();
+          this.ctx.moveTo(this.currentMeasurement.start.x, this.currentMeasurement.start.y);
+          this.ctx.lineTo(this.currentMeasurement.end.x, this.currentMeasurement.end.y);
+          this.ctx.stroke();
+        } else if (this.areaStart && this.areaEnd) {
+          // 영역 표시
+          this.ctx.strokeStyle = 'rgba(0, 0, 255, 0.5)';  // 파란색으로 변경
+          this.ctx.setLineDash([]);
+          this.ctx.strokeRect(
+            Math.min(this.areaStart.x, this.areaEnd.x),
+            Math.min(this.areaStart.y, this.areaEnd.y),
+            Math.abs(this.areaEnd.x - this.areaStart.x),
+            Math.abs(this.areaEnd.y - this.areaStart.y)
+          );
+          
+          // 예상 측정선 표시
+          this.ctx.strokeStyle = 'blue';  // 파란색으로 통일
+          this.ctx.setLineDash([5, 5]);
+          
+          if (this.measurementMode === 'area-vertical') {
+            const startX = Math.min(this.areaStart.x, this.areaEnd.x);
+            const endX = Math.max(this.areaStart.x, this.areaEnd.x);
+            const width = endX - startX;
+            const spacing = width / (this.lineCount - 1);
+            
+            for (let i = 0; i < this.lineCount; i++) {
+              const x = startX + (spacing * i);
+              this.ctx.beginPath();
+              this.ctx.moveTo(x, Math.min(this.areaStart.y, this.areaEnd.y));
+              this.ctx.lineTo(x, Math.max(this.areaStart.y, this.areaEnd.y));
+              this.ctx.stroke();
+            }
+          } else if (this.measurementMode === 'area-horizontal') {
+            const startY = Math.min(this.areaStart.y, this.areaEnd.y);
+            const endY = Math.max(this.areaStart.y, this.areaEnd.y);
+            const height = endY - startY;
+            const spacing = height / (this.lineCount - 1);
+            
+            for (let i = 0; i < this.lineCount; i++) {
+              const y = startY + (spacing * i);
+              this.ctx.beginPath();
+              this.ctx.moveTo(Math.min(this.areaStart.x, this.areaEnd.x), y);
+              this.ctx.lineTo(Math.max(this.areaStart.x, this.areaEnd.x), y);
+              this.ctx.stroke();
+            }
+          }
+        }
+      }
+      
+      // 빨간 실선으로 세그먼트 그리기
+      this.ctx.setLineDash([]);
+      this.ctx.lineWidth = 3;
+      
+      // 밝기 영역 표시를 위한 세그먼트 그리기
+      this.segmentedMeasurements.forEach(segment => {
+        const shouldDisplay = this.isReversed ? !segment.isBright : segment.isBright;
+        if (shouldDisplay) {
+          this.ctx.strokeStyle = 'red';
+          this.ctx.beginPath();
+          this.ctx.moveTo(segment.start.x, segment.start.y);
+          this.ctx.lineTo(segment.end.x, segment.end.y);
+          this.ctx.stroke();
+        }
+      });
+    },
+    setMode(mode) {
+      this.measurementMode = mode;
+      this.selectedMeasurement = null;
+      this.areaStart = null;
+      this.areaEnd = null;
+      this.render();
+    },
+    toggleReferenceMode() {
+      this.isSettingReference = !this.isSettingReference;
     },
     closePopup() {
-      this.$emit('close')
+      this.$emit('close');
     },
-  rgbToHsv(r, g, b) {
-      r /= 255;
-      g /= 255;
-      b /= 255;
-  
-      const max = Math.max(r, g, b);
-      const min = Math.min(r, g, b);
-      const delta = max - min;
-  
-      let h = 0, s = 0, v = max;
-  
-      if (delta !== 0) {
-        s = delta / max;
-        if (r === max) {
-          h = ((g - b) / delta) % 6;
-        } else if (g === max) {
-          h = (b - r) / delta + 2;
-        } else {
-          h = (r - g) / delta + 4;
-        }
-        h *= 60;
-        if (h < 0) h += 360;
-      }
-  
-      return { h, s, v };
-    },
-
-    // 예시: calculateColorAtPoint에서 사용
-    calculateColorAtPoint(x, y) {
-      try {
-        const img = this.$refs.measurementImage;
-        if (!img) return { r: 128, g: 128, b: 128, brightness: 128, h: 0, s: 0, v: 0.5 };
-
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        canvas.width = img.naturalWidth || img.width;
-        canvas.height = img.naturalHeight || img.height;
-
-        const scaleX = canvas.width / img.width;
-        const scaleY = canvas.height / img.height;
-        const scaledX = Math.min(Math.max(Math.round(x * scaleX), 0), canvas.width - 1);
-        const scaledY = Math.min(Math.max(Math.round(y * scaleY), 0), canvas.height - 1);
-
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-        const kernelSize = 5;
-        const halfSize = Math.floor(kernelSize / 2);
-        let totalR = 0, totalG = 0, totalB = 0;
-        let count = 0;
-
-        for (let offsetY = -halfSize; offsetY <= halfSize; offsetY++) {
-          for (let offsetX = -halfSize; offsetX <= halfSize; offsetX++) {
-            const checkX = Math.min(Math.max(scaledX + offsetX, 0), canvas.width - 1);
-            const checkY = Math.min(Math.max(scaledY + offsetY, 0), canvas.height - 1);
-            const pixel = ctx.getImageData(checkX, checkY, 1, 1).data;
-            totalR += pixel[0];
-            totalG += pixel[1];
-            totalB += pixel[2];
-            count++;
-          }
-        }
-
-        const avgR = totalR / count;
-        const avgG = totalG / count;
-        const avgB = totalB / count;
-        const brightness = (avgR + avgG + avgB) / 3;
-
-        // rgbToHsv 함수 호출 (같은 컴포넌트 내에 정의되어 있으므로 this를 붙여서 호출)
-        const { h, s, v } = this.rgbToHsv(avgR, avgG, avgB);
-
-        return { r: avgR, g: avgG, b: avgB, brightness, h, s, v };
-      } catch (e) {
-        console.error('Error in calculateColorAtPoint:', e);
-        return { r: 128, g: 128, b: 128, brightness: 128, h: 0, s: 0, v: 0.5 };
-      }
-    },
-
-
-    calculateDistanceForPoints(points) {
-      if (points.length < 2) return 0;
+    applySelectedIds() {
+      if (this.selectedRows.length === 0 || !this.newItemId || !this.newSubId) return;
       
-      let totalDistance = 0;
-      for (let i = 1; i < points.length; i++) {
-        const p1 = points[i-1];
-        const p2 = points[i];
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-        totalDistance += Math.sqrt(dx*dx + dy*dy);
-      }
-      
-      return totalDistance;
-    },
-    applyIdRange() {
-      if (!this.isValidIdRange) return;
-      
-      let currentId = this.idRangeStart;
-      let subIdx = 1;
-      
-      this.measurements.forEach(measurement => {
-        if (currentId <= this.idRangeEnd) {
-          measurement.itemId = currentId.toString();
-          measurement.subItemId = `${this.subItemPrefix}${subIdx}`;
-          subIdx++;
-          
-          if (subIdx > 99) {
-            subIdx = 1;
-            currentId++;
-          }
-        }
+      this.selectedRows.forEach((segment, index) => {
+        segment.itemId = this.newItemId;
+        // subId에 숫자만 추출하여 증가
+        const baseSubId = this.newSubId.replace(/\d+$/, '');
+        const startNum = parseInt(this.newSubId.match(/\d+$/)?.[0] || '1');
+        segment.subItemId = `${baseSubId}${startNum + index}`;
       });
       
-      this.nextId = this.idRangeEnd + 1;
-      this.segmentMeasurements();
-      this.$forceUpdate();
+      this.render();
     },
-    updateSelectedThreshold(newThreshold) {
-      if (this.selectedMeasurement) {
-        this.selectedBrightnessThreshold = newThreshold;
-        this.segmentMeasurements();
-        this.updateOverlay();
-      }
+    editSegment(segment) {
+      // 세그먼트 편집 로직 구현
+      console.log('Editing segment:', segment);
     },
-    selectMeasurement(measurement) {
-      this.selectedMeasurement = measurement;
-      this.selectedBrightnessThreshold = this.brightnessThreshold;
-      this.updateOverlay();
-    },
-
-    convertToGrayscale(imgElement) {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = imgElement.naturalWidth;
-      canvas.height = imgElement.naturalHeight;
-      
-      // 배경을 흰색으로 채움
-      ctx.fillStyle = 'white';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // 원본 이미지 그리기
-      ctx.drawImage(imgElement, 0, 0, canvas.width, canvas.height);
-      
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        const gray = r * 0.299 + g * 0.587 + b * 0.114;
-        data[i] = gray;
-        data[i + 1] = gray;
-        data[i + 2] = gray;
-      }
-      ctx.putImageData(imageData, 0, 0);
-      
-      // 저장: 이후 픽셀 샘플링은 이 캔버스(greyCanvas)를 기준으로 진행
-      this.greyCanvas = canvas;
-      
-      return canvas.toDataURL('image/png');
-    },
-    handleImageLoad(event) {
-      console.log("handleImageLoad 호출됨");
-      const img = event.target;
-      this.convertedImage = this.convertToGrayscale(img);
-      console.log("그레이스케일 변환 완료:", this.convertedImage);
-      this.initOverlay();
-    },
-    initOverlay() {
-      this.$nextTick(() => {
-        const container = this.$refs.displayedImage;
-        const svg = this.$refs.overlay;
-        if (container && svg) {
-          svg.setAttribute('width', container.offsetWidth);
-          svg.setAttribute('height', container.offsetHeight);
+    deleteSegment(segment) {
+      const index = this.segmentedMeasurements.indexOf(segment);
+      if (index > -1) {
+        // 관련된 모든 세그먼트와 측정값 삭제
+        const itemId = segment.itemId;
+        this.segmentedMeasurements = this.segmentedMeasurements.filter(s => s.itemId !== itemId);
+        this.measurements = this.measurements.filter(m => m.itemId !== itemId);
+        
+        // 삭제된 항목을 실행 취소 기록에 추가
+        const relatedSegments = this.segmentedMeasurements.filter(s => s.itemId === itemId);
+        const measurement = this.measurements.find(m => m.itemId === itemId);
+        if (measurement) {
+          this.undoHistory.push({
+            measurement: measurement,
+            segments: relatedSegments
+          });
         }
+        
+        this.render();
+      }
+    },
+    toggleReverse() {
+      this.isReversed = !this.isReversed;
+      this.render(); // 시각적 표시만 업데이트
+    },
+    handleRowMouseDown(segment, index) {
+      this.selectionStart = index;
+      this.selectedRows = [segment];
+      this.selectedSegment = segment;
+    },
+    handleRowMouseEnter(segment, index) {
+      if (this.selectionStart !== null) {
+        const start = Math.min(this.selectionStart, index);
+        const end = Math.max(this.selectionStart, index);
+        this.selectedRows = this.filteredMeasurements.slice(start, end + 1);
+      }
+    },
+    handleRowMouseUp() {
+      this.selectionStart = null;
+    },
+    handleKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        this.undoLastMeasurement();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        this.redoLastMeasurement();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (this.selectedSegment) {
+          this.deleteSegment(this.selectedSegment);
+          this.selectedSegment = null;
+        }
+      }
+    },
+    undoLastMeasurement() {
+      if (this.measurements.length > 0) {
+        const lastMeasurement = this.measurements.pop();
+        this.undoHistory.push(lastMeasurement);
+        
+        // 관련된 세그먼트들도 함께 저장하고 삭제
+        const relatedSegments = this.segmentedMeasurements.filter(
+          segment => segment.itemId === lastMeasurement.itemId
+        );
+        this.redoHistory.push({
+          measurement: lastMeasurement,
+          segments: relatedSegments
+        });
+        
+        this.segmentedMeasurements = this.segmentedMeasurements.filter(
+          segment => segment.itemId !== lastMeasurement.itemId
+        );
+        
+        this.render();
+      }
+    },
+    redoLastMeasurement() {
+      if (this.redoHistory.length > 0) {
+        const lastState = this.redoHistory.pop();
+        this.measurements.push(lastState.measurement);
+        this.segmentedMeasurements.push(...lastState.segments);
+        this.render();
+      }
+    },
+    updateAllMeasurements() {
+      this.segmentedMeasurements.forEach(segment => {
+        segment.value = this.calculateValue(segment.start, segment.end);
       });
     },
-    // 캔버스에서 (x, y) 좌표(캔버스 기준)의 픽셀 데이터를 읽어옴
-    getPixelDataAt(canvas, x, y) {
-      const ctx = canvas.getContext('2d');
-      try {
-        const imageData = ctx.getImageData(Math.round(x), Math.round(y), 1, 1);
-        console.log(`getPixelDataAt(${Math.round(x)}, ${Math.round(y)}):`, imageData.data);
-        return imageData.data; // [R, G, B, A]
-      } catch (e) {
-        console.error("getPixelDataAt 에러:", e);
-        return null;
-      }
-    },
-    // relative 좌표(0~1 기준)를 받아, 그레이스케일 캔버스 기준 절대 좌표로 변환 후 밝기를 읽어옴
-    calculateBrightnessAtPointAbsolute(xRel, yRel) {
-      if (!this.greyCanvas) {
-        console.error("calculateBrightnessAtPointAbsolute: greyCanvas가 없습니다.");
-        return 128;
-      }
-      const xCanvas = xRel * this.greyCanvas.width;
-      const yCanvas = yRel * this.greyCanvas.height;
-      const pixelData = this.getPixelDataAt(this.greyCanvas, xCanvas, yCanvas);
-      if (!pixelData) return 128;
-      const brightness = pixelData[0]; // 그레이스케일이면 R == G == B
-      console.log(`calculateBrightnessAtPointAbsolute (xRel:${xRel.toFixed(2)}, yRel:${yRel.toFixed(2)}) -> (x:${xCanvas.toFixed(1)}, y:${yCanvas.toFixed(1)}) brightness: ${brightness}`);
-      return brightness;
-    },
-    startMeasurement(event) {
-      const img = this.$refs.displayedImage;
-      if (!img) return;
-      const rect = img.getBoundingClientRect();
-      let x = (event.clientX - rect.left) / rect.width;
-      let y = (event.clientY - rect.top) / rect.height;
-      x = Math.min(Math.max(x, 0), 1);
-      y = Math.min(Math.max(y, 0), 1);
-      this.currentMeasurement = { points: [{ xRel: x, yRel: y }] };
-      this.isMeasuring = true;
-      this.updateOverlay();
-    },
-
-    updateMeasurement(event) {
-      if (!this.isMeasuring || !this.currentMeasurement) return;
-      const img = this.$refs.displayedImage;
-      const rect = img.getBoundingClientRect();
-      let x = (event.clientX - rect.left) / rect.width;
-      let y = (event.clientY - rect.top) / rect.height;
-      x = Math.min(Math.max(x, 0), 1);
-      y = Math.min(Math.max(y, 0), 1);
-      if (this.currentMeasurement.points.length === 1) {
-        this.currentMeasurement.points.push({ xRel: x, yRel: y });
-      } else {
-        this.currentMeasurement.points[1] = { xRel: x, yRel: y };
-      }
-      this.updateOverlay();
-    },
-
-    endMeasurement() {
-      this.isMeasuring = false;
-      const pts = this.currentMeasurement?.points;
-      this.currentMeasurement = null;
-
-      if (pts && pts.length === 2) {
-        const m = {
-          points:    [...pts],
-          itemId:    this.nextId.toString(),
-          value:     0,
-          brightness: 0
-        };
-        this.calculateMeasurement(m);
-        this.measurements.push(m);
+    createAreaMeasurements() {
+      const startX = Math.min(this.areaStart.x, this.areaEnd.x);
+      const endX = Math.max(this.areaStart.x, this.areaEnd.x);
+      const startY = Math.min(this.areaStart.y, this.areaEnd.y);
+      const endY = Math.max(this.areaStart.y, this.areaEnd.y);
+      
+      if (this.measurementMode === 'area-vertical') {
+        const width = endX - startX;
+        const spacing = width / (this.lineCount - 1);
+        
+        for (let i = 0; i < this.lineCount; i++) {
+          const x = startX + (spacing * i);
+          const measurement = {
+            start: { x, y: startY },
+            end: { x, y: endY },
+            itemId: this.nextId.toString(),
+            subItemId: `${this.nextId}-${this.subItemPrefix}${i + 1}`,
+            value: this.calculateValue({ x, y: startY }, { x, y: endY }),
+            brightness: 0
+          };
+          this.measurements.push(measurement);
+          this.createSegments(measurement);
+        }
         this.nextId++;
-        this.segmentMeasurements();
+      } else if (this.measurementMode === 'area-horizontal') {
+        const height = endY - startY;
+        const spacing = height / (this.lineCount - 1);
+        
+        for (let i = 0; i < this.lineCount; i++) {
+          const y = startY + (spacing * i);
+          const measurement = {
+            start: { x: startX, y },
+            end: { x: endX, y },
+            itemId: this.nextId.toString(),
+            subItemId: `${this.nextId}-${this.subItemPrefix}${i + 1}`,
+            value: this.calculateValue({ x: startX, y }, { x: endX, y }),
+            brightness: 0
+          };
+          this.measurements.push(measurement);
+          this.createSegments(measurement);
+        }
+        this.nextId++;
       }
-
-      this.updateOverlay();
     },
-
-    segmentMeasurements() {
-      const segs = [];
+    // 선 선택을 위한 거리 계산 함수
+    distanceToLine(point, lineStart, lineEnd) {
+      const A = point.x - lineStart.x;
+      const B = point.y - lineStart.y;
+      const C = lineEnd.x - lineStart.x;
+      const D = lineEnd.y - lineStart.y;
+      
+      const dot = A * C + B * D;
+      const lenSq = C * C + D * D;
+      let param = -1;
+      
+      if (lenSq !== 0) param = dot / lenSq;
+      
+      let xx, yy;
+      
+      if (param < 0) {
+        xx = lineStart.x;
+        yy = lineStart.y;
+      } else if (param > 1) {
+        xx = lineEnd.x;
+        yy = lineEnd.y;
+      } else {
+        xx = lineStart.x + param * C;
+        yy = lineStart.y + param * D;
+      }
+      
+      const dx = point.x - xx;
+      const dy = point.y - yy;
+      
+      return Math.sqrt(dx * dx + dy * dy);
+    },
+    // 캔버스 클릭 이벤트 핸들러
+    handleCanvasClick(e) {
+      if (this.isMeasuring) return;
+      
+      const pos = this.getLocalPos(e);
+      const threshold = 10; // 선택 허용 거리 (픽셀)
+      
+      // 가장 가까운 측정선 찾기
+      let closestMeasurement = null;
+      let minDistance = threshold;
+      
       this.measurements.forEach(measurement => {
-        const parts = this.createBrightnessSegments(measurement) || [];
-        parts.forEach((part, idx) => {
-          segs.push({
-            itemId:     measurement.itemId,
-            subItemId:  `${this.subItemPrefix}${idx + 1}`,
-            value:      part.value,
-            brightness: part.brightness
-          });
-        });
-      });
-      this.segmentedMeasurements = segs;
-    },
-
-    updateOverlay() {
-      if (this.rAFpending) return;
-      this.rAFpending = true;
-      requestAnimationFrame(() => {
-        this.rAFpending = false;
-        const svg       = this.$refs.overlay;
-        const container = this.$refs.imageContainer;
-        const imgEl     = this.$refs.displayedImage;
-        if (!svg || !container || !imgEl) return;
-
-        const cRect = container.getBoundingClientRect();
-        svg.setAttribute('width',  cRect.width);
-        svg.setAttribute('height', cRect.height);
-
-        const iRect     = imgEl.getBoundingClientRect();
-        const offsetX   = iRect.left - cRect.left;
-        const offsetY   = iRect.top  - cRect.top;
-        const imageW    = iRect.width;
-        const imageH    = iRect.height;
-
-        while (svg.firstChild) svg.removeChild(svg.firstChild);
-
-        // 확정된 라인 & 세그먼트
-        this.measurements.forEach(measurement => {
-          const absPts = measurement.points.map(pt => ({
-            x: offsetX + pt.xRel * imageW,
-            y: offsetY + pt.yRel * imageH
-          }));
-          // 파란 전체선
-          const full = document.createElementNS('http://www.w3.org/2000/svg','path');
-          let df = `M ${absPts[0].x} ${absPts[0].y}`;
-          absPts.slice(1).forEach(p => df += ` L ${p.x} ${p.y}`);
-          full.setAttribute('d', df);
-          full.setAttribute('stroke', 'blue');
-          full.setAttribute('stroke-width', '2');
-          full.setAttribute('fill', 'none');
-          full.setAttribute('stroke-dasharray', '5,5');
-          svg.appendChild(full);
-
-          // 빨간 세그먼트
-          const dx   = absPts[absPts.length-1].x - absPts[0].x;
-          const dy   = absPts[absPts.length-1].y - absPts[0].y;
-          const len  = Math.hypot(dx, dy);
-          const cnt  = Math.max(Math.ceil(len), this.sampleCountPerSegment);
-          const samples = this.sampleMeasurementPoints(measurement, cnt);
-          const thr = this.brightnessThreshold;
-          const inv = this.invertThreshold;
-          let inSeg = false, segPts = [];
-
-          samples.forEach((cur, i) => {
-            const prev = samples[i-1];
-            const bright = inv ? cur.brightness <= thr : cur.brightness > thr;
-
-            if (bright) {
-              if (!inSeg) {
-                if (prev) {
-                  const r = (thr - prev.brightness) / (cur.brightness - prev.brightness);
-                  const x0 = prev.x + r * (cur.x - prev.x);
-                  const y0 = prev.y + r * (cur.y - prev.y);
-                  segPts = [{ x: x0, y: y0 }];
-                } else {
-                  segPts = [{ x: cur.x, y: cur.y }];
-                }
-                inSeg = true;
-              }
-              segPts.push({ x: cur.x, y: cur.y });
-            } else if (inSeg) {
-              const r = (thr - prev.brightness) / (cur.brightness - prev.brightness);
-              const x1 = prev.x + r * (cur.x - prev.x);
-              const y1 = prev.y + r * (cur.y - prev.y);
-              segPts.push({ x: x1, y: y1 });
-
-              const sp = document.createElementNS('http://www.w3.org/2000/svg','path');
-              let ds = `M ${segPts[0].x} ${segPts[0].y}`;
-              segPts.slice(1).forEach(pt => ds += ` L ${pt.x} ${pt.y}`);
-              sp.setAttribute('d', ds);
-              sp.setAttribute('stroke', 'red');
-              sp.setAttribute('stroke-width', '3');
-              sp.setAttribute('fill', 'none');
-              svg.appendChild(sp);
-
-              inSeg = false;
-              segPts = [];
-            }
-          });
-
-          if (inSeg && segPts.length > 1) {
-            const sp = document.createElementNS('http://www.w3.org/2000/svg','path');
-            let ds = `M ${segPts[0].x} ${segPts[0].y}`;
-            segPts.slice(1).forEach(pt => ds += ` L ${pt.x} ${pt.y}`);
-            sp.setAttribute('d', ds);
-            sp.setAttribute('stroke', 'red');
-            sp.setAttribute('stroke-width', '3');
-            sp.setAttribute('fill', 'none');
-            svg.appendChild(sp);
-          }
-        });
-
-        // in-progress 선
-        if (this.isMeasuring && this.currentMeasurement?.points.length === 2) {
-          const [p1, p2] = this.currentMeasurement.points;
-          const a1 = { x: offsetX + p1.xRel * imageW, y: offsetY + p1.yRel * imageH };
-          const a2 = { x: offsetX + p2.xRel * imageW, y: offsetY + p2.yRel * imageH };
-          const ip = document.createElementNS('http://www.w3.org/2000/svg','path');
-          ip.setAttribute('d', `M ${a1.x} ${a1.y} L ${a2.x} ${a2.y}`);
-          ip.setAttribute('stroke', 'red');
-          ip.setAttribute('stroke-width', '3');
-          ip.setAttribute('fill', 'none');
-          svg.appendChild(ip);
+        const distance = this.distanceToLine(pos, measurement.start, measurement.end);
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestMeasurement = measurement;
         }
       });
+      
+      this.selectedMeasurement = closestMeasurement;
+      this.render();
     },
-
-    createBrightnessSegments(measurement) {
-      const segs = [];
-      const pts = measurement.points;
-      if (pts.length < 2) return segs;
-
-      const p1 = pts[0], p2 = pts[1];
-      const cw = this.greyCanvas.width, ch = this.greyCanvas.height;
-      const dx = (p2.xRel - p1.xRel) * cw, dy = (p2.yRel - p1.yRel) * ch;
-      const length = Math.hypot(dx, dy);
-      const cnt = Math.max(Math.ceil(length), 200);
-      const thr = this.brightnessThreshold;
-      const inv = this.invertThreshold;
-
-      let inSeg = false, startT = 0;
-      const samples = [];
-      for (let i = 0; i <= cnt; i++) {
-        const t = i / cnt;
-        const xRel = p1.xRel + (p2.xRel - p1.xRel) * t;
-        const yRel = p1.yRel + (p2.yRel - p1.yRel) * t;
-        const b = this.calculateBrightnessAtPointAbsolute(xRel, yRel);
-        samples.push({ t, b });
-      }
-
-      for (let i = 1; i < samples.length; i++) {
-        const prev = samples[i-1], cur = samples[i];
-        const wasOn = inv ? prev.b <= thr : prev.b > thr;
-        const isOn  = inv ? cur.b  <= thr : cur.b  > thr;
-
-        if (!inSeg && isOn && !wasOn) {
-          const r = (thr - prev.b) / (cur.b - prev.b);
-          startT = prev.t + (cur.t - prev.t) * r;
-          inSeg = true;
-        }
-        else if (inSeg && !isOn && wasOn) {
-          const r = (thr - prev.b) / (cur.b - prev.b);
-          const endT = prev.t + (cur.t - prev.t) * r;
-          const sx = (p1.xRel + (p2.xRel-p1.xRel)*startT) * cw;
-          const sy = (p1.yRel + (p2.yRel-p1.yRel)*startT) * ch;
-          const ex = (p1.xRel + (p2.xRel-p1.xRel)*endT)   * cw;
-          const ey = (p1.yRel + (p2.yRel-p1.yRel)*endT)   * ch;
-          segs.push({
-            itemId:     measurement.itemId,
-            subItemId:  measurement.subItemId,
-            value:      Math.hypot(ex - sx, ey - sy),
-            brightness: thr
-          });
-          inSeg = false;
-        }
-      }
-      return segs;
-    },
-
-
-    calculateMeasurement(measurement) {
-      const pts = measurement.points;
-      if (pts.length < 2) return;
-      const start = pts[0], end = pts[pts.length - 1];
-      measurement.value = this.calculateDistance(start, end);
-      const samples = this.sampleMeasurementPoints(measurement, this.sampleCountPerSegment);
-      measurement.brightness = samples.reduce((sum, s) => sum + s.brightness, 0) / samples.length;
-    },
-
-    
-
-    removeSegment(idx) {
-      this.segmentedMeasurements.splice(idx, 1);
-    },
-    
-    
-
-  sampleMeasurementPoints(measurement, sampleCount = 200) {
-    const s = [];
-    const pts = measurement.points;
-    if (pts.length < 2) return s;
-
-    const container = this.$refs.imageContainer;
-    const imgEl     = this.$refs.displayedImage;
-    if (!container || !imgEl) return s;
-
-    const cRect      = container.getBoundingClientRect();
-    const iRect      = imgEl.getBoundingClientRect();
-    const oX         = iRect.left - cRect.left;
-    const oY         = iRect.top  - cRect.top;
-    const iW         = iRect.width;
-    const iH         = iRect.height;
-
-    const start = { x: oX + pts[0].xRel * iW, y: oY + pts[0].yRel * iH };
-    const end   = { x: oX + pts[1].xRel * iW, y: oY + pts[1].yRel * iH };
-    const dx    = end.x - start.x;
-    const dy    = end.y - start.y;
-
-    for (let i = 0; i <= sampleCount; i++) {
-      const t = i / sampleCount;
-      const x = start.x + dx * t;
-      const y = start.y + dy * t;
-      const relX = (x - oX) / iW;
-      const relY = (y - oY) / iH;
-      const b = this.calculateBrightnessAtPointAbsolute(relX, relY);
-      s.push({ x, y, brightness: b });
-    }
-    return s;
-  },
-  },
-  
-
-  ////Methods 종료////
-
-  watch: {
-    showPopup(newVal) {
-      if (newVal) {
-        console.log('Popup shown, initializing SVG')
-        this.$nextTick(() => {
-          this.initSVG()
-        })
-      }
-    },
-    measurements: {
-      handler(newVal) {
-        console.log('Measurements updated', newVal.length)
-        this.updateOverlay()
-        this.segmentMeasurements()
-      },
-      deep: true
-    },
-    brightnessThreshold() {
-      this.segmentMeasurements();
-
-    },
-    invertThreshold() {
-      this.segmentMeasurements();
-
-    }
   }
-}
+};
 </script>
 
 <style scoped>
@@ -1053,712 +818,458 @@ export default {
   position: fixed;
   top: 0;
   left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
-  align-items: center;
   justify-content: center;
-  z-index: 99999;
-  backdrop-filter: blur(5px);
+  align-items: center;
+  z-index: 9999;
 }
 
 .measurement-container {
-  background: white;
+  background: #f8f9fa;
   border-radius: 12px;
-  width: 90vw;
-  max-width: 1400px;
+  width: 95vw;
   height: 95vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 20px 35px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
 }
 
 .measurement-header {
-  padding: 1.25rem 1.5rem;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 1rem 1.5rem;
+  background: #7950f2;
+  border-bottom: 1px solid #6741d9;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  height: 4rem;
 }
 
 .measurement-header h3 {
   margin: 0;
-  color: #1e293b;
+  color: #fff;
   font-size: 1.25rem;
   font-weight: 600;
 }
 
 .header-controls {
   display: flex;
+  gap: 1.5rem;
   align-items: center;
-  gap: 1rem;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.control-group label {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.control-input {
+  width: 80px;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.1);
+  outline: none;
+  transition: all 0.2s;
+}
+
+.control-input:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.control-input:focus {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.control-unit {
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
 .measurement-options {
   display: flex;
   gap: 0.5rem;
+  margin-right: 1rem;
 }
 
 .option-btn {
-  background: none;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  width: 36px;
-  height: 36px;
+  padding: 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  color: #64748b;
-  transition: all 0.2s ease;
+  width: 36px;
+  height: 36px;
 }
 
 .option-btn:hover {
-  background: #f1f5f9;
-  color: #1e293b;
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.5);
 }
 
 .option-btn.active {
-  background: #8b5cf6;
-  color: white;
-  border-color: #8b5cf6;
+  background: #fff;
+  color: #7950f2;
+  border-color: #fff;
 }
 
 .close-btn {
-  background: none;
+  padding: 0.5rem 1rem;
+  background: #fff;
+  color: #7950f2;
   border: none;
-  color: #64748b;
-  font-size: 1.2rem;
+  border-radius: 6px;
   cursor: pointer;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
+  font-weight: 600;
 }
 
 .close-btn:hover {
-  background: #e2e8f0;
-  color: #1e293b;
+  background: #f8f0ff;
 }
 
 .measurement-content {
-  display: flex;
   flex: 1;
+  display: flex;
   overflow: hidden;
-  height: calc(95vh - 60px);
 }
 
 .image-container {
-  position: relative;
   flex: 1;
-  height: 100%;
+  position: relative;
+  background: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f8fafc;
-  overflow: hidden;
 }
 
-.image-container img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  pointer-events: auto;
-  position: relative;
-  z-index: 1;
-}
-
-.measurement-overlay {
+.measurement-canvas {
   position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-  z-index: 2;
+  cursor: crosshair;
 }
 
-.measurement-controls {
-  width: 350px;
-  padding: 1.25rem;
-  background: white;
-  border-left: 1px solid #e2e8f0;
-  overflow-y: auto;
+.right-panel {
+  width: 400px;
+  background: #fff;
+  border-left: 1px solid #e9ecef;
   display: flex;
   flex-direction: column;
-  height: 100%;
 }
 
-.measurement-input-panel {
-  background: #f8fafc;
+.panel-section {
+  padding: 1.5rem;
+}
+
+.id-input-panel {
+  background: #f8f0ff;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 1.5rem;
   margin-bottom: 1.5rem;
-  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(121, 80, 242, 0.1);
 }
 
-.measurement-input-panel h4 {
-  margin: 0 0 1rem;
-  color: #1e293b;
+.id-input-panel h5 {
+  color: #7950f2;
+  margin: 0 0 1rem 0;
   font-size: 1rem;
-  font-weight: 600;
 }
 
-.input-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-gap: 0.75rem;
-}
-
-.input-grid .input-group {
-  grid-column: span 2;
-}
-
-.button-group {
-  grid-column: span 2;
+.id-input-container {
   display: flex;
-  justify-content: flex-end;
-  margin-top: 0.5rem;
-}
-
-.apply-btn {
-  background: #8b5cf6;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 0.5rem 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s ease;
-}
-
-.apply-btn:hover {
-  background: #7c3aed;
-}
-
-.apply-btn:disabled {
-  background: #cbd5e1;
-  cursor: not-allowed;
-}
-
-.results-table-container {
-  overflow-x: auto;
-  margin-bottom: 1rem;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-}
-
-.results-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-.results-table th,
-.results-table td {
-  padding: 0.75rem;
-  text-align: left;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.results-table th {
-  background: #f1f5f9;
-  font-weight: 600;
-  color: #1e293b;
-  position: sticky;
-  top: 0;
-}
-
-.results-table tr:last-child td {
-  border-bottom: none;
-}
-
-.results-table tr.highlighted {
-  background-color: #ede9fe;
-}
-
-.results-table tr.bright {
-  border-left: 3px solid #ef4444;
-}
-
-.results-table tr.dark {
-  border-left: 3px solid #3b82f6;
-}
-
-.icon-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-size: 0.875rem;
-  padding: 0.25rem;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.delete-btn {
-  color: #ef4444;
-}
-
-.delete-btn:hover {
-  background: #fee2e2;
-}
-
-.edit-btn {
-  color: #3b82f6;
-}
-
-.edit-btn:hover {
-  background: #dbeafe;
-}
-
-.results-summary {
-  display: flex;
-  justify-content: space-between;
-  background: #f8fafc;
-  padding: 0.75rem;
-  border-radius: 8px;
-  margin-top: 1rem;
-  border: 1px solid #e2e8f0;
-}
-
-.summary-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.summary-label {
-  font-size: 0.75rem;
-  color: #64748b;
-  margin-bottom: 0.25rem;
-}
-
-.summary-value {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.unit-selector, .scale-input {
-  margin-bottom: 1.5rem;
-}
-
-.unit-selector label, .scale-input label {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: #1e293b;
-  font-weight: 500;
-}
-
-.unit-selector select {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  background: white;
-}
-
-.scale-input-group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.scale-input-group input {
-  width: 80px;
-  padding: 0.5rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-}
-
-.measurement-results {
-  margin-top: 2rem;
-  padding: 1rem;
-  background: #f8fafc;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-}
-
-.measurement-results h4 {
-  margin: 0 0 1rem;
-  color: #1e293b;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.results-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  gap: 1rem;
   margin-bottom: 1rem;
 }
 
-.segment-count {
-  font-size: 0.875rem;
-  color: #64748b;
-}
-
-.segment-info {
-  margin-top: 1rem;
-  padding: 1rem;
-  background: #f8fafc;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-}
-
-.segment-header {
-  margin-bottom: 0.5rem;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.segment-count-by-type {
-  display: flex;
-  justify-content: space-between;
-}
-
-.bright-count, .dark-count {
-  font-size: 0.875rem;
-  color: #64748b;
-}
-
-/* 신규 ID 범위 설정 패널 스타일 */
-.id-range-panel {
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
-  border: 1px solid #e2e8f0;
-}
-
-.id-range-panel h4 {
-  margin: 0 0 1rem;
-  color: #1e293b;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-/* 선택된 측정을 위한 임계값 조정 패널 */
-.threshold-panel {
-  background: #ede9fe;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
-  border: 1px solid #c4b5fd;
-}
-
-.threshold-panel h4 {
-  margin: 0 0 1rem;
-  color: #5b21b6;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-/* 기본 입력 그리드 스타일 */
-.input-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-gap: 0.75rem;
-}
-
-.input-grid .input-group {
-  grid-column: span 1;
-}
-
-.input-grid .input-group:last-child {
-  grid-column: span 2;
-}
-
-.button-group {
-  grid-column: span 2;
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 0.5rem;
-}
-
-.apply-btn {
-  background: #8b5cf6;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 0.5rem 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  transition: all 0.2s ease;
-}
-
-.apply-btn:hover {
-  background: #7c3aed;
-}
-
-.apply-btn:disabled {
-  background: #cbd5e1;
-  cursor: not-allowed;
-}
-
-/* 결과 테이블 스타일 업데이트 */
-.results-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.segment-count {
-  font-size: 0.875rem;
-  padding: 0.25rem 0.5rem;
-  background: #f1f5f9;
-  border-radius: 4px;
-  color: #334155;
-  font-weight: 500;
-}
-
-.results-table-container {
-  overflow-y: auto;
-  max-height: 200px;
-  margin-bottom: 1rem;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-}
-
-.results-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-.results-table th,
-.results-table td {
-  padding: 0.75rem;
-  text-align: left;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.results-table th {
-  background: #f1f5f9;
-  font-weight: 600;
-  color: #1e293b;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.results-table tr {
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.results-table tr:hover {
-  background-color: #f8fafc;
-}
-
-.results-table tr:last-child td {
-  border-bottom: none;
-}
-
-.results-table tr.highlighted {
-  background-color: #ede9fe;
-}
-
-.results-table tr.bright {
-  border-left: 3px solid #ef4444;
-}
-
-.results-table tr.dark {
-  border-left: 3px solid #3b82f6;
-}
-
-/* 세그먼트 정보 스타일 */
-.segment-info {
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 0.75rem;
-  margin-top: 1rem;
-  border: 1px solid #e2e8f0;
-}
-
-.segment-header {
-  margin-bottom: 0.5rem;
-}
-
-.segment-header h5 {
-  margin: 0;
-  color: #1e293b;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.segment-count-by-type {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.875rem;
-}
-
-.bright-count {
-  color: #ef4444;
-  font-weight: 500;
-}
-
-.dark-count {
-  color: #3b82f6;
-  font-weight: 500;
-}
-
-/* 기본 입력 컴포넌트 스타일 */
 .input-group {
-  margin-bottom: 0.75rem;
+  flex: 1;
 }
 
 .input-group label {
   display: block;
   margin-bottom: 0.5rem;
-  color: #1e293b;
+  color: #495057;
+  font-size: 0.9rem;
   font-weight: 500;
-  font-size: 0.875rem;
 }
 
-.input-group input,
-.input-group select {
+.form-control {
   width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  font-size: 0.875rem;
+  padding: 0.625rem;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: all 0.2s;
 }
 
-.input-group input[type="range"] {
-  margin-bottom: 0.5rem;
+.form-control:focus {
+  border-color: #7950f2;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(121, 80, 242, 0.1);
 }
 
-.input-group span {
-  display: block;
-  text-align: center;
-  color: #64748b;
-  font-size: 0.875rem;
-}
-
-/* 아이콘 버튼 스타일 */
-.icon-btn {
-  background: none;
+.btn-apply {
+  width: 100%;
+  padding: 0.75rem;
+  background: #7950f2;
+  color: #fff;
   border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
   cursor: pointer;
-  font-size: 0.875rem;
-  padding: 0.25rem;
-  border-radius: 4px;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 }
 
-.delete-btn {
-  color: #ef4444;
+.btn-apply:hover {
+  background: #6741d9;
 }
 
-.delete-btn:hover {
-  background: #fee2e2;
+.btn-apply:disabled {
+  background: #dee2e6;
+  cursor: not-allowed;
 }
 
-/* 기존 스타일 유지 */
-.unit-selector, .scale-input, .threshold-input {
-  margin-bottom: 1.5rem;
+.results-table-container {
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  overflow: auto;
+  max-height: calc(100vh - 400px);
 }
 
-.scale-input-group {
+.results-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.results-table th {
+  background: #f8f0ff;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #495057;
+  border-bottom: 2px solid #e9ecef;
+  position: sticky;
+  top: 0;
+}
+
+.results-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e9ecef;
+  color: #495057;
+}
+
+.selected-row {
+  background-color: #f3f0ff !important;
+}
+
+.results-table tr {
+  cursor: pointer;
+  user-select: none;
+}
+
+.results-table tr:hover {
+  background-color: #f8f0ff;
+}
+
+.measurement-controls {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 1.5rem;
+  background: rgba(0, 0, 0, 0.85);
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 1.5rem;
+  white-space: nowrap;
+  max-width: calc(100% - 3rem);
+  overflow-x: auto;
 }
 
-.scale-input-group input {
-  width: 80px;
-  padding: 0.5rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-}
-
-.measurement-results {
-  margin-top: 2rem;
-  padding: 1rem;
-  background: #f8fafc;
+.measurement-controls .option-btn {
+  background: #7950f2;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 100px;
+  white-space: nowrap;
 }
 
-.measurement-results h4 {
-  margin: 0;
-  color: #1e293b;
+.measurement-controls .option-btn:hover {
+  background: #6741d9;
+  transform: translateY(-1px);
+}
+
+.measurement-controls .option-btn.active {
+  background: #fff;
+  color: #7950f2;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.control-label {
+  color: #fff;
   font-size: 1rem;
-  font-weight: 600;
+  font-weight: 500;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
 }
 
-/* 기존 스타일 유지 (추가 부분) */
-.measurement-input-panel {
-  background: #f8fafc;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
-  border: 1px solid #e2e8f0;
+.threshold-slider {
+  width: 200px;
 }
 
-.measurement-input-panel h4 {
-  margin: 0 0 1rem;
-  color: #1e293b;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.threshold-header {
+.results-summary {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.threshold-header label {
-  display: block;
-  color: #1e293b;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: #f8f0ff;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: #495057;
   font-weight: 500;
-  font-size: 0.875rem;
 }
 
-.toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.5rem;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f8f0ff;
   border-radius: 4px;
-  font-size: 0.75rem;
-  color: #64748b;
-  cursor: pointer;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #7950f2;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6741d9;
+}
+
+.measurement-controls .control-group label {
+  color: #fff;
+  font-size: 1rem;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.results-table td.action-buttons .option-btn {
+  color: #7950f2;
+  background: #fff;
+  border: 1px solid #7950f2;
+  padding: 6px 10px;  /* 패딩 증가 */
+  font-size: 1rem;  /* 크기 증가 */
+}
+
+.results-table td.action-buttons .option-btn:hover {
+  background: #7950f2;
+  color: #fff;
+  transform: scale(1.05);  /* 호버 효과 추가 */
   transition: all 0.2s ease;
 }
 
-.toggle-btn i {
-  font-size: 0.875rem;
+@media (max-width: 1200px) {
+  .measurement-container {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .measurement-content {
+    flex-direction: column;
+  }
+
+  .right-panel {
+    width: 100%;
+    height: auto;
+    min-height: 200px;
+  }
+
+  .image-container {
+    height: 50vh;
+  }
+
+  .results-table-container {
+    max-height: 30vh;
+  }
+
+  .measurement-controls {
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+    border-radius: 0;
+  }
+
+  .control-group {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .threshold-slider {
+    width: 150px;
+  }
 }
 
-.toggle-btn.toggled {
-  background: #1e293b;
-  color: white;
-  border-color: #1e293b;
-}
+@media (max-width: 768px) {
+  .measurement-header {
+    padding: 0.75rem;
+    height: auto;
+  }
 
-.toggle-btn:hover {
-  background: #e2e8f0;
-}
+  .header-controls {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
 
-.toggle-btn.toggled:hover {
-  background: #334155;
+  .control-input {
+    width: 60px;
+  }
+
+  .measurement-options {
+    margin-right: 0;
+  }
+
+  .option-btn {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+  }
+
+  .results-table th,
+  .results-table td {
+    padding: 0.5rem;
+    font-size: 0.8rem;
+  }
 }
-</style> 
+</style>

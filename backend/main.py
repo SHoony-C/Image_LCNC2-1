@@ -35,7 +35,7 @@ app = FastAPI(
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 프로덕션에서는 구체적인 도메인으로 변경
+    allow_origins=["*"],  # 개발 환경에서는 모든 origin 허용
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

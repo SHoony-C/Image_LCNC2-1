@@ -1,10 +1,28 @@
 <template>
   <div class="main-view">
+    <div class="mobile-header">
+      <button class="hamburger-btn" @click="toggleSidebar">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
     <div class="page-title">
       <h1>I-App Main</h1>
       <div class="title-underline"></div>
     </div>
     <div class="content">
+      <div class="sidebar" :class="{ 'sidebar-open': isSidebarOpen }">
+        <div class="sidebar-header">
+          <h3>메뉴</h3>
+          <button class="close-btn" @click="toggleSidebar">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <nav class="sidebar-nav">
+          <a href="#" class="nav-item">메뉴 1</a>
+          <a href="#" class="nav-item">메뉴 2</a>
+          <a href="#" class="nav-item">메뉴 3</a>
+        </nav>
+      </div>
       <div class="msa-grid">
         <div class="top-row">
           <MSA1ImageInput class="msa-card msa1" />
@@ -21,6 +39,7 @@
       </div>
     </div>
     <MainFooter />
+    <div class="sidebar-overlay" v-if="isSidebarOpen" @click="toggleSidebar"></div>
   </div>
 </template>
 
@@ -43,6 +62,16 @@ export default {
     MSA5ImageLCNC,
     MSA6FinalResult,
     MainFooter
+  },
+  data() {
+    return {
+      isSidebarOpen: false
+    }
+  },
+  methods: {
+    toggleSidebar() {
+      this.isSidebarOpen = !this.isSidebarOpen;
+    }
   }
 }
 </script>
@@ -86,7 +115,8 @@ export default {
   display: flex;
   flex-direction: column;
   margin-bottom: 3rem;
-  height: calc(100vh - 13rem); /* Account for padding, title, and footer */
+  height: calc(100vh - 13rem);
+  min-height: 800px;
 }
 
 .msa-grid {
@@ -104,6 +134,7 @@ export default {
   gap: 2rem;
   width: 100%;
   height: 40%;
+  min-height: 300px;
 }
 
 .bottom-row {
@@ -112,6 +143,7 @@ export default {
   gap: 2rem;
   width: 100%;
   height: 60%;
+  min-height: 400px;
 }
 
 .msa5-6-container {
@@ -129,6 +161,7 @@ export default {
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .msa1 {
@@ -158,31 +191,90 @@ export default {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
+@media (max-width: 1600px) {
+  .top-row {
+    grid-template-columns: 1fr 1.5fr 1.5fr;
+  }
+}
+
+@media (max-width: 1400px) {
+  .top-row {
+    grid-template-columns: 1fr 1fr 1fr;
+    height: 45%;
+  }
+
+  .bottom-row {
+    height: 55%;
+  }
+}
+
 @media (max-width: 1200px) {
   .content {
     height: auto;
-    min-height: calc(100vh - 13rem);
   }
 
-  .top-row,
-  .bottom-row,
-  .msa5-6-container {
+  .top-row {
     grid-template-columns: 1fr;
     height: auto;
-  }
-
-  .msa4, .msa6 {
-    width: 100%;
-  }
-
-  .footer-content {
-    flex-direction: column;
-    text-align: center;
     gap: 1rem;
   }
 
-  .footer-links {
-    justify-content: center;
+  .bottom-row {
+    grid-template-columns: 1fr;
+    height: auto;
+    gap: 1rem;
+  }
+
+  .msa5-6-container {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .msa1, .msa2, .msa3 {
+    min-height: 250px;
+    height: auto;
+  }
+
+  .msa4 {
+    width: 100%;
+    height: 300px;
+  }
+
+  .msa5 {
+    min-height: 400px;
+    width: 100%;
+  }
+
+  .msa6 {
+    width: 100%;
+    height: 400px;
+  }
+
+  .msa-card {
+    margin-bottom: 1rem;
+  }
+
+  .mobile-header {
+    display: block;
+  }
+
+  .main-view {
+    padding-top: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .msa1, .msa2, .msa3, .msa4 {
+    min-height: 200px;
+  }
+
+  .msa5, .msa6 {
+    height: 300px;
+  }
+
+  .msa-grid {
+    gap: 1rem;
+    padding: 0.5rem;
   }
 }
 
@@ -229,5 +321,89 @@ export default {
 
 .footer-link:hover {
   color: var(--primary-700);
+}
+
+.mobile-header {
+  display: none;
+  padding: 1rem;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.hamburger-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--primary-600);
+  cursor: pointer;
+  padding: 0.5rem;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: -300px;
+  width: 300px;
+  height: 100vh;
+  background: white;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+  transition: left 0.3s ease;
+  z-index: 1000;
+}
+
+.sidebar-open {
+  left: 0;
+}
+
+.sidebar-header {
+  padding: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.sidebar-header h3 {
+  margin: 0;
+  color: var(--primary-800);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--gray-600);
+  cursor: pointer;
+}
+
+.sidebar-nav {
+  padding: 1rem;
+}
+
+.nav-item {
+  display: block;
+  padding: 1rem;
+  color: var(--gray-800);
+  text-decoration: none;
+  transition: background 0.2s;
+  border-radius: 8px;
+}
+
+.nav-item:hover {
+  background: var(--primary-50);
+  color: var(--primary-600);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
 }
 </style> 

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 import random
@@ -56,7 +57,7 @@ def generate_image_url(item_id: str, subitem_id: str):
 # 데모 데이터 저장
 demo_data = generate_demo_data()
 
-@router.get("/side2/data")
+@router.get("/data")
 async def get_analysis_data():
     """분석 데이터 전체 조회"""
     return {
@@ -64,7 +65,23 @@ async def get_analysis_data():
         "data": demo_data
     }
 
-@router.get("/side2/data/{item_id}")
+@router.get("/images/{item_id}")
+async def get_image(item_id: str):
+    """이미지 조회"""
+    # item_id에서 숫자만 추출 (예: "item1" -> "1")
+    item_number = item_id.replace("item", "")
+    
+    # 테스트 이미지 경로
+    image_path = f"frontend/public/test_image/{item_number}.png"
+    
+    if os.path.exists(image_path):
+        return FileResponse(image_path)
+    else:
+        # 이미지가 없으면 기본 이미지 반환
+        default_image = "frontend/public/test_image/1.png"
+        return FileResponse(default_image)
+
+@router.get("/data/{item_id}")
 async def get_item_data(item_id: str):
     """특정 아이템의 데이터 조회"""
     item_data = [d for d in demo_data if d['item_id'] == item_id]
@@ -75,7 +92,7 @@ async def get_item_data(item_id: str):
         "data": item_data
     }
 
-@router.post("/side2/selected")
+@router.post("/selected")
 async def get_selected_data(selected_ids: List[str]):
     """선택된 데이터 포인트들의 상세 정보 조회"""
     try:
@@ -102,7 +119,7 @@ async def get_selected_data(selected_ids: List[str]):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/side2/plot")
+@router.get("/plot")
 async def get_plot_data():
     """그래프용 데이터 조회"""
     plot_data = {

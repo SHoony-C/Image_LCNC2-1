@@ -22,7 +22,7 @@
       <span>{{ statusMessage }}</span>
     </div>
 
-    <div class="workflow-container">
+    <div class="workflow-container" ref="containerRef">
       <div class="node-palette">
         <div class="palette-header">
           <i class="fas fa-th-large"></i>
@@ -56,11 +56,14 @@
         </div>
       </div>
 
-      <div class="workflow-area" @dragover="onDragOver" @drop="onDrop">
-        <VueFlow v-model="elements" :default-viewport="{ x: 0, y: 0, zoom: 0.7 }"
+      <div class="workflow-area" @dragover="onDragOver" @drop="onDrop" ref="workflowArea">
+        <VueFlow v-model="elements" 
+          :default-viewport="{ x: 0, y: 0, zoom: 0.7 }"
+          :style="{ width: '100%', height: '100%' }"
           @connect="onConnect" @node-drag-stop="onNodeDragStop" @node-click="onNodeClick"
           :min-zoom="0.2" :max-zoom="2" :snap-to-grid="true" :snap-grid="[15, 15]"
-          fit-view-on-init
+          :fit-view-on-init="true"
+          :auto-connect="false"
           @pane-ready="onPaneReady"
           @init="onInit">
           <Background pattern-color="#aaa" gap="8" />
@@ -115,10 +118,10 @@
 
           <template #node-merge="nodeProps">
             <div class="merge-node">
-              <Handle type="target" position="left-top" id="input-lefttop" />
-              <Handle type="target" position="left-bottom" id="input-leftbottom" />
-              <Handle type="target" position="right-top" id="input-righttop" />
-              <Handle type="source" position="right-bottom" id="output-rightbottom" />
+              <Handle type="target" position="left" id="input-lefttop" :style="{ left: '-5px', top: '20px', transform: 'none' }" />
+              <Handle type="target" position="left" id="input-leftbottom" :style="{ left: '-5px', bottom: '20px', transform: 'none' }" />
+              <Handle type="target" position="right" id="input-righttop" :style="{ right: '-5px', top: '20px', transform: 'none' }" />
+              <Handle type="source" position="right" id="output-rightbottom" :style="{ right: '-5px', bottom: '20px', transform: 'none' }" />
               
               <div class="node-header">
                 <i :class="nodeProps.data.icon"></i>
@@ -211,6 +214,7 @@ export default {
     const flowInstance = ref(null)
     const defaultOptions = ref({})
     const processingQueue = ref([])
+    const containerRef = ref(null)
 
     // 전처리 옵션 로드 함수
     const loadAvailableNodes = async () => {
@@ -233,10 +237,44 @@ export default {
         console.log('로드된 기본 옵션:', defaultOptions.value)
 
         // 로드된 노드 기반으로 초기 elements 설정
-        elements.value = [
-          { id: 'start', type: 'start', position: { x: 50, y: 50 }, data: { label: '시작' } },
-          { id: 'end', type: 'end', position: { x: 650, y: 400 }, data: { label: '종료' } }
-        ]
+        if (containerRef.value) {
+          const containerWidth = containerRef.value.clientWidth
+          const containerHeight = containerRef.value.clientHeight
+          
+          // 종료 노드 위치 계산 - 화면 크기에 맞게 조정
+          let endX;
+          if (containerWidth < 600) {
+            endX = Math.min(containerWidth - 80, containerWidth * 0.35);
+          } else if (containerWidth < 800) {
+            endX = Math.min(containerWidth - 100, containerWidth * 0.4);
+          } else {
+            endX = Math.min(containerWidth - 120, containerWidth * 0.6);
+          }
+          
+          // 시작점보다는 오른쪽에 배치
+          endX = Math.max(endX, containerWidth * 0.1 + 200);
+          
+          elements.value = [
+            { 
+              id: 'start', 
+              type: 'start', 
+              position: { 
+                x: containerWidth * 0.1,  // 화면 너비의 10% 위치
+                y: containerHeight * 0.1   // 화면 높이의 10% 위치
+              }, 
+              data: { label: '시작' } 
+            },
+            { 
+              id: 'end', 
+              type: 'end', 
+              position: { 
+                x: endX,  // 계산된 위치 사용
+                y: containerHeight * 0.5   // 수직 중앙에 배치
+              }, 
+              data: { label: '종료' } 
+            }
+          ]
+        }
 
       } catch (error) {
         console.error('전처리 옵션을 불러오는 중 오류 발생:', error)
@@ -249,10 +287,31 @@ export default {
         defaultOptions.value = {}
         
         // 초기 elements 설정
-        elements.value = [
-          { id: 'start', type: 'start', position: { x: 50, y: 50 }, data: { label: '시작' } },
-          { id: 'end', type: 'end', position: { x: 650, y: 400 }, data: { label: '종료' } }
-        ]
+        if (containerRef.value) {
+          const containerWidth = containerRef.value.clientWidth
+          const containerHeight = containerRef.value.clientHeight
+          
+          elements.value = [
+            { 
+              id: 'start', 
+              type: 'start', 
+              position: { 
+                x: containerWidth * 0.1,
+                y: containerHeight * 0.1
+              }, 
+              data: { label: '시작' } 
+            },
+            { 
+              id: 'end', 
+              type: 'end', 
+              position: { 
+                x: containerWidth * 0.85,
+                y: containerHeight * 0.8
+              }, 
+              data: { label: '종료' } 
+            }
+          ]
+        }
       } finally {
         isNodesLoading.value = false
       }
@@ -833,9 +892,18 @@ export default {
     const onPaneReady = (instance) => {
       console.log('VueFlow pane ready')
       if (instance) {
-        instance.fitView({ padding: 0.4, duration: 200 })
+        const workflowArea = document.querySelector('.workflow-area')
+        console.log('Workflow area dimensions:', {
+          width: workflowArea?.clientWidth,
+          height: workflowArea?.clientHeight,
+          offsetWidth: workflowArea?.offsetWidth,
+          offsetHeight: workflowArea?.offsetHeight
+        })
+        
+        instance.fitView({ padding: 0.2, duration: 200 })
         setTimeout(() => {
-          instance.zoomTo(0.9)
+          instance.setTransform({ x: 0, y: 0, zoom: 0.9 })
+          console.log('VueFlow viewport after transform:', instance.getViewport())
         }, 300)
       }
     }
@@ -1015,8 +1083,150 @@ export default {
       }, 100);
     }
 
+    const updateElementPositions = () => {
+      console.log('Window resize detected, updating element positions...');
+      
+      if (containerRef.value) {
+        const containerWidth = containerRef.value.clientWidth;
+        const containerHeight = containerRef.value.clientHeight;
+        
+        console.log('Container dimensions:', {
+          width: containerWidth,
+          height: containerHeight,
+          offsetWidth: containerRef.value.offsetWidth,
+          offsetHeight: containerRef.value.offsetHeight,
+          scrollWidth: containerRef.value.scrollWidth,
+          scrollHeight: containerRef.value.scrollHeight
+        });
+        
+        // 시작 노드 위치 (왼쪽 10% 지점, 최대 200px)
+        const startX = Math.max(100, Math.min(containerWidth * 0.1, 200));
+        const startY = Math.max(100, Math.min(containerHeight * 0.1, 200));
+        
+        console.log('Start node position:', {
+          x: startX,
+          y: startY,
+          containerWidth,
+          containerHeight
+        });
+        
+        // 종료 노드 위치 계산 수정 - 작은 화면에서도 캔버스 내에 표시되도록 개선
+        let minEndX, maxEndX, defaultEndX;
+        
+        // 화면 크기에 따른 동적 조정
+        if (containerWidth < 600) {
+          // 매우 작은 화면
+          minEndX = startX + 200;  // 최소 거리 감소
+          maxEndX = containerWidth - 80; // 오른쪽 여백 감소
+          defaultEndX = containerWidth * 0.35; // 더 왼쪽으로
+        } else if (containerWidth < 800) {
+          // 작은 화면
+          minEndX = startX + 250;
+          maxEndX = containerWidth - 100;
+          defaultEndX = containerWidth * 0.4;
+        } else {
+          // 보통 크기 이상 화면
+          minEndX = startX + 300;
+          maxEndX = Math.min(containerWidth - 120, containerWidth * 0.7);
+          defaultEndX = containerWidth * 0.5;
+        }
+        
+        // 항상 화면 안에 들어오도록 보정
+        if (maxEndX > containerWidth - 10) {
+          maxEndX = containerWidth - 10;
+        }
+        
+        const endX = Math.min(maxEndX, Math.max(minEndX, defaultEndX));
+        const endY = Math.max(200, Math.min(containerHeight * 0.5, containerHeight - 150));
+        
+        console.log('End node position calculation:', {
+          minEndX,
+          maxEndX,
+          defaultEndX,
+          finalEndX: endX,
+          finalEndY: endY,
+          containerWidth,
+          containerHeight
+        });
+        
+        // 현재 elements에서 시작/종료 노드 외의 다른 노드들 보존
+        const otherNodes = elements.value.filter(el => 
+          el.id !== 'start' && el.id !== 'end' && el.type !== 'smoothstep'
+        );
+        const connections = elements.value.filter(el => el.type === 'smoothstep');
+        
+        elements.value = [
+          { 
+            id: 'start', 
+            type: 'start', 
+            position: { x: startX, y: startY }, 
+            data: { label: '시작' } 
+          },
+          { 
+            id: 'end', 
+            type: 'end', 
+            position: { x: endX, y: endY }, 
+            data: { label: '종료' } 
+          },
+          ...otherNodes,
+          ...connections
+        ];
+        
+        console.log('Updated elements:', elements.value);
+        
+        // VueFlow 인스턴스가 있으면 뷰를 업데이트
+        if (flowInstance.value) {
+          console.log('Updating VueFlow viewport...');
+          setTimeout(() => {
+            flowInstance.value.fitView({ padding: 0.2, duration: 200 });
+            // Viewport 정보 로깅 추가
+            const viewport = flowInstance.value.getViewport();
+            console.log('VueFlow viewport after transform:', viewport);
+            
+            // 추가: 현재 뷰포트의 실제 크기 확인
+            const workflowArea = document.querySelector('.workflow-area');
+            if (workflowArea) {
+              console.log('Workflow area dimensions:', {
+                clientWidth: workflowArea.clientWidth,
+                clientHeight: workflowArea.clientHeight,
+                offsetWidth: workflowArea.offsetWidth,
+                offsetHeight: workflowArea.offsetHeight
+              });
+            }
+          }, 50);
+        } else {
+          console.warn('VueFlow instance not available during resize');
+        }
+      } else {
+        console.warn('Container reference not available during resize');
+      }
+    }
+
     onMounted(() => {
       console.log('=========== MSA5 COMPONENT MOUNTED ==========');
+      
+      // 초기 elements 설정
+      elements.value = [
+        { 
+          id: 'start', 
+          type: 'start', 
+          position: { 
+            x: 100,
+            y: 100
+          }, 
+          data: { label: '시작' } 
+        },
+        { 
+          id: 'end', 
+          type: 'end', 
+          position: { 
+            x: 400,  // 초기값을 시작 위치보다 적당히 떨어진 위치로 설정
+            y: 300
+          }, 
+          data: { label: '종료' } 
+        }
+      ];
+      
       loadAvailableNodes();
       
       // 즉시 MSA1에 현재 이미지 요청
@@ -1081,12 +1291,23 @@ export default {
           }
         }
       });
+
+      // containerRef가 준비될 때까지 기다린 후 초기 위치 설정 및 리사이즈 이벤트 리스너 등록
+      const checkContainerRef = setInterval(() => {
+        if (containerRef.value) {
+          console.log('Container reference is now available');
+          updateElementPositions();
+          window.addEventListener('resize', updateElementPositions);
+          clearInterval(checkContainerRef);
+        }
+      }, 100);
     })
 
     onUnmounted(() => {
       // 이벤트 리스너 해제
       window.removeEventListener('msa4-image-selected', handleImageUpdate);
       window.removeEventListener('msa1-image-selected', handleImageUpdate);
+      window.removeEventListener('resize', updateElementPositions)
     })
 
     return {
@@ -1260,6 +1481,8 @@ export default {
   overflow: hidden;
   height: 100%;
   cursor: default;
+  min-width: 0; /* 추가: flexbox 내에서 올바른 크기 계산을 위해 */
+  min-height: 0; /* 추가: flexbox 내에서 올바른 크기 계산을 위해 */
 }
 
 .workflow-area.dragging {
@@ -1664,13 +1887,13 @@ select.param-input {
   100% { opacity: 0; transform: translate(-50%, -10px); }
 }
 
-/* 병합 노드 스타일 */
+/* 병합 노드 스타일 수정 */
 .merge-node {
+  position: relative;
   width: 180px;
   height: auto;
   background: white;
   border-radius: 4px;
-  position: relative;
   border: 1px solid rgba(124, 58, 237, 0.2);
   display: flex;
   flex-direction: column;
@@ -1678,55 +1901,69 @@ select.param-input {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
 }
 
-.merge-node .node-header {
-  transform: none;
-  width: 100%;
-  text-align: center;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.merge-node .node-image {
-  transform: none;
-  width: 100%;
-  height: 120px;
-  margin: 0;
-}
-
-/* 병합 노드 핸들 위치 조정 - 꼭지점에 배치 */
 .merge-node :deep(.vue-flow__handle) {
   width: 11px !important;
   height: 11px !important;
+  background: #8b5cf6 !important;
+  border: 2px solid white !important;
+  box-shadow: 0 0 0 2px #8b5cf6 !important;
+  transform: none !important;
+  pointer-events: all !important;
+  z-index: 10 !important;
 }
 
-/* 좌상단 */
+/* 병합 노드 핸들 위치 수정 - 표준 left/right 포지션 사용 */
 .merge-node :deep(.vue-flow__handle.target#input-lefttop) {
-  left: -5px;
-  top: 10px;
+  top: 20px !important;
+  transform: none !important;
 }
 
-/* 좌하단 */
 .merge-node :deep(.vue-flow__handle.target#input-leftbottom) {
-  left: -5px;
-  top: unset;
-  bottom: 10px;
+  bottom: 20px !important;
+  transform: none !important;
 }
 
-/* 우상단 */
 .merge-node :deep(.vue-flow__handle.target#input-righttop) {
-  right: -5px;
-  left: unset;
-  top: 10px;
+  top: 20px !important;
+  transform: none !important;
 }
 
-/* 우하단 */
 .merge-node :deep(.vue-flow__handle.source#output-rightbottom) {
-  right: -5px;
-  left: unset;
-  top: unset;
-  bottom: 10px;
+  bottom: 20px !important;
+  transform: none !important;
+}
+
+/* 엣지 스타일 수정 */
+:deep(.vue-flow__edge-path) {
+  stroke: #8b5cf6 !important;
+  stroke-width: 2 !important;
+  pointer-events: all !important;
+}
+
+:deep(.vue-flow__edge) {
+  pointer-events: all !important;
+}
+
+:deep(.vue-flow__connection-path) {
+  stroke: #8b5cf6 !important;
+  stroke-width: 2 !important;
+  pointer-events: all !important;
+}
+
+:deep(.vue-flow__edge-text) {
+  pointer-events: all !important;
+}
+
+:deep(.vue-flow__edge-textbg) {
+  pointer-events: all !important;
+}
+
+:deep(.vue-flow__connection) {
+  pointer-events: all !important;
+}
+
+:deep(.vue-flow__connection-path) {
+  pointer-events: all !important;
 }
 
 /* 다이아몬드 프리뷰 스타일 복원 */

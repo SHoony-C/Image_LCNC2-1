@@ -1,187 +1,131 @@
 <template>
   <div class="analysis-container">
-    <div class="header">
-      <h2>분석</h2>
-      <div class="controls">
-        <div class="date-range-selector">
-          <label for="dateRange">기간:</label>
-          <select id="dateRange" v-model="selectedDateRange" @change="updatePlot">
-            <option value="7">7일</option>
-            <option value="30">30일</option>
-            <option value="365">365일</option>
-          </select>
+    <div class="chart-container">
+      <div class="chart-card">
+        <div class="chart-header">
+          <h3>분석 결과</h3>
+          <div class="chart-actions">
+            <button class="btn-chart-type" :class="{ active: chartType === 'line' }" @click="setChartType('line')">
+              <i class="fas fa-chart-line"></i>
+            </button>
+            <button class="btn-chart-type" :class="{ active: chartType === 'bar' }" @click="setChartType('bar')">
+              <i class="fas fa-chart-bar"></i>
+            </button>
+          </div>
+        </div>
+        <div class="chart-content" ref="chartContainer" style="height: 400px;">
+          <svg v-if="chartData" :width="width" :height="height" class="chart">
+            <!-- Grid Lines -->
+            <g class="grid-lines">
+              <line v-for="y in yGridLines" :key="'y-' + y"
+                x1="50" :x2="width - 20" :y1="y" :y2="y"
+                stroke="#eee" stroke-dasharray="2,2" />
+              <line v-for="x in xGridLines" :key="'x-' + x"
+                :x1="x" :x2="x" y1="20" :y2="height - 30"
+                stroke="#eee" stroke-dasharray="2,2" />
+            </g>
+            <!-- Data points -->
+            <g class="data-points">
+              <circle v-for="point in getVisiblePoints()" :key="point.x + '-' + point.y"
+                :cx="point.x" :cy="point.y" r="4"
+                :fill="point.color"
+                stroke="white"
+                stroke-width="2"
+                @mouseover="selectedPoint = point"
+                @mouseout="selectedPoint = null" />
+            </g>
+            <!-- Tooltip -->
+            <g v-if="selectedPoint" class="tooltip"
+              :transform="'translate(' + (selectedPoint.x + 10) + ',' + (selectedPoint.y - 10) + ')'">
+              <rect x="0" y="0" width="120" height="60" rx="4"
+                fill="rgba(255,255,255,0.95)" />
+              <text x="10" y="20" fill="#333" font-size="12">
+                {{ selectedPoint.label }}
+              </text>
+              <text x="10" y="40" fill="#333" font-size="12">
+                {{ selectedPoint.date }}
+              </text>
+              <text x="10" y="55" fill="#333" font-size="12">
+                값: {{ selectedPoint.value.toFixed(2) }}
+              </text>
+            </g>
+            <!-- Axes -->
+            <g class="axes">
+              <line x1="50" :x2="width - 20" :y1="height - 30" :y2="height - 30" stroke="#666" />
+              <line x1="50" y1="20" x2="50" :y2="height - 30" stroke="#666" />
+            </g>
+            <!-- Labels -->
+            <g class="labels">
+              <text v-for="(label, i) in getLimitedLabels()" :key="'label-' + i"
+                :x="getLabelX(i)" :y="height - 10"
+                fill="#666" text-anchor="middle"
+                font-size="12">{{ label }}</text>
+            </g>
+          </svg>
+          <div v-else class="loading-chart">차트 데이터 로딩 중...</div>
         </div>
       </div>
     </div>
     
-    <!-- 그래프 영역 -->
-    <div class="graph-container">
-      <div class="graph-controls">
-        <div class="date-range">
-          <label>기간 선택:</label>
-          <select v-model="selectedDateRange">
-            <option value="7">7일</option>
-            <option value="30">30일</option>
-            <option value="365">365일</option>
-          </select>
-        </div>
-      </div>
-      <div class="plot-wrapper">
-        <div ref="plotContainer" class="plot-container"></div>
-        <div v-if="isGraphLoading" class="loading-overlay">
-          <div class="loading-content">
-            <div class="loading-spinner"></div>
-            <div class="loading-text">그래프를 그리는 중...</div>
-          </div>
-        </div>
+    <!-- Data Table with Right Image Column -->
+    <div class="data-container">
+      <div class="table-section">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>날짜</th>
+              <th>Item ID</th>
+              <th>Sub ID</th>
+              <th>값</th>
+              <th class="image-header">이미지</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="group in Object.values(groupDataByImage)" :key="group.item_id">
+              <template v-for="(point, index) in group.points" :key="point.x + '-' + point.y">
+                <tr :class="{ 
+                      'group-start': index === 0,
+                      'hovered': hoveredImage === group
+                    }"
+                    :data-item-id="group.item_id"
+                    @mouseover="hoveredImage = group"
+                    @mouseout="handleMouseOut"
+                    @dragenter.prevent="handleDragEnter(group)"
+                    draggable="true">
+                  <td>{{ point.date }}</td>
+                  <td>{{ point.label }}</td>
+                  <td>{{ point.subId }}</td>
+                  <td>{{ point.value.toFixed(2) }}</td>
+                  <td v-if="index === 0" :rowspan="group.points.length" class="image-cell">
+                    <img :src="group.imageUrl" 
+                         :alt="group.item_id" 
+                         class="table-image"
+                         @error="handleImageError"
+                         @click="showImagePopup(group)" />
+                  </td>
+                </tr>
+              </template>
+            </template>
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <!-- 선택된 데이터 표시 영역 -->
-    <div class="data-display">
-      <!-- 왼쪽: 선택된 데이터 목록 -->
-      <div class="selected-data">
-        <div class="panel-header">
-          <h3>선택된 데이터</h3>
-          <div class="header-controls">
-            <div class="selected-count" v-if="selectedData.length > 0">
-              {{ selectedData.length }}개 선택됨
-            </div>
-            <div class="column-control">
-              <button class="settings-btn" @click="showColumnSettings = !showColumnSettings">
-                <i class="fas fa-cog"></i>
-              </button>
-              <div class="column-settings" v-if="showColumnSettings">
-                <div v-for="(visible, column) in visibleColumns" :key="column" class="column-option">
-                  <input type="checkbox" :id="column" v-model="visibleColumns[column]">
-                  <label :for="column">{{ columnLabels[column] }}</label>
-                </div>
-              </div>
+    <!-- Image Popup -->
+    <div v-if="selectedImage" class="image-popup" @click="closeImagePopup">
+      <div class="popup-content" @click.stop>
+        <button class="close-btn" @click="closeImagePopup">&times;</button>
+        <img :src="selectedImage.imageUrl" :alt="selectedImage.item_id" />
+        <div class="popup-info">
+          <h4>{{ selectedImage.item_id }}</h4>
+          <div class="measurement-list">
+            <div v-for="point in selectedImage.points" 
+                 :key="point.x + '-' + point.y"
+                 class="measurement-item">
+              <span>{{ point.date }} (Sub ID: {{ point.subId }})</span>
+              <span>{{ point.value.toFixed(2) }}</span>
             </div>
           </div>
-        </div>
-        <div class="data-table-container">
-          <div v-if="isGraphLoading" class="loading-overlay active">
-            <div class="loading-spinner"></div>
-            <div class="loading-text">데이터를 불러오는 중...</div>
-          </div>
-          <template v-else>
-            <table v-if="selectedData.length > 0" class="data-table">
-              <thead>
-                <tr>
-                  <th v-if="visibleColumns.date">날짜</th>
-                  <th v-if="visibleColumns.item">Item</th>
-                  <th v-if="visibleColumns.subitem">Subitem</th>
-                  <th v-if="visibleColumns.value">값</th>
-                  <th v-if="visibleColumns.status">상태</th>
-                  <th v-if="visibleColumns.temperature">온도</th>
-                  <th v-if="visibleColumns.humidity">습도</th>
-                  <th v-if="visibleColumns.pressure">압력</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(data, index) in selectedData" 
-                    :key="index" 
-                    :class="getStatusClass(data.flag)">
-                  <td v-if="visibleColumns.date">{{ formatDate(data.date) }}</td>
-                  <td v-if="visibleColumns.item">{{ data.item_id }}</td>
-                  <td v-if="visibleColumns.subitem">{{ data.subitem_id }}</td>
-                  <td v-if="visibleColumns.value">{{ data.value.toFixed(2) }}</td>
-                  <td v-if="visibleColumns.status">
-                    <span class="status-dot" :class="getStatusClass(data.flag)"></span>
-                    <span class="status-text">{{ getStatusText(data.flag) }}</span>
-                  </td>
-                  <td v-if="visibleColumns.temperature">{{ (data.temperature || 0).toFixed(1) }}°C</td>
-                  <td v-if="visibleColumns.humidity">{{ (data.humidity || 0).toFixed(1) }}%</td>
-                  <td v-if="visibleColumns.pressure">{{ (data.pressure || 0).toFixed(1) }}hPa</td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="no-data">
-              데이터를 선택하세요
-            </div>
-          </template>
-        </div>
-      </div>
-
-      <!-- 오른쪽: 선택된 데이터의 이미지 -->
-      <div class="selected-images">
-        <div class="panel-header">
-          <h3>관련 이미지</h3>
-          <div class="header-controls">
-            <div class="selected-count" v-if="selectedData.length > 0">
-              {{ selectedData.length }}개의 이미지
-            </div>
-            <div class="column-control">
-              <button class="settings-btn" @click="showImageColumnSettings = !showImageColumnSettings">
-                <i class="fas fa-cog"></i>
-              </button>
-              <div class="column-settings" v-if="showImageColumnSettings">
-                <div v-for="(visible, column) in visibleImageColumns" :key="column" class="column-option">
-                  <input type="checkbox" :id="'img-' + column" v-model="visibleImageColumns[column]">
-                  <label :for="'img-' + column">{{ columnLabels[column] }}</label>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="image-table-container">
-          <div v-if="isGraphLoading" class="loading-overlay active">
-            <div class="loading-spinner"></div>
-            <div class="loading-text">이미지를 불러오는 중...</div>
-          </div>
-          <template v-else>
-            <table v-if="selectedData.length > 0" class="image-table">
-              <thead>
-                <tr>
-                  <th v-if="visibleImageColumns.date">날짜</th>
-                  <th v-if="visibleImageColumns.item">Item</th>
-                  <th v-if="visibleImageColumns.subitem">Subitem</th>
-                  <th v-if="visibleImageColumns.value">값</th>
-                  <th v-if="visibleImageColumns.status">상태</th>
-                  <th v-if="visibleImageColumns.temperature">온도</th>
-                  <th v-if="visibleImageColumns.humidity">습도</th>
-                  <th v-if="visibleImageColumns.pressure">압력</th>
-                  <th>이미지</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(data, index) in selectedData" 
-                    :key="index"
-                    :class="getStatusClass(data.flag)">
-                  <td v-if="visibleImageColumns.date">{{ formatDate(data.date) }}</td>
-                  <td v-if="visibleImageColumns.item">{{ data.item_id }}</td>
-                  <td v-if="visibleImageColumns.subitem">{{ data.subitem_id }}</td>
-                  <td v-if="visibleImageColumns.value">{{ data.value.toFixed(2) }}</td>
-                  <td v-if="visibleImageColumns.status">
-                    <span class="status-dot" :class="getStatusClass(data.flag)"></span>
-                    <span class="status-text">{{ getStatusText(data.flag) }}</span>
-                  </td>
-                  <td v-if="visibleImageColumns.temperature">{{ (data.temperature || 0).toFixed(1) }}°C</td>
-                  <td v-if="visibleImageColumns.humidity">{{ (data.humidity || 0).toFixed(1) }}%</td>
-                  <td v-if="visibleImageColumns.pressure">{{ (data.pressure || 0).toFixed(1) }}hPa</td>
-                  <td>
-                    <div class="image-preview" @click="showImagePopup(data.image_url)">
-                      <img :src="data.image_url" 
-                           :alt="`${data.item_id}-${data.subitem_id}`"
-                           class="thumbnail">
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-            <div v-else class="no-data">
-              이미지가 없습니다
-            </div>
-          </template>
-        </div>
-      </div>
-
-      <!-- 이미지 팝업 -->
-      <div class="image-popup" v-if="showPopup" @click="showPopup = false">
-        <div class="popup-content" @click.stop>
-          <button class="close-btn" @click="showPopup = false">&times;</button>
-          <img :src="popupImageUrl" class="popup-image">
         </div>
       </div>
     </div>
@@ -189,277 +133,313 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
-import Plotly from 'plotly.js-dist-min'
-import { useSide2AnalysisStore } from '@/stores/side2Analysis'
+import { ref, onMounted, computed, watch } from 'vue'
+import axios from 'axios'
+
+// 랜덤 색상 생성 함수
+const getRandomColor = () => {
+  const hue = Math.floor(Math.random() * 360);
+  return `hsl(${hue}, 70%, 50%)`;
+}
 
 export default {
   name: 'Side2Analysis',
   setup() {
-    const plotContainer = ref(null)
-    const store = useSide2AnalysisStore()
-    const showColumnSettings = ref(false)
-    const showPopup = ref(false)
-    const popupImageUrl = ref('')
-    const showImageColumnSettings = ref(false)
-    const isGraphLoading = ref(false)
+    const chartContainer = ref(null)
+    const width = ref(800)
+    const height = ref(400)
+    const chartType = ref('line')
+    const chartData = ref(null)
+    const selectedPoint = ref(null)
 
-    const visibleColumns = ref({
-      date: true,
-      item: true,
-      subitem: true,
-      value: true,
-      status: true,
-      temperature: true,
-      humidity: true,
-      pressure: true
+    const yGridLines = computed(() => {
+      if (!chartData.value) return []
+      const count = 5
+      const step = (height.value - 50) / count
+      return Array(count + 1).fill().map((_, i) => 20 + i * step)
     })
 
-    const columnLabels = {
-      date: '날짜',
-      item: 'Item',
-      subitem: 'Subitem',
-      value: '값',
-      status: '상태',
-      temperature: '온도',
-      humidity: '습도',
-      pressure: '압력'
-    }
-
-    const visibleImageColumns = ref({
-      date: true,
-      item: true,
-      subitem: true,
-      value: true,
-      status: true,
-      temperature: true,
-      humidity: true,
-      pressure: true
+    const xGridLines = computed(() => {
+      if (!chartData.value) return []
+      const count = chartData.value.labels.length - 1
+      const step = (width.value - 70) / count
+      return Array(count + 1).fill().map((_, i) => 50 + i * step)
     })
 
-    // 날짜 포맷 함수
-    const formatDate = (dateStr) => {
-      const date = new Date(dateStr)
-      return date.toLocaleDateString('ko-KR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
+    const getLinePath = (dataset) => {
+      if (!dataset || !dataset.data || dataset.data.length === 0) {
+        console.log('No data for line path')
+        return ''
+      }
+      
+      const xStep = (width.value - 70) / (dataset.data.length - 1)
+      // 모든 데이터셋에서 y 값을 가져와서 최대값과 최소값을 계산
+      const allValues = chartData.value.datasets.flatMap(d => d.data.map(point => point.y))
+      console.log('All y values:', allValues)
+      
+      const maxY = Math.max(...allValues)
+      const minY = Math.min(...allValues)
+      const yScale = (height.value - 50) / ((maxY - minY) || 1)  // 0으로 나누는 것 방지
+      
+      console.log(`Line path calculation - yScale: ${yScale}, minY: ${minY}, maxY: ${maxY}`)
+      
+      let path = ''
+      dataset.data.forEach((point, i) => {
+        const x = 50 + i * xStep
+        const y = height.value - 30 - (point.y - minY) * yScale
+        path += (i === 0 ? 'M' : 'L') + `${x},${y}`
       })
+      
+      console.log(`Path for ${dataset.label}:`, path)
+      return path
     }
 
-    // 상태 클래스 반환 함수
-    const getStatusClass = (flag) => {
-      switch (flag) {
-        case 1:
-          return 'normal'
-        case 0:
-          return 'warning'
-        case -1:
-          return 'error'
-        default:
-          return ''
+    const getAllPoints = () => {
+      if (!chartData.value) {
+        console.log('No chart data available for points')
+        return []
       }
-    }
-
-    // 상태 텍스트 반환 함수
-    const getStatusText = (flag) => {
-      switch (flag) {
-        case 1:
-          return '정상'
-        case 0:
-          return '경고'
-        case -1:
-          return '위험'
-        default:
-          return ''
-      }
-    }
-
-    // 그래프 업데이트
-    const updatePlot = () => {
-      if (!store.plotData || !plotContainer.value) {
-        console.log('Plot data or container not ready:', { plotData: store.plotData, container: plotContainer.value })
-        return
-      }
-
-      isGraphLoading.value = true
-      console.log('Graph loading started')
-
-      const filteredData = store.filterDataByDateRange()
-      if (!filteredData) {
-        console.log('No filtered data available')
-        isGraphLoading.value = false
-        return
-      }
-
-      const traces = [
-        ...filteredData.items.map(item => ({
-          x: filteredData.dates,
-          y: filteredData.values[item],
-          type: 'scatter',
-          mode: 'markers+lines',
-          name: item,
-          marker: { size: 8 },
-          line: { width: 2 }
-        }))
-      ]
-
-      const layout = {
-        title: `분석 데이터 (최근 ${store.selectedDateRange}일)`,
-        xaxis: {
-          title: '날짜',
-          gridcolor: '#eee'
-        },
-        yaxis: {
-          title: '값',
-          gridcolor: '#eee'
-        },
-        dragmode: 'select',
-        selectdirection: 'any',
-        showlegend: true,
-        legend: {
-          x: 0.02,
-          xanchor: 'left',
-          y: 1,
-          yanchor: 'top',
-          bgcolor: 'rgba(255, 255, 255, 0.8)',
-          bordercolor: '#ddd',
-          borderwidth: 1,
-          font: {
-            size: 12
-          }
-        },
-        plot_bgcolor: 'white',
-        paper_bgcolor: 'white',
-        margin: {
-          l: 50,
-          r: 50,
-          t: 50,
-          b: 50
-        },
-        autosize: true
-      }
-
-      const config = {
-        responsive: true,
-        displayModeBar: true,
-        modeBarButtonsToAdd: ['select2d', 'lasso2d'],
-        modeBarButtonsToRemove: ['zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d']
-      }
-
-      // 기존 그래프 제거
-      if (plotContainer.value._fullLayout) {
-        Plotly.purge(plotContainer.value)
-      }
-
-      // 새 그래프 그리기
-      console.log('Starting plot render')
-      Plotly.newPlot(plotContainer.value, traces, layout, config)
-        .then(() => {
-          console.log('Plot rendering completed')
-          setTimeout(() => {
-            isGraphLoading.value = false
-          }, 100)
-        })
-        .catch(error => {
-          console.error('Error rendering plot:', error)
-          isGraphLoading.value = false
-        })
-
-      // 이벤트 핸들러 설정
-      plotContainer.value.on('plotly_selected', (eventData) => {
-        if (eventData && eventData.points && eventData.points.length > 0) {
-          const selectedIds = eventData.points.map(point => 
-            `${filteredData.items[point.curveNumber]}_${point.pointIndex}`
-          )
-          store.fetchSelectedData(selectedIds)
-        } else {
-          const allIds = filteredData.items.flatMap(item => 
-            filteredData.dates.map((_, index) => `${item}_${index}`)
-          )
-          store.fetchSelectedData(allIds)
-          Plotly.restyle(plotContainer.value, {
-            selectedpoints: null
+      const points = []
+      
+      // 모든 데이터셋에서 y 값을 가져와서 최대값과 최소값을 계산
+      const allValues = chartData.value.datasets.flatMap(d => d.data.map(point => point.y))
+      const maxY = Math.max(...allValues)
+      const minY = Math.min(...allValues)
+      // 0으로 나누는 것 방지
+      const yScale = (height.value - 50) / ((maxY - minY) || 1)
+      
+      console.log(`Points calculation - yScale: ${yScale}, minY: ${minY}, maxY: ${maxY}`)
+      
+      chartData.value.datasets.forEach((dataset) => {
+        dataset.data.forEach((item, index) => {
+          const xStep = (width.value - 70) / (dataset.data.length - 1)
+          const x = 50 + index * xStep
+          const y = height.value - 30 - (item.y - minY) * yScale
+          
+          points.push({
+            x,
+            y,
+            color: dataset.borderColor,
+            value: item.y,
+            date: item.x,
+            label: item.label,
+            subId: item.subitem_id
           })
-        }
+        })
       })
-
-      plotContainer.value.on('plotly_click', (eventData) => {
-        if (!eventData.points || eventData.points.length === 0) {
-          const allIds = filteredData.items.flatMap(item => 
-            filteredData.dates.map((_, index) => `${item}_${index}`)
-          )
-          store.fetchSelectedData(allIds)
-          Plotly.restyle(plotContainer.value, {
-            selectedpoints: null
-          })
-        }
-      })
-
-      // 레전드 클릭 이벤트 처리
-      plotContainer.value.on('plotly_legendclick', (eventData) => {
-        const clickedItem = filteredData.items[eventData.curveNumber]
-        const selectedIds = filteredData.dates.map((_, index) => 
-          `${clickedItem}_${index}`
-        )
-        store.fetchSelectedData(selectedIds)
-        return false
-      })
-
-      // 윈도우 리사이즈 이벤트 처리
-      window.addEventListener('resize', () => {
-        Plotly.Plots.resize(plotContainer.value)
-      })
+      
+      console.log(`Generated ${points.length} data points`)
+      return points
     }
 
-    // 데이터 로드 후 그래프 업데이트
-    const initializePlot = async () => {
+    const getLimitedLabels = () => {
+      if (!chartData.value) return [];
+      const allLabels = chartData.value.labels;
+      const maxLabels = 4; // x축에 표시할 최대 라벨 수
+      
+      if (allLabels.length <= maxLabels) return allLabels;
+      
+      const step = Math.ceil(allLabels.length / maxLabels);
+      return allLabels.filter((_, index) => index % step === 0);
+    }
+
+    const getLabelX = (index) => {
+      if (!chartData.value) return 0;
+      const limitedLabels = getLimitedLabels();
+      const totalLabels = chartData.value.labels.length;
+      const step = (width.value - 70) / (totalLabels - 1);
+      const labelStep = Math.ceil(totalLabels / limitedLabels.length);
+      return 50 + (index * labelStep) * step;
+    }
+
+    const fetchData = async () => {
       try {
-        await store.fetchData()
-        if (store.plotData) {
-          updatePlot()
+        console.log('=== API 호출 시작 ===');
+        const response = await axios.get('http://localhost:8000/api/side2/data');
+        console.log('API 응답 전체:', response);
+        console.log('API 응답 데이터:', response.data);
+        
+        if (response.data.status === 'success') {
+          console.log('데이터 처리 시작');
+          const rawData = response.data.data;
+          console.log('원본 데이터:', rawData);
+          
+          // 데이터를 날짜별로 그룹화
+          const groupedByDate = {};
+          rawData.forEach(item => {
+            if (!groupedByDate[item.date]) {
+              groupedByDate[item.date] = [];
+            }
+            groupedByDate[item.date].push(item);
+          });
+          console.log('날짜별 그룹화된 데이터:', groupedByDate);
+          
+          // 데이터셋 생성
+          const datasets = [];
+          const itemIds = [...new Set(rawData.map(item => item.item_id))];
+          console.log('고유한 item_id 목록:', itemIds);
+          
+          itemIds.forEach(itemId => {
+            const itemData = rawData.filter(item => item.item_id === itemId);
+            console.log(`${itemId}의 데이터:`, itemData);
+            
+            const color = getRandomColor();
+            const dataset = {
+              label: itemId,
+              data: itemData.map(item => ({
+                x: item.date,
+                y: parseFloat(item.value),  // 값이 문자열인 경우를 대비해 숫자로 변환
+                label: item.item_id,
+                subitem_id: item.subitem_id
+              })),
+              backgroundColor: color,
+              borderColor: color,
+              borderWidth: 1,
+              pointRadius: 5,
+              pointHoverRadius: 8
+            };
+            console.log(`${itemId}의 데이터셋:`, dataset);
+            datasets.push(dataset);
+          });
+          
+          console.log('생성된 전체 데이터셋:', datasets);
+          
+          // 차트 데이터 업데이트
+          chartData.value = {
+            labels: Object.keys(groupedByDate),
+            datasets: datasets
+          };
+          
+          console.log('최종 차트 데이터:', chartData.value);
         }
       } catch (error) {
-        console.error('Error loading data:', error)
+        console.error('데이터 가져오기 실패:', error);
       }
     }
 
-    const showImagePopup = (imageUrl) => {
-      popupImageUrl.value = imageUrl
-      showPopup.value = true
+    const groupDataByImage = computed(() => {
+      console.log('=== 이미지 데이터 그룹화 시작 ===');
+      const points = getAllPoints();
+      console.log('모든 포인트:', points);
+      
+      const grouped = {};
+      points.forEach(point => {
+        if (!grouped[point.label]) {
+          grouped[point.label] = {
+            item_id: point.label,
+            points: [],
+            imageUrl: `/test_image/${point.label.replace('item', '')}.png`
+          };
+        }
+        grouped[point.label].points.push(point);
+      });
+      
+      console.log('그룹화된 데이터:', grouped);
+      return grouped;
+    })
+
+    const selectedImage = ref(null)
+    const hoveredImage = ref(null)
+
+    // 차트 데이터가 로드되면 첫 번째 그룹을 기본으로 선택
+    watch(groupDataByImage, (groups) => {
+      const groupValues = Object.values(groups);
+      if (groupValues.length > 0 && !hoveredImage.value) {
+        hoveredImage.value = groupValues[0];
+      }
+    }, { immediate: true })
+
+    const showImagePopup = (image) => {
+      selectedImage.value = image
+    }
+
+    const closeImagePopup = () => {
+      selectedImage.value = null
+    }
+
+    const getVisiblePoints = () => {
+      const points = getAllPoints()
+      return points
+    }
+
+    const setChartType = (type) => {
+      chartType.value = type
+    }
+
+    const getStatusClass = (value) => {
+      if (value > 80) return 'error'
+      if (value > 70) return 'warning'
+      return 'normal'
+    }
+
+    const getStatusText = (value) => {
+      if (value > 80) return '위험'
+      if (value > 70) return '경고'
+      return '정상'
+    }
+
+    const handleImageError = (event) => {
+      console.error('Failed to load image:', event.target.src)
+      // 이미지 로드 실패 시 기본 이미지 표시
+      event.target.src = '/test_image/1.png'  // 기본 이미지로 1.png 사용
+    }
+
+    const handleDragEnter = (group) => {
+      hoveredImage.value = group
+    }
+    
+    const handleDrop = () => {
+      // 드롭 이벤트 처리 (필요한 경우)
+    }
+
+    const handleMouseOut = (event) => {
+      // 마우스가 다른 행으로 이동하지 않았다면 이미지를 유지
+      const relatedTarget = event.relatedTarget;
+      if (!relatedTarget || !relatedTarget.closest('tr')) {
+        // 이미지는 유지 (이전 코드와 달리 이미지를 계속 표시)
+        // hoveredImage.value = null;
+      }
     }
 
     onMounted(() => {
-      // 페이지가 마운트되면 즉시 표시하고, 데이터 로드는 다음 틱에서 시작
-      setTimeout(() => {
-        initializePlot()
-      }, 0)
+      console.log('컴포넌트 마운트됨')
+      if (chartContainer.value) {
+        const rect = chartContainer.value.getBoundingClientRect()
+        width.value = rect.width
+        height.value = 400 // 명시적인 높이 지정
+        console.log(`차트 컨테이너 크기: ${width.value} x ${height.value}`)
+      } else {
+        console.log('차트 컨테이너를 찾을 수 없음')
+      }
+      fetchData()
     })
 
     return {
-      plotContainer,
-      selectedData: computed(() => store.selectedData),
-      selectedDateRange: computed({
-        get: () => store.selectedDateRange,
-        set: (value) => {
-          store.selectedDateRange = value
-          updatePlot()
-        }
-      }),
-      formatDate,
-      updatePlot,
-      showColumnSettings,
-      visibleColumns,
-      columnLabels,
-      showPopup,
-      popupImageUrl,
-      showImagePopup,
-      showImageColumnSettings,
-      visibleImageColumns,
+      chartType,
+      chartData,
+      width,
+      height,
+      yGridLines,
+      xGridLines,
+      getLinePath,
+      getLabelX,
+      getLimitedLabels,
+      getAllPoints,
+      setChartType,
+      chartContainer,
+      selectedPoint,
       getStatusClass,
       getStatusText,
-      isGraphLoading,
-      isImageLoading: computed(() => store.isImageLoading)
+      groupDataByImage,
+      selectedImage,
+      showImagePopup,
+      closeImagePopup,
+      getVisiblePoints,
+      handleImageError,
+      hoveredImage,
+      handleDragEnter,
+      handleDrop,
+      handleMouseOut
     }
   }
 }
@@ -468,193 +448,148 @@ export default {
 <style scoped>
 .analysis-container {
   padding: 20px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  opacity: 1;
-  transition: opacity 0.3s ease;
-  visibility: visible;
+  background: #f8f9fa;
+  border-radius: 15px;
+  color: #4a4a4a;
 }
 
-.header {
+.chart-container {
+  margin-bottom: 20px;
+}
+
+.chart-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 12px rgba(147, 112, 219, 0.1);
+}
+
+.chart-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 20px;
 }
 
-.controls {
-  display: flex;
-  gap: 20px;
-  align-items: center;
-}
-
-.date-range-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.date-range-selector select {
-  padding: 6px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  min-width: 100px;
-}
-
-.graph-container {
-  flex: 1;
-  min-height: 400px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  padding: 20px;
-  display: flex;
-}
-
-.plot-wrapper {
-  position: relative;
-  flex: 1;
-  width: 100%;
-  height: 100%;
-}
-
-.plot-container {
-  flex: 1;
-  width: 100%;
-  height: 100%;
-}
-
-.data-display {
-  display: flex;
-  gap: 20px;
-  height: 300px;
-}
-
-.selected-data, .selected-images {
-  flex: 1;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
-}
-
-.panel-header {
-  padding: 15px 20px;
-  border-bottom: 1px solid #eee;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.panel-header h3 {
+.chart-header h3 {
   margin: 0;
-  font-size: 1.1em;
+  color: #4a4a4a;
+  font-size: 1.25rem;
 }
 
-.selected-count {
-  font-size: 0.9em;
-  color: #666;
+.btn-chart-type {
+  background: transparent;
+  border: 1px solid #9370db;
+  color: #9370db;
+  padding: 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.3s ease;
 }
 
-.data-table-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0;
+.btn-chart-type:hover,
+.btn-chart-type.active {
+  color: #ffffff;
+  background: #9370db;
+}
+
+.chart-content {
+  position: relative;
+}
+
+.loading-chart {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 1.2rem;
+  color: #9370db;
+}
+
+.data-container {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(147, 112, 219, 0.1);
+  height: calc(100vh - 500px);
+  min-height: 400px;
+  overflow: hidden;
+}
+
+.table-section {
+  height: 100%;
+  overflow: auto;
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9em;
-}
-
-.data-table th,
-.data-table td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid #eee;
+  table-layout: fixed;
 }
 
 .data-table th {
-  background-color: #f8f8f8;
-  font-weight: 600;
   position: sticky;
   top: 0;
+  background: #ffffff;
   z-index: 1;
-  padding-top: 15px;
-  padding-bottom: 15px;
-}
-
-.data-table tr:hover {
-  background-color: #f5f5f5;
-}
-
-.data-table tr.warning {
-  background-color: #fff8e1;
-}
-
-.data-table tr.error {
-  background-color: #ffebee;
-}
-
-.data-table tr.normal {
-  background-color: #e8f5e9;
-}
-
-.image-table-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0;
-}
-
-.image-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9em;
-}
-
-.image-table th,
-.image-table td {
+  color: #4a4a4a;
   padding: 12px;
   text-align: left;
-  border-bottom: 1px solid #eee;
+  border-bottom: 2px solid #9370db;
 }
 
-.image-table th {
-  background-color: #f8f8f8;
-  font-weight: 600;
+.image-header {
+  width: 50%;
+}
+
+.data-table td {
+  padding: 12px;
+  color: #666666;
+  border-bottom: 1px solid rgba(147, 112, 219, 0.1);
+}
+
+.group-start {
+  border-top: 2px solid rgba(147, 112, 219, 0.2);
+}
+
+/* 이미지 셀 스타일 */
+.image-cell {
+  width: 50%;
+  text-align: center;
+  background: #f8f9fa;
+  border-left: 1px solid rgba(147, 112, 219, 0.1);
+  padding: 10px;
   position: sticky;
-  top: 0;
-  z-index: 1;
-  padding-top: 15px;
-  padding-bottom: 15px;
+  top: 40px; /* 헤더 높이 고려 */
+  z-index: 2;
+  height: 300px;
+  vertical-align: top;
 }
 
-.image-table tr:hover {
-  background-color: #f5f5f5;
-}
-
-.image-preview {
+.table-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
   cursor: pointer;
-  width: 100px;
-  height: 100px;
-  overflow: hidden;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-.thumbnail {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.2s;
+.table-image:hover {
+  transform: scale(1.02);
 }
 
-.thumbnail:hover {
-  transform: scale(1.05);
+tr.hovered {
+  background-color: rgba(147, 112, 219, 0.05);
+}
+
+tr.hovered + tr {
+  background-color: rgba(147, 112, 219, 0.05);
 }
 
 .image-popup {
@@ -663,7 +598,7 @@ export default {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(255, 255, 255, 0.95);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -672,180 +607,47 @@ export default {
 
 .popup-content {
   position: relative;
-  width: 80%;
-  height: 80%;
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  max-width: 90%;
+  max-height: 90%;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(147, 112, 219, 0.15);
 }
 
 .close-btn {
   position: absolute;
   top: 10px;
   right: 10px;
-  background: none;
+  background: #ffffff;
   border: none;
+  color: #4a4a4a;
   font-size: 24px;
   cursor: pointer;
-  color: #666;
-  padding: 5px;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(147, 112, 219, 0.1);
 }
 
-.close-btn:hover {
-  color: #333;
-}
-
-.popup-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.no-data {
-  text-align: center;
-  color: #666;
+.measurement-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
   padding: 20px;
 }
 
-@media (max-width: 1200px) {
-  .data-display {
-    flex-direction: column;
-    height: auto;
-  }
-
-  .selected-data, .selected-images {
-    height: 300px;
-  }
-}
-
-.header-controls {
+.measurement-item {
   display: flex;
   align-items: center;
-  gap: 15px;
-}
-
-.column-control {
-  position: relative;
-}
-
-.settings-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 5px;
-  color: #666;
-  font-size: 1.1em;
-}
-
-.settings-btn:hover {
-  color: #333;
-}
-
-.column-settings {
-  position: absolute;
-  right: 0;
-  top: 30px;
-  background: white;
-  padding: 15px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 100;
-  min-width: 150px;
-}
-
-.column-option {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.column-option:last-child {
-  margin-bottom: 0;
-}
-
-.status-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  margin-right: 8px;
-}
-
-.status-text {
-  font-size: 0.9em;
-  color: #666;
-}
-
-.status-dot.warning {
-  background-color: #f0ad4e;
-}
-
-.status-dot.error {
-  background-color: #d9534f;
-}
-
-.status-dot.normal {
-  background-color: #5cb85c;
-}
-
-.image-table tr.warning {
-  background-color: #fff8e1;
-}
-
-.image-table tr.error {
-  background-color: #ffebee;
-}
-
-.image-table tr.normal {
-  background-color: #e8f5e9;
-}
-
-.loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.95);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-
-.loading-overlay.active {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.loading-spinner {
-  width: 50px;
-  height: 50px;
-  border: 5px solid #f3f3f3;
-  border-top: 5px solid #3498db;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 15px;
-}
-
-.loading-text {
-  color: #333;
-  font-size: 1.1em;
-  font-weight: 500;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.graph-container,
-.data-table-container,
-.image-table-container {
-  position: relative;
-  min-height: 200px;
+  justify-content: space-between;
+  padding: 8px;
+  background: rgba(147, 112, 219, 0.1);
+  border-radius: 4px;
+  color: #4a4a4a;
 }
 </style> 

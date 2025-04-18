@@ -65,5 +65,8 @@ export default {
   flex-direction: column;
   margin-bottom: 3rem;
   height: calc(100vh - 12rem);
+  width: 80%;
+  margin-left: 0;
+  padding-left: 2rem;
 }
 </style> 
