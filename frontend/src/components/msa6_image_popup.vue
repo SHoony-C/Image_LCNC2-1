@@ -1,6 +1,10 @@
 <template>
   <Teleport to="body">
-    <div class="image-measurement-popup" v-if="showPopup" @click="closePopup">
+    <div
+      class="image-measurement-popup"
+      v-if="showPopup"
+      @click.self="closePopup"
+    >
       <div ref="container" class="measurement-container" @click.stop>
         <div class="measurement-header">
           <h3>이미지 측정 도구</h3>
@@ -40,19 +44,24 @@
               @load="handleImageLoad" 
               style="visibility: hidden; position: absolute; width: 1px; height: 1px;" 
               />
-            <!-- 변환된 그레이스케일 이미지가 있을 때만 표시 -->
-            <img 
-              ref="displayedImage"
-              v-if="convertedImage" 
-              :src="convertedImage" 
-              crossorigin="anonymous"
-              alt="Grayscale Image"
-              @mousedown.prevent="startMeasurement" 
-              @mousemove.prevent="updateMeasurement" 
-              @mouseup.prevent="endMeasurement"
-              @mouseleave.prevent="endMeasurement"
-              draggable="false"
-            />
+              <div
+              ref="imageContainer"
+              class="image-container"
+              @mousedown.prevent.stop="startMeasurement"
+              @mousemove.prevent.stop="updateMeasurement"
+              @mouseup.prevent.stop="endMeasurement"
+              @mouseleave.prevent.stop="endMeasurement"
+            >
+              <img
+                v-if="convertedImage"
+                ref="displayedImage"
+                :src="convertedImage"
+                crossorigin="anonymous"
+                alt="Grayscale Image"
+                draggable="false"
+              />
+              <svg ref="overlay" class="measurement-overlay"></svg>
+            </div>
             <svg class="measurement-overlay" ref="overlay"></svg>
           </div>
           
@@ -148,7 +157,7 @@
                 </div>
               </div>
               
-              <div class="results-table-container">
+              <div class="results-table-container" v-if="segmentedMeasurements.length">
                 <table class="results-table">
                   <thead>
                     <tr>
@@ -159,21 +168,20 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="(m, idx) in measurements" :key="idx" 
+                    <tr v-for="(seg, idx) in segmentedMeasurements"
+                      :key="idx"                     
                       :class="{
-                        'highlighted': m === selectedMeasurement,
-                        'bright': m.brightness > brightnessThreshold,
-                        'dark': m.brightness <= brightnessThreshold
+                        'bright': seg.brightness > brightnessThreshold,
+                        'dark': seg.brightness <= brightnessThreshold
                       }"
-                      @click="selectMeasurement(m)"
                     >
-                      <td>{{ m.itemId }}</td>
-                      <td>{{ m.subItemId }}</td>
-                      <td>{{ formatValue(m.value) }}</td>
+                      <td>{{ seg.itemId }}</td>
+                      <td>{{ seg.subItemId }}</td>
+                      <td>{{ formatValue(seg.value) }}</td>
+
                       <td>
-                        <button class="icon-btn delete-btn" @click.stop="deleteMeasurement(idx)" title="삭제">
-                          <i class="fas fa-trash"></i>
-                        </button>
+                        <button @click.stop="removeSegment(idx)">삭제</button>
+
                       </td>
                     </tr>
                   </tbody>
@@ -226,7 +234,7 @@ export default {
       referenceLength: 100,
       referenceScale: null,
       isSettingReference: false,
-      measurements: [],
+      
       currentMeasurement: null,
       selectedMeasurement: null,
       selectedMeasurementIndex: -1,
@@ -248,8 +256,10 @@ export default {
       subItemPrefix: 'S',
       selectedBrightnessThreshold: 128,
       showBrightSegments: true,
+      measurements: [],
       segmentedMeasurements: [],
-      invertThreshold: false
+      invertThreshold: false,
+      rAFpending: false,
     }
   },
   computed: {
@@ -340,10 +350,7 @@ export default {
     console.error("calculateBrightnessAtPointImproved 에러:", e);
     return 128;
   }
-}
-
-
-,
+},
     isBrightAccordingToThreshold(brightness) {
       return this.invertThreshold 
         ? brightness <= this.brightnessThreshold 
@@ -468,24 +475,6 @@ export default {
         return 128
       }
     },
-    
-    calculateMeasurement(measurement) {
-      const points = measurement.points
-      const start = points[0]
-      const end = points[points.length - 1]
-      
-      switch (measurement.type) {
-        case 'line':
-          measurement.value = this.calculateDistance(start, end)
-          break
-        case 'area':
-          measurement.value = this.calculateArea(points)
-          break
-        case 'angle':
-          measurement.value = this.calculateAngle(points)
-          break
-      }
-    },
     calculateDistance(start, end) {
       const dx = end.x - start.x
       const dy = end.y - start.y
@@ -544,115 +533,6 @@ export default {
     closePopup() {
       this.$emit('close')
     },
-    segmentMeasurements() {
-      this.segmentedMeasurements = [];
-      
-      this.measurements.forEach(measurement => {
-        if (measurement.type !== 'line' || !measurement.points || measurement.points.length < 2) {
-          return;
-        }
-        
-        const segments = this.createBrightnessSegments(measurement);
-        this.segmentedMeasurements.push(...segments);
-      });
-      
-      console.log('Segmented measurements:', this.segmentedMeasurements.length);
-    },
-    createBrightnessSegments(measurement) {
-  const segments = [];
-  const points = measurement.points;
-  if (points.length < 2) return segments;
-
-  // 임계값(선택 측정이 있으면 그쪽 우선)
-  const threshold =
-    this.selectedMeasurement === measurement &&
-    this.selectedBrightnessThreshold !== this.brightnessThreshold
-      ? this.selectedBrightnessThreshold
-      : this.brightnessThreshold;
-
-  for (let i = 1; i < points.length; i++) {
-    const p1 = points[i - 1];
-    const p2 = points[i];
-    const dx = p2.x - p1.x;
-    const dy = p2.y - p1.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    // 샘플링 개수(최소 200, 거리만큼)
-    const numSamples = Math.max(200, Math.ceil(distance));
-
-    // brightnessPoints 구하기
-    const brightnessPoints = [];
-    for (let j = 0; j <= numSamples; j++) {
-      const ratio = j / numSamples;
-      const sampleX = p1.x + dx * ratio;
-      const sampleY = p1.y + dy * ratio;
-      const brightness = this.calculateBrightnessAtPointImproved(sampleX, sampleY);
-      const isMatching = this.invertThreshold
-        ? brightness <= threshold
-        : brightness > threshold;
-
-      brightnessPoints.push({ x: sampleX, y: sampleY, brightness, isMatching });
-    }
-
-    // (선택) 이동평균 or 미디언 필터로 brightnessPoints 스무딩
-    // ...
-
-    // 연속 구간으로 세그먼트화 + 임계값 경계에서 보간
-    let currentSegment = null;
-    for (let k = 0; k < brightnessPoints.length - 1; k++) {
-      const cur = brightnessPoints[k];
-      const nxt = brightnessPoints[k + 1];
-
-      // 만약 현재가 임계값 만족 중이라면(빨간 선이어야 함)
-      if (cur.isMatching) {
-        if (!currentSegment) {
-          // 새 세그먼트 시작
-          currentSegment = {
-            points: [{ x: cur.x, y: cur.y }],
-            brightness: cur.brightness,
-            originalMeasurement: measurement,
-            type: 'segment',
-            itemId: measurement.itemId,
-            subItemId: measurement.subItemId,
-            isMatching: true
-          };
-        } else {
-          // 기존 세그먼트에 포인트 추가
-          currentSegment.points.push({ x: cur.x, y: cur.y });
-        }
-      } else {
-        // 임계값 불만족(파란 선)
-        // 만약 열려있는 세그먼트가 있으면 여기서 종료
-        if (currentSegment) {
-          // (선택) cur와 nxt 사이에서 경계가 있다면 보간
-          if (nxt.isMatching !== cur.isMatching) {
-            // 여기서 threshold 교차 지점을 찾는다 (linear interpolation)
-            const ratio = (threshold - cur.brightness) / (nxt.brightness - cur.brightness);
-            const xInterp = cur.x + ratio * (nxt.x - cur.x);
-            const yInterp = cur.y + ratio * (nxt.y - cur.y);
-            currentSegment.points.push({ x: xInterp, y: yInterp });
-          }
-
-          // 세그먼트 마무리
-          currentSegment.value = this.calculateDistanceForPoints(currentSegment.points);
-          segments.push(currentSegment);
-          currentSegment = null;
-        }
-      }
-    }
-
-    // 마지막 포인트 체크
-    const lastPoint = brightnessPoints[brightnessPoints.length - 1];
-    if (currentSegment && lastPoint.isMatching) {
-      currentSegment.points.push({ x: lastPoint.x, y: lastPoint.y });
-      currentSegment.value = this.calculateDistanceForPoints(currentSegment.points);
-      segments.push(currentSegment);
-      currentSegment = null;
-    }
-  }
-
-  return segments;
-  },
   rgbToHsv(r, g, b) {
       r /= 255;
       g /= 255;
@@ -853,160 +733,287 @@ export default {
       console.log(`calculateBrightnessAtPointAbsolute (xRel:${xRel.toFixed(2)}, yRel:${yRel.toFixed(2)}) -> (x:${xCanvas.toFixed(1)}, y:${yCanvas.toFixed(1)}) brightness: ${brightness}`);
       return brightness;
     },
-    // 측정 선 시작: 컨테이너 기준 상대 좌표 저장 (0~1)
     startMeasurement(event) {
-      // 실제 보이는 이미지 요소의 크기를 기준으로 좌표 계산
-      const imgEl = this.$refs.displayedImage;
-      if (!imgEl) return;
-      const rect = imgEl.getBoundingClientRect();
-      const xRel = (event.clientX - rect.left) / rect.width;
-      const yRel = (event.clientY - rect.top) / rect.height;
-      console.log("startMeasurement:", { xRel, yRel, rect });
+      const img = this.$refs.displayedImage;
+      if (!img) return;
+      const rect = img.getBoundingClientRect();
+      let x = (event.clientX - rect.left) / rect.width;
+      let y = (event.clientY - rect.top) / rect.height;
+      x = Math.min(Math.max(x, 0), 1);
+      y = Math.min(Math.max(y, 0), 1);
+      this.currentMeasurement = { points: [{ xRel: x, yRel: y }] };
       this.isMeasuring = true;
-      this.currentMeasurement = { points: [{ xRel, yRel }] };
+      this.updateOverlay();
     },
+
     updateMeasurement(event) {
       if (!this.isMeasuring || !this.currentMeasurement) return;
-      const imgEl = this.$refs.displayedImage;
-      if (!imgEl) return;
-      const rect = imgEl.getBoundingClientRect();
-      const xRel = (event.clientX - rect.left) / rect.width;
-      const yRel = (event.clientY - rect.top) / rect.height;
+      const img = this.$refs.displayedImage;
+      const rect = img.getBoundingClientRect();
+      let x = (event.clientX - rect.left) / rect.width;
+      let y = (event.clientY - rect.top) / rect.height;
+      x = Math.min(Math.max(x, 0), 1);
+      y = Math.min(Math.max(y, 0), 1);
       if (this.currentMeasurement.points.length === 1) {
-        this.currentMeasurement.points.push({ xRel, yRel });
+        this.currentMeasurement.points.push({ xRel: x, yRel: y });
       } else {
-        this.currentMeasurement.points[1] = { xRel, yRel };
+        this.currentMeasurement.points[1] = { xRel: x, yRel: y };
       }
       this.updateOverlay();
     },
-    // 측정 선 종료: 측정 선 데이터를 저장하고 오버레이 업데이트
+
     endMeasurement() {
-      if (this.isMeasuring && this.currentMeasurement && this.currentMeasurement.points.length === 2) {
-        this.measurements.push(this.currentMeasurement);
-      }
       this.isMeasuring = false;
+      const pts = this.currentMeasurement?.points;
       this.currentMeasurement = null;
+
+      if (pts && pts.length === 2) {
+        const m = {
+          points:    [...pts],
+          itemId:    this.nextId.toString(),
+          value:     0,
+          brightness: 0
+        };
+        this.calculateMeasurement(m);
+        this.measurements.push(m);
+        this.nextId++;
+        this.segmentMeasurements();
+      }
+
       this.updateOverlay();
     },
-    // 측정 선(두 점만 있는 직선)을 일정 간격(샘플 개수)으로 샘플링하여, 각 포인트의 컨테이너 상 절대 좌표와 brightness를 리턴하는 함수
-    sampleMeasurementPoints(measurement, sampleCountPerSegment = 20) {
-      console.log('sampleMeasurementPoints 시작');
-      const samples = [];
-      const pts = measurement.points;
-      // 여기서 pts는 2개의 상대 좌표 (0~1)로 저장되어 있음
-      console.log("측정 데이터 포인트 개수:", pts.length);
-      console.log("sampleCountPerSegment:", sampleCountPerSegment);
-      if (pts.length < 2) {
-        console.log("포인트가 2개 미만임");
-        return samples;
-      }
-      
-      // 컨테이너 사이즈 (화면상 선 표시용)
-      const container = this.$refs.imageContainer;
-      const containerWidth = container.offsetWidth;
-      const containerHeight = container.offsetHeight;
-      
-      // 컨테이너 기준 절대 좌표 (화면 상에서의 선)로 계산
-      const absStart = { 
-        x: pts[0].xRel * containerWidth, 
-        y: pts[0].yRel * containerHeight 
-      };
-      const absEnd = { 
-        x: pts[1].xRel * containerWidth, 
-        y: pts[1].yRel * containerHeight 
-      };
-      const dx = absEnd.x - absStart.x;
-      const dy = absEnd.y - absStart.y;
-      
-      for (let j = 0; j <= sampleCountPerSegment; j++) {
-        const ratio = j / sampleCountPerSegment;
-        // 컨테이너 기준 절대 좌표에서 샘플 포인트 계산
-        const sampleXContainer = absStart.x + dx * ratio;
-        const sampleYContainer = absStart.y + dy * ratio;
-        // 다시 이 절대 좌표를 컨테이너 기준 상대 좌표로 변환
-        const sampleXRel = sampleXContainer / containerWidth;
-        const sampleYRel = sampleYContainer / containerHeight;
-        const brightness = this.calculateBrightnessAtPointAbsolute(sampleXRel, sampleYRel);
-        samples.push({ x: sampleXContainer, y: sampleYContainer, brightness });
-        console.log(`샘플 ${j}/${sampleCountPerSegment}: (x:${sampleXContainer.toFixed(1)}, y:${sampleYContainer.toFixed(1)}) -> brightness: ${brightness}`);
-      }
-      return samples;
-    },
-    // SVG 오버레이 업데이트: 전체 측정 선 (파란 점선)과 내부에서 임계 조건(밝기 임계값을 넘나드는) 구간(빨간 실선) 표시
-    updateOverlay() {
-      const svg = this.$refs.overlay;
-      const container = this.$refs.imageContainer;
-      if (!svg || !container) return;
-      const rect = container.getBoundingClientRect();
-      const width = rect.width, height = rect.height;
-      svg.setAttribute('width', width);
-      svg.setAttribute('height', height);
-      while (svg.firstChild) { svg.removeChild(svg.firstChild); }
-      
-      // 전체 측정 선 (파란 점선) 그리기
+
+    segmentMeasurements() {
+      const segs = [];
       this.measurements.forEach(measurement => {
-        if (measurement.points.length < 2) return;
-        const absPoints = measurement.points.map(pt => ({
-          x: pt.xRel * width,
-          y: pt.yRel * height
-        }));
-        const overallPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        let dOverall = `M ${absPoints[0].x} ${absPoints[0].y}`;
-        for (let i = 1; i < absPoints.length; i++) {
-          dOverall += ` L ${absPoints[i].x} ${absPoints[i].y}`;
-        }
-        overallPath.setAttribute("d", dOverall);
-        overallPath.setAttribute("stroke", "blue");
-        overallPath.setAttribute("stroke-width", "2");
-        overallPath.setAttribute("fill", "none");
-        overallPath.setAttribute("stroke-dasharray", "5,5");
-        svg.appendChild(overallPath);
-        
-        // 내부 세그먼트: 측정 선 내부를 샘플링하여, 연속된 샘플 중 brightness > threshold인 그룹을 찾아 빨간 선으로 표시
-        const samples = this.sampleMeasurementPoints(measurement, this.sampleCountPerSegment);
-        const redSegments = [];
-        let currentGroup = [];
-        samples.forEach(sample => {
-          const condition = sample.brightness > this.brightnessThreshold;
-          if (condition) {
-            currentGroup.push(sample);
-          } else {
-            if (currentGroup.length > 1) {
-              redSegments.push(currentGroup);
-            }
-            currentGroup = [];
-          }
-        });
-        if (currentGroup.length > 1) { redSegments.push(currentGroup); }
-        
-        redSegments.forEach(group => {
-          const groupStart = group[0];
-          const groupEnd = group[group.length - 1];
-          const segmentPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-          const dSeg = `M ${groupStart.x} ${groupStart.y} L ${groupEnd.x} ${groupEnd.y}`;
-          segmentPath.setAttribute("d", dSeg);
-          segmentPath.setAttribute("stroke", "red");
-          segmentPath.setAttribute("stroke-width", "3");
-          segmentPath.setAttribute("fill", "none");
-          svg.appendChild(segmentPath);
+        const parts = this.createBrightnessSegments(measurement) || [];
+        parts.forEach((part, idx) => {
+          segs.push({
+            itemId:     measurement.itemId,
+            subItemId:  `${this.subItemPrefix}${idx + 1}`,
+            value:      part.value,
+            brightness: part.brightness
+          });
         });
       });
-      
-      // 진행 중인 측정 선 (마우스 이동 중인 선) 그리기 (빨간 선)
-      if (this.isMeasuring && this.currentMeasurement && this.currentMeasurement.points.length === 2) {
-        const currAbsPoints = this.currentMeasurement.points.map(pt => ({
-          x: pt.xRel * width,
-          y: pt.yRel * height
-        }));
-        const currPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        let dCurr = `M ${currAbsPoints[0].x} ${currAbsPoints[0].y} L ${currAbsPoints[1].x} ${currAbsPoints[1].y}`;
-        currPath.setAttribute("d", dCurr);
-        currPath.setAttribute("stroke", "red");
-        currPath.setAttribute("stroke-width", "3");
-        currPath.setAttribute("fill", "none");
-        svg.appendChild(currPath);
+      this.segmentedMeasurements = segs;
+    },
+
+    updateOverlay() {
+      if (this.rAFpending) return;
+      this.rAFpending = true;
+      requestAnimationFrame(() => {
+        this.rAFpending = false;
+        const svg       = this.$refs.overlay;
+        const container = this.$refs.imageContainer;
+        const imgEl     = this.$refs.displayedImage;
+        if (!svg || !container || !imgEl) return;
+
+        const cRect = container.getBoundingClientRect();
+        svg.setAttribute('width',  cRect.width);
+        svg.setAttribute('height', cRect.height);
+
+        const iRect     = imgEl.getBoundingClientRect();
+        const offsetX   = iRect.left - cRect.left;
+        const offsetY   = iRect.top  - cRect.top;
+        const imageW    = iRect.width;
+        const imageH    = iRect.height;
+
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+        // 확정된 라인 & 세그먼트
+        this.measurements.forEach(measurement => {
+          const absPts = measurement.points.map(pt => ({
+            x: offsetX + pt.xRel * imageW,
+            y: offsetY + pt.yRel * imageH
+          }));
+          // 파란 전체선
+          const full = document.createElementNS('http://www.w3.org/2000/svg','path');
+          let df = `M ${absPts[0].x} ${absPts[0].y}`;
+          absPts.slice(1).forEach(p => df += ` L ${p.x} ${p.y}`);
+          full.setAttribute('d', df);
+          full.setAttribute('stroke', 'blue');
+          full.setAttribute('stroke-width', '2');
+          full.setAttribute('fill', 'none');
+          full.setAttribute('stroke-dasharray', '5,5');
+          svg.appendChild(full);
+
+          // 빨간 세그먼트
+          const dx   = absPts[absPts.length-1].x - absPts[0].x;
+          const dy   = absPts[absPts.length-1].y - absPts[0].y;
+          const len  = Math.hypot(dx, dy);
+          const cnt  = Math.max(Math.ceil(len), this.sampleCountPerSegment);
+          const samples = this.sampleMeasurementPoints(measurement, cnt);
+          const thr = this.brightnessThreshold;
+          const inv = this.invertThreshold;
+          let inSeg = false, segPts = [];
+
+          samples.forEach((cur, i) => {
+            const prev = samples[i-1];
+            const bright = inv ? cur.brightness <= thr : cur.brightness > thr;
+
+            if (bright) {
+              if (!inSeg) {
+                if (prev) {
+                  const r = (thr - prev.brightness) / (cur.brightness - prev.brightness);
+                  const x0 = prev.x + r * (cur.x - prev.x);
+                  const y0 = prev.y + r * (cur.y - prev.y);
+                  segPts = [{ x: x0, y: y0 }];
+                } else {
+                  segPts = [{ x: cur.x, y: cur.y }];
+                }
+                inSeg = true;
+              }
+              segPts.push({ x: cur.x, y: cur.y });
+            } else if (inSeg) {
+              const r = (thr - prev.brightness) / (cur.brightness - prev.brightness);
+              const x1 = prev.x + r * (cur.x - prev.x);
+              const y1 = prev.y + r * (cur.y - prev.y);
+              segPts.push({ x: x1, y: y1 });
+
+              const sp = document.createElementNS('http://www.w3.org/2000/svg','path');
+              let ds = `M ${segPts[0].x} ${segPts[0].y}`;
+              segPts.slice(1).forEach(pt => ds += ` L ${pt.x} ${pt.y}`);
+              sp.setAttribute('d', ds);
+              sp.setAttribute('stroke', 'red');
+              sp.setAttribute('stroke-width', '3');
+              sp.setAttribute('fill', 'none');
+              svg.appendChild(sp);
+
+              inSeg = false;
+              segPts = [];
+            }
+          });
+
+          if (inSeg && segPts.length > 1) {
+            const sp = document.createElementNS('http://www.w3.org/2000/svg','path');
+            let ds = `M ${segPts[0].x} ${segPts[0].y}`;
+            segPts.slice(1).forEach(pt => ds += ` L ${pt.x} ${pt.y}`);
+            sp.setAttribute('d', ds);
+            sp.setAttribute('stroke', 'red');
+            sp.setAttribute('stroke-width', '3');
+            sp.setAttribute('fill', 'none');
+            svg.appendChild(sp);
+          }
+        });
+
+        // in-progress 선
+        if (this.isMeasuring && this.currentMeasurement?.points.length === 2) {
+          const [p1, p2] = this.currentMeasurement.points;
+          const a1 = { x: offsetX + p1.xRel * imageW, y: offsetY + p1.yRel * imageH };
+          const a2 = { x: offsetX + p2.xRel * imageW, y: offsetY + p2.yRel * imageH };
+          const ip = document.createElementNS('http://www.w3.org/2000/svg','path');
+          ip.setAttribute('d', `M ${a1.x} ${a1.y} L ${a2.x} ${a2.y}`);
+          ip.setAttribute('stroke', 'red');
+          ip.setAttribute('stroke-width', '3');
+          ip.setAttribute('fill', 'none');
+          svg.appendChild(ip);
+        }
+      });
+    },
+
+    createBrightnessSegments(measurement) {
+      const segs = [];
+      const pts = measurement.points;
+      if (pts.length < 2) return segs;
+
+      const p1 = pts[0], p2 = pts[1];
+      const cw = this.greyCanvas.width, ch = this.greyCanvas.height;
+      const dx = (p2.xRel - p1.xRel) * cw, dy = (p2.yRel - p1.yRel) * ch;
+      const length = Math.hypot(dx, dy);
+      const cnt = Math.max(Math.ceil(length), 200);
+      const thr = this.brightnessThreshold;
+      const inv = this.invertThreshold;
+
+      let inSeg = false, startT = 0;
+      const samples = [];
+      for (let i = 0; i <= cnt; i++) {
+        const t = i / cnt;
+        const xRel = p1.xRel + (p2.xRel - p1.xRel) * t;
+        const yRel = p1.yRel + (p2.yRel - p1.yRel) * t;
+        const b = this.calculateBrightnessAtPointAbsolute(xRel, yRel);
+        samples.push({ t, b });
       }
+
+      for (let i = 1; i < samples.length; i++) {
+        const prev = samples[i-1], cur = samples[i];
+        const wasOn = inv ? prev.b <= thr : prev.b > thr;
+        const isOn  = inv ? cur.b  <= thr : cur.b  > thr;
+
+        if (!inSeg && isOn && !wasOn) {
+          const r = (thr - prev.b) / (cur.b - prev.b);
+          startT = prev.t + (cur.t - prev.t) * r;
+          inSeg = true;
+        }
+        else if (inSeg && !isOn && wasOn) {
+          const r = (thr - prev.b) / (cur.b - prev.b);
+          const endT = prev.t + (cur.t - prev.t) * r;
+          const sx = (p1.xRel + (p2.xRel-p1.xRel)*startT) * cw;
+          const sy = (p1.yRel + (p2.yRel-p1.yRel)*startT) * ch;
+          const ex = (p1.xRel + (p2.xRel-p1.xRel)*endT)   * cw;
+          const ey = (p1.yRel + (p2.yRel-p1.yRel)*endT)   * ch;
+          segs.push({
+            itemId:     measurement.itemId,
+            subItemId:  measurement.subItemId,
+            value:      Math.hypot(ex - sx, ey - sy),
+            brightness: thr
+          });
+          inSeg = false;
+        }
+      }
+      return segs;
+    },
+
+
+    calculateMeasurement(measurement) {
+      const pts = measurement.points;
+      if (pts.length < 2) return;
+      const start = pts[0], end = pts[pts.length - 1];
+      measurement.value = this.calculateDistance(start, end);
+      const samples = this.sampleMeasurementPoints(measurement, this.sampleCountPerSegment);
+      measurement.brightness = samples.reduce((sum, s) => sum + s.brightness, 0) / samples.length;
+    },
+
+    
+
+    removeSegment(idx) {
+      this.segmentedMeasurements.splice(idx, 1);
+    },
+    
+    
+
+  sampleMeasurementPoints(measurement, sampleCount = 200) {
+    const s = [];
+    const pts = measurement.points;
+    if (pts.length < 2) return s;
+
+    const container = this.$refs.imageContainer;
+    const imgEl     = this.$refs.displayedImage;
+    if (!container || !imgEl) return s;
+
+    const cRect      = container.getBoundingClientRect();
+    const iRect      = imgEl.getBoundingClientRect();
+    const oX         = iRect.left - cRect.left;
+    const oY         = iRect.top  - cRect.top;
+    const iW         = iRect.width;
+    const iH         = iRect.height;
+
+    const start = { x: oX + pts[0].xRel * iW, y: oY + pts[0].yRel * iH };
+    const end   = { x: oX + pts[1].xRel * iW, y: oY + pts[1].yRel * iH };
+    const dx    = end.x - start.x;
+    const dy    = end.y - start.y;
+
+    for (let i = 0; i <= sampleCount; i++) {
+      const t = i / sampleCount;
+      const x = start.x + dx * t;
+      const y = start.y + dy * t;
+      const relX = (x - oX) / iW;
+      const relY = (y - oY) / iH;
+      const b = this.calculateBrightnessAtPointAbsolute(relX, relY);
+      s.push({ x, y, brightness: b });
     }
+    return s;
+  },
   },
   
 
@@ -1030,12 +1037,12 @@ export default {
       deep: true
     },
     brightnessThreshold() {
-      this.updateOverlay()
-      this.segmentMeasurements()
+      this.segmentMeasurements();
+
     },
     invertThreshold() {
-      this.updateOverlay()
-      this.segmentMeasurements()
+      this.segmentMeasurements();
+
     }
   }
 }
