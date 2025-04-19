@@ -5,6 +5,9 @@ import router from './router'
 import store from './store'
 import './assets/main.css'
 
+// Font Awesome
+import '@fortawesome/fontawesome-free/css/all.css'
+
 // 전역 스타일 파일
 import './assets/css/global.css'
 

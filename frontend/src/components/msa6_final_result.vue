@@ -39,7 +39,7 @@
 </template>
 
 <script>
-import MSA6ImagePopup from './msa6_image_popup.vue'
+import MSA6ImagePopup from './msa6_image_popup1.vue'
 
 export default {
   name: 'MSA6FinalResult',
@@ -166,19 +166,26 @@ export default {
 
 .measurement-hint {
   position: absolute;
-  bottom: 1rem;
+  bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.8);
   color: white;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
+  padding: 1rem 2rem;
+  border-radius: 8px;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
+  gap: 1rem;
+  font-size: 1.1rem;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+}
+
+.measurement-hint i {
+  font-size: 1.4rem;
+  color: #7950f2;
 }
 
 .result-image:hover .measurement-hint {
