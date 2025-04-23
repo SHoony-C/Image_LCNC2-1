@@ -4,6 +4,7 @@ import os
 import httpx
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 # MSA 모듈 라우터 임포트
 from msa1_imageload import router as msa1_router
@@ -40,6 +41,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 정적 파일 서빙 설정
+app.mount("/storage", StaticFiles(directory="./storage"), name="storage")
+# images 디렉토리는 사용하지 않음
+# app.mount("/images", StaticFiles(directory="./images"), name="images")
+# 벡터 디렉토리 경로 변경 (더 이상 필요없음, storage 마운트로 접근 가능)
+# app.mount("/vectors", StaticFiles(directory="./vectors"), name="vectors")
 
 # 시작 이벤트: 필요한 디렉토리 생성
 @app.on_event("startup")
@@ -103,19 +111,19 @@ async def health():
     }
 
 # MSA 모듈 라우터 등록
-app.include_router(msa1_router, prefix="/api/msa1", tags=["MSA1"])
-app.include_router(msa2_router, prefix="/api/msa2", tags=["MSA2"])
-app.include_router(msa3_router, prefix="/api/msa3", tags=["MSA3"])
-app.include_router(msa4_router, prefix="/api/msa4", tags=["MSA4"])
-app.include_router(msa5_router, prefix="/api/msa5", tags=["MSA5"])
-app.include_router(msa6_router, prefix="/api/msa6", tags=["MSA6"])
+app.include_router(msa1_router, prefix="/api/msa1", tags=["msa1"])
+app.include_router(msa2_router, prefix="/api/msa2", tags=["msa2"])
+app.include_router(msa3_router, prefix="/api/msa3", tags=["msa3"])
+app.include_router(msa4_router, prefix="/api/msa4", tags=["msa4"])
+app.include_router(msa5_router, prefix="/api/msa5", tags=["msa5"])
+app.include_router(msa6_router, prefix="/api/msa6", tags=["msa6"])
 
 # 사이드 모듈 라우터 등록
-app.include_router(side_2_router, prefix="/api/side2", tags=["Side2"])
-app.include_router(workflow_router, prefix="/api/workflow", tags=["Workflow"])
-app.include_router(management_router, prefix="/api/management", tags=["Management"])
-app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
-app.include_router(help_router, prefix="/api/help", tags=["Help"])
+app.include_router(side_2_router, prefix="/api/side2", tags=["side2"])
+app.include_router(workflow_router, prefix="/api/workflow", tags=["workflow"])
+app.include_router(management_router, prefix="/api/management", tags=["management"])
+app.include_router(settings_router, prefix="/api/settings", tags=["settings"])
+app.include_router(help_router, prefix="/api/help", tags=["help"])
 
 # 서버 시작
 if __name__ == "__main__":

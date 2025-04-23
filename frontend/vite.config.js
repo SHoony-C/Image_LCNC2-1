@@ -21,11 +21,11 @@ export default defineConfig({
     'process.env': {}
   },
   server: {
+    // Images are served directly from http://localhost:8091/images/
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
       }
     }
   }

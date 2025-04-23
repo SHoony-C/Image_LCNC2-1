@@ -1,5 +1,5 @@
 <template>
-  <div class="msa-component" :class="{ maximized: isMaximized }">
+  <div class="msa-component" :class="{ maximized: isMaximized }" tabindex="0" @keydown="handleKeyDown">
     <div class="component-header">
       <div class="header-left">
         <i class="fas fa-image"></i>
@@ -32,17 +32,29 @@
         <!-- 전처리 노드 팔레트 (스크롤 가능) -->
         <div class="preprocessing-nodes-wrapper">
           <div class="preprocessing-nodes-container">
-            <div v-for="node in availableNodes.filter(n => n.id !== 'merge')" :key="node.id" class="palette-node" draggable="true"
-              @dragstart="onDragStart($event, node)">
-              <i :class="node.icon"></i>
-              <span>{{ node.label }}</span>
+            <template v-if="availableNodes && filteredNodes.length > 0">
+              <div v-for="node in filteredNodes" 
+                  :key="node.id" 
+                  class="palette-node" 
+                  draggable="true"
+                  @dragstart="onDragStart($event, node)">
+                <i :class="node.icon"></i>
+                <span>{{ node.label }}</span>
+              </div>
+            </template>
+            <div v-if="!availableNodes || isNodesLoading" class="loading-placeholder">
+              <i class="fas fa-spinner fa-spin"></i>
+              <span>노드 로딩 중...</span>
             </div>
           </div>
         </div>
         
         <!-- 병합 노드를 하단에 고정 배치 -->
         <div class="merge-palette-section">
-          <div class="merge-node-container" draggable="true" @dragstart="onDragStart($event, availableNodes.find(n => n.id === 'merge'))">
+          <div v-if="mergeNode" 
+              class="merge-node-container" 
+              draggable="true" 
+              @dragstart="onDragStart($event, mergeNode)">
             <div class="merge-node-preview">
               <div class="diamond-preview">
                 <i class="fas fa-object-group"></i>
@@ -50,13 +62,14 @@
               <span>이미지 병합</span>
             </div>
             <div class="merge-node-desc">
-              여러 이미지를 하나로 병합합니다 (최대 3개 입력)
+              여러 이미지를 하나로 병합합니다 (최대 5개 입력)
             </div>
           </div>
         </div>
       </div>
 
       <div class="workflow-area" @dragover="onDragOver" @drop="onDrop" ref="workflowArea">
+
         <VueFlow v-model="elements" 
           :default-viewport="{ x: 0, y: 0, zoom: 0.7 }"
           :style="{ width: '100%', height: '100%' }"
@@ -77,7 +90,7 @@
           />
           
           <template #node-start>
-            <div class="start-node" :class="{ 'has-connection': hasInput }">
+            <div class="start-node" :class="{ 'has-connection': hasInput, 'has-image': !!inputImage }">
               <Handle type="source" position="right" />
               <div class="node-header">
                 <i class="fas fa-play"></i>
@@ -90,7 +103,7 @@
           </template>
 
           <template #node-end>
-            <div class="end-node" :class="{ 'has-connection': hasOutput }">
+            <div class="end-node" :class="{ 'has-connection': hasOutput, 'has-image': !!processedImages['end'] }">
               <Handle type="target" position="left" />
               <div class="node-header">
                 <i class="fas fa-stop"></i>
@@ -118,10 +131,13 @@
 
           <template #node-merge="nodeProps">
             <div class="merge-node">
-              <Handle type="target" position="left" id="input-lefttop" :style="{ left: '-5px', top: '20px', transform: 'none' }" />
-              <Handle type="target" position="left" id="input-leftbottom" :style="{ left: '-5px', bottom: '20px', transform: 'none' }" />
-              <Handle type="target" position="right" id="input-righttop" :style="{ right: '-5px', top: '20px', transform: 'none' }" />
-              <Handle type="source" position="right" id="output-rightbottom" :style="{ right: '-5px', bottom: '20px', transform: 'none' }" />
+              <!-- 여러 입력을 받을 수 있도록 핸들 위치 조정 -->
+              <Handle type="target" position="left" id="input-1" :style="{ left: '-5px', top: '30%', transform: 'none' }" />
+              <Handle type="target" position="left" id="input-2" :style="{ left: '-5px', top: '50%', transform: 'none' }" />
+              <Handle type="target" position="left" id="input-3" :style="{ left: '-5px', top: '70%', transform: 'none' }" />
+              <Handle type="target" position="top" id="input-4" :style="{ top: '-5px', left: '30%', transform: 'none' }" />
+              <Handle type="target" position="top" id="input-5" :style="{ top: '-5px', left: '70%', transform: 'none' }" />
+              <Handle type="source" position="right" id="output" :style="{ right: '-5px', top: '50%', transform: 'none' }" />
               
               <div class="node-header">
                 <i :class="nodeProps.data.icon"></i>
@@ -135,7 +151,7 @@
         </VueFlow>
       </div>
 
-      <div class="options-panel" v-if="selectedNode">
+      <div class="options-panel" v-if="selectedNode" :class="{ 'fullscreen-panel': isMaximized }">
         <div class="panel-header">
           <h3>{{ selectedNode.data.label }} 설정</h3>
           <button class="close-btn" @click="selectedNode = null">
@@ -181,7 +197,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
 import { VueFlow, Handle } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -203,275 +219,378 @@ export default {
     const hasOutput = ref(false)
     const elements = ref([])
     const selectedNode = ref(null)
-    const inputImage = ref(null)
+    const inputImage = ref('')
     const processedImages = reactive({})
     const processingStatus = ref('idle')
     const previewImageUrl = ref(null)
-    const statusMessage = ref('')
     const showStatusMessage = ref(false)
+    const statusMessage = ref('')
     const availableNodes = ref([])
     const isNodesLoading = ref(true)
     const flowInstance = ref(null)
     const defaultOptions = ref({})
     const processingQueue = ref([])
     const containerRef = ref(null)
+    
+    // 노드 필터링을 위한 computed 속성
+    const filteredNodes = computed(() => {
+      return availableNodes.value ? availableNodes.value.filter(n => n && n.id !== 'merge') : [];
+    });
+    
+    // 병합 노드를 위한 computed 속성
+    const mergeNode = computed(() => {
+      return availableNodes.value ? availableNodes.value.find(n => n && n.id === 'merge') : null;
+    });
 
-    // 전처리 옵션 로드 함수
-    const loadAvailableNodes = async () => {
-      isNodesLoading.value = true
-      try {
-        // 백엔드 API 엔드포인트 호출
-        const response = await fetch('http://localhost:8000/api/msa5/nodes')
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
+    // 실행 취소/다시 실행 기록을 위한 상태 변수 추가
+    const undoStack = ref([])
+    const redoStack = ref([])
+    const MAX_HISTORY = 20 // 최대 히스토리 갯수
+
+    // 노드/엣지 작업 내역 저장
+    const saveToHistory = () => {
+      // 너무 많은 히스토리를 저장하지 않도록 제한
+      if (undoStack.value.length >= MAX_HISTORY) {
+        undoStack.value.shift() // 가장 오래된 히스토리 제거
+      }
+      
+      // 현재 상태 깊은 복사하여 저장
+      undoStack.value.push(JSON.parse(JSON.stringify(elements.value)))
+      
+      // 새 액션 이후 redo 스택은 비움
+      redoStack.value = []
+    }
+
+    // 실행 취소 (Ctrl+Z)
+    const undo = () => {
+      if (undoStack.value.length === 0) return
+      
+      // 현재 상태를 redo 스택에 저장
+      redoStack.value.push(JSON.parse(JSON.stringify(elements.value)))
+      
+      // 마지막 저장된 상태로 되돌림
+      const lastState = undoStack.value.pop()
+      elements.value = lastState
+      
+      // 실행 취소 후 입력/출력 연결 상태 업데이트
+      updateConnections()
+    }
+
+    // 다시 실행 (Ctrl+Y)
+    const redo = () => {
+      if (redoStack.value.length === 0) return
+      
+      // 현재 상태를 undo 스택에 저장
+      undoStack.value.push(JSON.parse(JSON.stringify(elements.value)))
+      
+      // redo 스택에서 상태 복원
+      const nextState = redoStack.value.pop()
+      elements.value = nextState
+      
+      // 다시 실행 후 입력/출력 연결 상태 업데이트
+      updateConnections()
+    }
+
+    // 선택한 노드 삭제
+    const deleteSelectedNode = () => {
+      if (!selectedNode.value) return
+      
+      // 해당 노드의 ID
+      const nodeId = selectedNode.value.id
+      
+      // 변경 전 상태 저장
+      saveToHistory()
+      
+      // 연결된 엣지 먼저 삭제
+      elements.value = elements.value.filter(el => {
+        if (el.type === 'smoothstep') {
+          return el.source !== nodeId && el.target !== nodeId
         }
-        const data = await response.json()
-        
-        console.log('전처리 옵션 응답 데이터:', data)
-        
-        // 백엔드에서 받은 노드 옵션 설정
-        availableNodes.value = data.options || []
-        defaultOptions.value = data.defaultOptions || {}
+        return true
+      })
+      
+      // 노드 삭제
+      elements.value = elements.value.filter(el => el.id !== nodeId)
+      
+      // 선택 해제
+      selectedNode.value = null
+      
+      // 입력/출력 연결 상태 업데이트
+      updateConnections()
+    }
 
-        console.log('로드된 전처리 노드:', availableNodes.value)
-        console.log('로드된 기본 옵션:', defaultOptions.value)
+    // 키보드 이벤트 핸들러
+    const handleKeyDown = (event) => {
+      console.log('키보드 이벤트 감지:', event.key, event.ctrlKey);
+      console.log('키보드 이벤트 상세정보:', {
+        key: event.key,
+        code: event.code,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        altKey: event.altKey,
+        shiftKey: event.shiftKey,
+        target: event.target.tagName,
+        activeElement: document.activeElement?.tagName
+      });
+      
+      // Escape 키는 이미지 프리뷰 닫기
+      if (event.key === 'Escape' && previewImageUrl.value) {
+        closeImagePreview();
+        return;
+      }
+      
+      // Delete 키로 선택된 노드 삭제
+      if (event.key === 'Delete' && selectedNode.value) {
+        console.log('Delete 키 감지 - 노드 삭제 실행');
+        deleteSelectedNode();
+        event.preventDefault();
+        return;
+      }
+      
+      // Ctrl+Z: 실행 취소
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+        console.log('Ctrl+Z 감지 - 실행 취소 실행');
+        event.preventDefault();
+        undo();
+        return;
+      }
+      
+      // Ctrl+Y: 다시 실행
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+        console.log('Ctrl+Y 감지 - 다시 실행 실행');
+        event.preventDefault();
+        redo();
+        return;
+      }
+    }
 
-        // 로드된 노드 기반으로 초기 elements 설정
-        if (containerRef.value) {
-          const containerWidth = containerRef.value.clientWidth
-          const containerHeight = containerRef.value.clientHeight
+    // 연결 상태 업데이트
+    const updateConnections = () => {
+      const connections = elements.value.filter(el => el.type === 'smoothstep')
+      
+      // 시작 노드에서 나가는 연결 확인
+      hasInput.value = connections.some(conn => conn.source === 'start')
+      
+      // 종료 노드로 들어오는 연결 확인
+      hasOutput.value = connections.some(conn => conn.target === 'end')
+    }
+
+    // 이미지 프리뷰 열기
+    const openImagePreview = (imageUrl) => {
+      previewImageUrl.value = imageUrl
+    }
+
+    // 이미지 프리뷰 닫기
+    const closeImagePreview = () => {
+      previewImageUrl.value = null
+    }
+
+    // 드래그 시작 이벤트 핸들러
+    const onDragStart = (event, node) => {
+      event.dataTransfer.setData('application/vueflow', JSON.stringify(node))
+      event.dataTransfer.effectAllowed = 'move'
+    }
+
+    // 드래그 오버 이벤트 핸들러
+    const onDragOver = (event) => {
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+    }
+
+    // 최대화 버튼 토글
+    const toggleMaximize = () => {
+      isMaximized.value = !isMaximized.value
+    }
+
+    // VueFlow 초기화
+    const onInit = (instance) => {
+      flowInstance.value = instance
+      console.log('VueFlow initialized')
+    }
+
+    // 패널 준비 완료 이벤트 핸들러
+    const onPaneReady = (instance) => {
+      console.log('VueFlow pane ready')
+      if (instance) {
+        instance.fitView({ padding: 0.2, duration: 200 })
+      }
+    }
+
+    // 노드 드래그 종료 이벤트 핸들러
+    const onNodeDragStop = (event) => {
+      console.log('Node dragged:', event.node.id)
+    }
+
+    // 노드 클릭 이벤트 핸들러
+    const onNodeClick = (event) => {
+      const { node } = event
+      console.log('노드 클릭:', node.id, '마우스 위치:', { 
+        clientX: event.event?.clientX, 
+        clientY: event.event?.clientY,
+        screenX: event.event?.screenX, 
+        screenY: event.event?.screenY 
+      });
+      
+      if (node && node.type && node.type !== 'smoothstep' && node.data && node.id !== 'start' && node.id !== 'end') {
+        if (!node.data.params) {
+          console.warn(`Node ${node.id} data is missing params object. Initializing.`)
+          node.data.params = getDefaultParams(node.data.id, defaultOptions.value)
+        }
+        
+        selectedNode.value = node
+        console.log('Node selected:', selectedNode.value);
+        
+        // 패널 위치 디버깅 로그
+        setTimeout(() => {
+          const panelEl = document.querySelector('.options-panel');
+          const componentEl = document.querySelector('.msa-component');
           
-          // 종료 노드 위치 계산 - 화면 크기에 맞게 조정
-          let endX;
-          if (containerWidth < 600) {
-            endX = Math.min(containerWidth - 80, containerWidth * 0.35);
-          } else if (containerWidth < 800) {
-            endX = Math.min(containerWidth - 100, containerWidth * 0.4);
-          } else {
-            endX = Math.min(containerWidth - 120, containerWidth * 0.6);
+          if (panelEl && componentEl) {
+            console.log('옵션 패널 위치 정보:', {
+              panel: {
+                offsetTop: panelEl.offsetTop,
+                offsetLeft: panelEl.offsetLeft,
+                offsetWidth: panelEl.offsetWidth,
+                offsetHeight: panelEl.offsetHeight,
+                clientRect: panelEl.getBoundingClientRect()
+              },
+              component: {
+                isMaximized: isMaximized.value,
+                clientRect: componentEl.getBoundingClientRect()
+              },
+              windowSize: {
+                innerWidth: window.innerWidth,
+                innerHeight: window.innerHeight
+              }
+            });
           }
-          
-          // 시작점보다는 오른쪽에 배치
-          endX = Math.max(endX, containerWidth * 0.1 + 200);
-          
-          elements.value = [
-            { 
-              id: 'start', 
-              type: 'start', 
-              position: { 
-                x: containerWidth * 0.1,  // 화면 너비의 10% 위치
-                y: containerHeight * 0.1   // 화면 높이의 10% 위치
-              }, 
-              data: { label: '시작' } 
-            },
-            { 
-              id: 'end', 
-              type: 'end', 
-              position: { 
-                x: endX,  // 계산된 위치 사용
-                y: containerHeight * 0.5   // 수직 중앙에 배치
-              }, 
-              data: { label: '종료' } 
-            }
-          ]
-        }
-
-      } catch (error) {
-        console.error('전처리 옵션을 불러오는 중 오류 발생:', error)
-        statusMessage.value = '전처리 옵션을 불러올 수 없습니다. 백엔드 서버에 연결하세요.'
-        showStatusMessage.value = true
-        setTimeout(() => { showStatusMessage.value = false }, 5000)
-        
-        // 백엔드 연결 실패 시 빈 상태로 유지
-        availableNodes.value = []
-        defaultOptions.value = {}
-        
-        // 초기 elements 설정
-        if (containerRef.value) {
-          const containerWidth = containerRef.value.clientWidth
-          const containerHeight = containerRef.value.clientHeight
-          
-          elements.value = [
-            { 
-              id: 'start', 
-              type: 'start', 
-              position: { 
-                x: containerWidth * 0.1,
-                y: containerHeight * 0.1
-              }, 
-              data: { label: '시작' } 
-            },
-            { 
-              id: 'end', 
-              type: 'end', 
-              position: { 
-                x: containerWidth * 0.85,
-                y: containerHeight * 0.8
-              }, 
-              data: { label: '종료' } 
-            }
-          ]
-        }
-      } finally {
-        isNodesLoading.value = false
-      }
-    }
-
-    const handleImageUpdate = (event) => {
-      console.log('[MSA5 handleImageUpdate] 이벤트 수신 타입:', event.type);
-      
-      // 이벤트에서 이미지 URL 추출 시도
-      let imageUrl = null;
-      
-      if (event.detail) {
-        console.log('[MSA5] 이벤트 detail 키:', Object.keys(event.detail));
-        // 일반적인 imageUrl 찾기
-        if (event.detail.imageUrl) {
-          imageUrl = event.detail.imageUrl;
-        }
-        // 다른 가능한 속성 이름들 확인
-        else if (event.detail.image) {
-          imageUrl = event.detail.image;
-        }
-        else if (event.detail.url) {
-          imageUrl = event.detail.url;
-        }
-        else if (event.detail.src) {
-          imageUrl = event.detail.src;
-        }
-      }
-      
-      // 이벤트 자체에 이미지 속성이 있는지 확인
-      if (!imageUrl && event.image) {
-        imageUrl = event.image;
-      }
-      
-      if (!imageUrl && event.imageUrl) {
-        imageUrl = event.imageUrl;
-      }
-      
-      // 이미지 URL을 찾았으면 직접 처리 함수 호출
-      if (imageUrl) {
-        console.log('[MSA5] 이벤트에서 이미지 URL 추출 성공');
-        handleDirectImageUpdate(imageUrl);
+        }, 10);
       } else {
-        console.warn('[MSA5] 이벤트에서 이미지 URL을 찾을 수 없음:', event);
+        selectedNode.value = null
+        console.log('Node deselected or invalid node clicked.')
       }
     }
 
-    const clearProcessedImages = () => {
-      Object.keys(processedImages).forEach(key => delete processedImages[key])
-      processingStatus.value = 'idle'
-      hasOutput.value = false
-    }
-
-    const processStart = async () => {
+    // 워크플로우 처리 시작
+    const processStart = () => {
       if (!inputImage.value) return
-
+      
       showStatusMessage.value = true
       statusMessage.value = '워크플로우 처리 시작...'
       processingStatus.value = 'processing'
-
-      // processedImages 초기화
-      Object.keys(processedImages).forEach(key => delete processedImages[key])
-      processedImages['start'] = inputImage.value
-
+      
+      // 처리된 이미지 초기화 (시작 노드는 유지)
+      Object.keys(processedImages).forEach(key => {
+        if (key !== 'start') delete processedImages[key]
+      })
+      
+      // 워크플로우 처리 경로 찾기
       const workflow = findProcessingPath()
       if (!workflow || workflow.length === 0) {
-        console.error('No valid workflow path found')
+        console.error('유효한 워크플로우 경로를 찾을 수 없습니다')
         processingStatus.value = 'error'
-        showStatusMessage.value = true
         statusMessage.value = '유효한 워크플로우 경로가 없습니다. 시작부터 종료까지 연결된 경로를 만들어주세요.'
+        showStatusMessage.value = true
         setTimeout(() => { showStatusMessage.value = false }, 5000)
         return
       }
-
-      console.log('Processing workflow path:', workflow)
-
-      await processWorkflow()
+      
+      console.log('처리할 워크플로우 경로:', workflow)
+      processWorkflow()
     }
-
+    
+    // 워크플로우 처리 경로 찾기 (시작 노드부터 종료 노드까지)
     const findProcessingPath = () => {
       const connections = elements.value.filter(el => el.type === 'smoothstep')
       const nodes = elements.value.filter(el => el.type !== 'smoothstep')
       
+      // 그래프 구성
       const graph = {}
       for (const node of nodes) {
         graph[node.id] = []
       }
       
+      // 연결 관계 설정
       for (const conn of connections) {
-        const source = conn.source
-        const target = conn.target
-        
-        if (!graph[source]) graph[source] = []
-        graph[source].push(target)
+        if (!graph[conn.source]) graph[conn.source] = []
+        graph[conn.source].push(conn.target)
       }
       
-      const path = []
+      // 각 노드의 방문 상태 추적
       const visited = new Set()
-      const visiting = new Set()
+      const visiting = new Set() // 순환 참조 검사용
+      const path = []
       
-      const mergeNodes = nodes.filter(node => 
-        node.type === 'merge' || 
-        (node.data && node.data.id === 'merge')
-      ).map(node => node.id)
+      // 병합 노드 식별
+      const mergeNodes = nodes
+        .filter(node => node.type === 'merge' || (node.data && node.data.id === 'merge'))
+        .map(node => node.id)
       
+      // 각 노드로 들어오는 엣지 개수 (병합 노드의 여러 입력 처리용)
       const incomingEdges = {}
       for (const node of nodes) {
         incomingEdges[node.id] = 0
       }
       
       for (const conn of connections) {
-        const target = conn.target
-        incomingEdges[target] = (incomingEdges[target] || 0) + 1
+        incomingEdges[conn.target] = (incomingEdges[conn.target] || 0) + 1
       }
       
+      // DFS로 유효 경로 탐색 (순환 참조 확인 포함)
       const findPathDFS = (nodeId) => {
+        // 순환 참조 확인
         if (visiting.has(nodeId)) {
           console.error('순환 참조 발견:', nodeId)
           return false
         }
         
+        // 이미 방문한 노드는 건너뜀
         if (visited.has(nodeId)) return true
         
         visiting.add(nodeId)
         
+        // 자식 노드들 재귀 호출
         const children = graph[nodeId] || []
         for (const child of children) {
           if (!findPathDFS(child)) return false
         }
         
+        // 방문 완료
         visiting.delete(nodeId)
         visited.add(nodeId)
         
+        // 경로에 추가 (역순)
         path.unshift(nodeId)
-        
         return true
       }
       
+      // 시작 노드부터 DFS 시작
       if (!findPathDFS('start')) {
-        console.error('순환 참조가 있어 유효한 경로를 찾을 수 없습니다.')
+        console.error('순환 참조가 있어 유효한 경로를 찾을 수 없습니다')
         return null
       }
       
+      // 종료 노드가 경로에 포함되었는지 확인
       if (!visited.has('end')) {
-        console.error('시작부터 종료까지의 경로가 없습니다.')
+        console.error('시작부터 종료까지의 경로가 없습니다')
         return null
       }
       
+      // 병합 노드의 입력이 모두 처리될 수 있도록 경로 조정
       let finalPath = []
       for (let i = 0; i < path.length; i++) {
         const nodeId = path[i]
         
         if (mergeNodes.includes(nodeId)) {
+          // 병합 노드로 들어오는 모든 입력 노드 확인
           const inputNodeIds = connections
             .filter(conn => 
               conn.target === nodeId && 
-              ['input-lefttop', 'input-leftbottom', 'input-righttop'].includes(conn.targetHandle)
+              conn.targetHandle?.startsWith('input-')
             )
             .map(conn => conn.source)
           
+          // 모든 입력 노드가 이미 처리되었는지 확인
           const allInputsProcessed = inputNodeIds.every(inputId => 
             finalPath.includes(inputId) || inputId === 'start'
           )
@@ -479,6 +598,7 @@ export default {
           if (allInputsProcessed) {
             finalPath.push(nodeId)
           } else {
+            // 아직 모든 입력이 처리되지 않았으면 나중에 다시 시도
             path.push(nodeId)
           }
         } else {
@@ -488,321 +608,324 @@ export default {
       
       return finalPath
     }
-
+    
+    // 워크플로우 실제 처리 함수
     const processWorkflow = async () => {
       try {
         console.log('워크플로우 처리 시작')
-
+        
+        // 처리 큐 초기화
         processingQueue.value = []
-
-        const startNode = elements.value.find(node => node.type === 'start')
-        console.log('시작 노드:', startNode)
-
+        
+        // 시작 노드 처리
+        const startNode = elements.value.find(node => node.id === 'start')
         if (!startNode) {
           throw new Error('시작 노드를 찾을 수 없습니다')
         }
-
-        const startEdges = elements.value.filter(edge => edge.type === 'smoothstep' && edge.source === startNode.id)
-        console.log('시작 노드의 출력 엣지:', startEdges)
-
-        const startImage = processedImages[startNode.id]
-        console.log('시작 노드의 입력 이미지:', startImage)
-
+        
+        // 시작 노드에서 나가는 엣지 찾기
+        const startEdges = elements.value.filter(edge => 
+          edge.type === 'smoothstep' && edge.source === 'start'
+        )
+        
+        // 시작 이미지 확인
+        const startImage = processedImages['start']
         if (!startImage) {
-          throw new Error('입력 이미지가 없습니다')
+          throw new Error('시작 이미지가 없습니다')
         }
-
-        console.log('시작 노드 처리 완료')
-
+        
+        // 처리 큐에 시작 엣지 추가
         processingQueue.value.push(...startEdges)
-        console.log('처리 큐 초기화:', processingQueue.value)
-
+        console.log('처리 큐 초기화:', processingQueue.value.length, '개 엣지')
+        
+        // 큐에 있는 엣지 순서대로 처리
         while (processingQueue.value.length > 0) {
           const edge = processingQueue.value.shift()
-          console.log('현재 처리 중인 엣지:', edge)
-
+          console.log('현재 처리 중인 엣지:', edge.id)
+          
           const sourceNode = elements.value.find(node => node.id === edge.source)
           const targetNode = elements.value.find(node => node.id === edge.target)
-
-          console.log('소스 노드:', sourceNode)
-          console.log('타겟 노드:', targetNode)
-
+          
           if (!sourceNode || !targetNode) {
-            console.warn('엣지의 소스 또는 타겟 노드를 찾을 수 없습니다:', edge)
+            console.warn('엣지의 소스 또는 타겟 노드를 찾을 수 없습니다:', edge.id)
             continue
           }
-
+          
+          // 이미 처리된 노드는 건너뜀
           if (processedImages[targetNode.id]) {
-             console.log(`타겟 노드 ${targetNode.id}는 이미 처리되었습니다. 건너니다.`);
-             continue;
+            console.log(`노드 ${targetNode.id}는 이미 처리되었습니다. 건너뜁니다.`)
+            continue
           }
-
+          
+          // 소스 노드의 출력 이미지 확인
           const sourceImage = processedImages[sourceNode.id]
-          console.log('소스 노드의 출력 이미지:', sourceImage)
-
           if (!sourceImage) {
-            console.warn('소스 노드의 출력 이미지가 없습니다:', sourceNode.id)
-            if (targetNode.type !== 'merge') {
-               console.error(`소스 노드 ${sourceNode.id}의 이미지가 없어 ${targetNode.id} 처리를 진행할 수 없습니다.`);
-            } else {
-               console.log(`병합 노드 ${targetNode.id}는 소스 ${sourceNode.id}의 이미지를 기다립니다.`);
-           }
-           continue
+            console.warn(`소스 노드 ${sourceNode.id}의 이미지가 없습니다`)
+            continue
           }
-
-          console.log('타겟 노드 처리 시작:', targetNode.data.id)
-          let processedImage
-          if (targetNode.data.id === 'merge') {
-            processedImage = await processMergeNode(targetNode);
+          
+          // 타겟 노드 처리
+          let processedImage = null
+          
+          if (targetNode.type === 'merge') {
+            // 병합 노드 특별 처리 - 모든 입력 확인
+            processedImage = await processMergeNode(targetNode)
             if (!processedImage) {
-               console.log(`병합 노드 ${targetNode.id} 처리가 아직 준비되지 않았습니다.`);
-               continue;
+              console.log(`병합 노드 ${targetNode.id}는 아직 모든 입력이 준비되지 않았습니다`)
+              continue
             }
-          } else if (targetNode.type === 'end') {
-             processedImage = sourceImage;
-             console.log('종료 노드 도달');
+          } else if (targetNode.id === 'end') {
+            // 종료 노드는 처리 없이 이미지 전달
+            processedImage = sourceImage
+            console.log('종료 노드 도달')
           } else {
-            processedImage = await processImage(targetNode, sourceImage)
+            // 일반 노드 처리
+            processedImage = await processNode(targetNode, sourceImage)
           }
-          console.log('타겟 노드 처리 완료:', targetNode.data.id)
-
+          
+          // 처리 결과 저장
           processedImages[targetNode.id] = processedImage
-          console.log('처리된 이미지 저장:', targetNode.id)
-
-          if (targetNode.type !== 'end') {
-            const targetEdges = elements.value.filter(e => e.type === 'smoothstep' && e.source === targetNode.id);
-            targetEdges.forEach(tEdge => {
-                if (!processingQueue.value.some(qEdge => qEdge.id === tEdge.id)) {
-                    processingQueue.value.push(tEdge);
-                }
-            });
-            console.log('새로운 엣지 큐에 추가:', targetEdges);
+          console.log(`노드 ${targetNode.id} 처리 완료, 결과 저장됨`)
+          
+          // 다음 처리할 엣지 큐에 추가 (종료 노드가 아닌 경우)
+          if (targetNode.id !== 'end') {
+            const nextEdges = elements.value.filter(
+              e => e.type === 'smoothstep' && e.source === targetNode.id
+            )
+            
+            nextEdges.forEach(nextEdge => {
+              if (!processingQueue.value.some(qEdge => qEdge.id === nextEdge.id)) {
+                processingQueue.value.push(nextEdge)
+              }
+            })
+            
+            console.log(`${nextEdges.length}개의 다음 엣지가 큐에 추가됨`)
           }
         }
-
+        
+        // 워크플로우 처리 완료
         console.log('워크플로우 처리 완료')
-        console.log('최종 처리된 이미지들:', processedImages)
-
+        
+        // 종료 노드 이미지 확인
         const finalImage = processedImages['end']
-        console.log('최종 이미지:', finalImage)
-
         if (finalImage) {
-          console.log('MSA6로 이미지 전달:', finalImage.substring(0, 50) + '...');
+          console.log('최종 처리 이미지 준비 완료')
           
-          // MSA6로 이미지 전달 이벤트
+          // 이벤트 발생 - 다른 컴포넌트로 이미지 전달
           const imageProcessedEvent = new CustomEvent('msa5-image-processed', {
             detail: { 
               imageUrl: finalImage,
               timestamp: new Date().toISOString()
             }
-          });
+          })
           
-          window.dispatchEvent(imageProcessedEvent);
-          console.log('MSA6로 이미지 이벤트 발송 완료');
+          window.dispatchEvent(imageProcessedEvent)
+          console.log('이미지 처리 완료 이벤트 발송')
           
-          hasOutput.value = true;
+          hasOutput.value = true
+          statusMessage.value = '이미지 처리가 완료되었습니다!'
         } else {
           console.warn('최종 이미지가 없습니다')
-          hasOutput.value = false;
+          statusMessage.value = '이미지 처리 중 오류가 발생했습니다'
+          hasOutput.value = false
         }
-
+        
         processingStatus.value = 'completed'
         showStatusMessage.value = true
-        statusMessage.value = '워크플로우 처리가 완료되었습니다!'
-
         setTimeout(() => { showStatusMessage.value = false }, 3000)
+        
       } catch (error) {
         console.error('워크플로우 처리 중 오류 발생:', error)
         processingStatus.value = 'error'
+        statusMessage.value = `처리 오류: ${error.message || '알 수 없는 오류'}`
         showStatusMessage.value = true
-        statusMessage.value = `워크플로우 처리 중 오류 발생: ${error.message || '알 수 없는 오류'}`
+        setTimeout(() => { showStatusMessage.value = false }, 5000)
       }
     }
-
-    const processImage = async (node, inputImg) => {
-      const nodeType = node.data.id
-      console.log(`이미지 처리 시작 - 노드 타입: ${nodeType}`)
-
+    
+    // 일반 노드 처리 함수
+    const processNode = async (node, inputImage) => {
       try {
-        // 파라미터 전처리
-        const processedParams = {};
-        if (node.data.params) {
-          Object.entries(node.data.params).forEach(([key, paramObj]) => {
-            // Object.prototype.hasOwnProperty 대신 Object.hasOwn 사용
-            processedParams[key] = Object.hasOwn(paramObj, 'value') ? paramObj.value : paramObj;
-          });
-        }
-
-        console.log('이미지 처리 시작:', { 
-          nodeType, 
-          originalParams: node.data.params,
-          processedParams: processedParams 
-        });
+        console.log(`${node.data.id} 타입 노드 처리 시작`)
         
-        // FormData 생성
-        const formData = new FormData();
+        // 실제 구현에서는 여기서 백엔드 API 호출하여 이미지 처리
+        // 예시 코드이므로 입력 이미지를 그대로 반환
         
-        // 이미지가 File 객체인 경우 직접 사용, URL인 경우 fetch로 가져옴
-        if (inputImg instanceof File) {
-          formData.append('image', inputImg);
-        } else if (inputImg instanceof Blob) {
-          formData.append('image', inputImg, 'image.png');
-        } else if (typeof inputImg === 'string') {
-          if (inputImg.startsWith('blob:') || inputImg.startsWith('data:')) {
-            const response = await fetch(inputImg);
-            const blob = await response.blob();
-            formData.append('image', blob, 'image.png');
-          } else {
-            throw new Error('지원하지 않는 이미지 형식입니다.');
-          }
-        } else {
-          throw new Error('유효하지 않은 이미지 형식입니다.');
-        }
-
-        // 노드 타입과 처리된 파라미터 추가
-        formData.append('nodeType', nodeType);
-        formData.append('params', JSON.stringify(processedParams));
-
-        console.log('API 요청 데이터:', {
-          nodeType,
-          params: processedParams
-        });
-
-        // API 호출
-        const response = await fetch('http://localhost:8000/api/msa5/process', {
-          method: 'POST',
-          body: formData
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('API 오류 응답:', errorText);
-          throw new Error(`API 오류 (${response.status}): ${errorText}`);
-        }
-
-        // 응답이 이미지인 경우
-        const contentType = response.headers.get('Content-Type');
-        if (contentType && contentType.includes('image/')) {
-          const blob = await response.blob();
-          return URL.createObjectURL(blob);
-        }
-
-        // JSON 응답인 경우
-        const result = await response.json();
-        if (result.status === 'success' && result.image) {
-          return result.image;
-        }
-
-        throw new Error(result.message || '이미지 처리 실패');
+        // 처리 지연 시뮬레이션 (실제 구현에서는 제거)
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        console.log(`${node.data.id} 노드 처리 완료`)
+        return inputImage
       } catch (error) {
-        console.error('이미지 처리 실패:', error);
-        throw error;
+        console.error(`노드 처리 오류:`, error)
+        throw error
+      }
+    }
+    
+    // 병합 노드 특별 처리 함수
+    const processMergeNode = async (node) => {
+      try {
+        // 병합 노드로 들어오는 모든 입력 연결 찾기
+        const inputConnections = elements.value.filter(
+          el => el.type === 'smoothstep' && 
+               el.target === node.id && 
+               el.targetHandle?.startsWith('input-')
+        )
+        
+        if (inputConnections.length === 0) {
+          return null // 입력 연결 없음
+        }
+        
+        // 모든 입력 이미지 수집
+        const inputImages = []
+        let allInputsReady = true
+        
+        for (const conn of inputConnections) {
+          const sourceImage = processedImages[conn.source]
+          if (!sourceImage) {
+            // 하나라도 준비되지 않은 입력이 있으면 처리 불가
+            allInputsReady = false
+            break
+          }
+          inputImages.push(sourceImage)
+        }
+        
+        if (!allInputsReady) {
+          return null // 아직 모든 입력이 준비되지 않음
+        }
+        
+        console.log(`병합 노드 처리: ${inputImages.length}개 이미지 병합`)
+        
+        // 실제 구현에서는 여기서 백엔드 API 호출하여 이미지 병합
+        // 예시 코드이므로 첫 번째 입력 이미지를 그대로 반환
+        
+        // 처리 지연 시뮬레이션 (실제 구현에서는 제거)
+        await new Promise(resolve => setTimeout(resolve, 800))
+        
+        console.log('병합 처리 완료')
+        return inputImages[0]
+      } catch (error) {
+        console.error('병합 노드 처리 오류:', error)
+        throw error
       }
     }
 
-    const processMergeNode = async (node) => {
-        try {
-          const connections = elements.value.filter(el =>
-            el.type === 'smoothstep' && el.target === node.id &&
-            ['input-lefttop', 'input-leftbottom', 'input-righttop'].includes(el.targetHandle)
-          );
-
-          console.log(`병합 노드 ${node.id} 입력 연결:`, connections);
-
-          const inputImages = [];
-          let allInputsReady = true;
-          for (const conn of connections) {
-            const sourceNodeId = conn.source;
-            const sourceImage = processedImages[sourceNodeId];
-
-            if (!sourceImage) {
-              console.log(`병합 노드 ${node.id}: 소스 ${sourceNodeId}의 이미지가 아직 준비되지 않았습니다.`);
-              allInputsReady = false;
-              break;
-            }
-            inputImages.push(sourceImage);
+    // 노드의 기본 파라미터 반환
+    const getDefaultParams = (nodeId, defaults) => {
+      const nodeDefaults = defaults[nodeId] || {}
+      const params = {}
+      
+      // 노드 타입에 따른 기본 파라미터 설정
+      switch (nodeId) {
+        case 'resize':
+          params.width = { label: '너비', value: nodeDefaults.width || 100, min: 1, max: 5000, step: 1 }
+          params.height = { label: '높이', value: nodeDefaults.height || 100, min: 1, max: 5000, step: 1 }
+          break
+        case 'crop':
+          params.x = { label: 'X 좌표', value: nodeDefaults.x || 0, min: 0, max: 5000, step: 1 }
+          params.y = { label: 'Y 좌표', value: nodeDefaults.y || 0, min: 0, max: 5000, step: 1 }
+          params.width = { label: '너비', value: nodeDefaults.width || 100, min: 1, max: 5000, step: 1 }
+          params.height = { label: '높이', value: nodeDefaults.height || 100, min: 1, max: 5000, step: 1 }
+          break
+        case 'rotate':
+          params.angle = { label: '각도', value: nodeDefaults.angle || 0, min: -360, max: 360, step: 1 }
+          break
+        case 'brightness':
+          params.factor = { label: '밝기', value: nodeDefaults.factor || 1, min: 0, max: 3, step: 0.1 }
+          break
+        case 'blur':
+          params.radius = { label: '반경', value: nodeDefaults.radius || 5, min: 0, max: 20, step: 1 }
+          break
+        case 'merge':
+          params.merge_type = { 
+            label: '병합 방식', 
+            value: nodeDefaults.merge_type || 'horizontal',
+            options: ['horizontal', 'vertical', 'grid', 'overlay']
           }
+          params.spacing = { label: '간격', value: nodeDefaults.spacing || 10, min: 0, max: 100, step: 1 }
+          break
+        default:
+          console.warn(`Node type "${nodeId}" has no default parameters defined.`)
+      }
+      
+      return params
+    }
 
-          if (!allInputsReady) {
-            return null;
-          }
-
-          console.log(`병합 노드 ${node.id} 입력 이미지 개수: ${inputImages.length}`);
-
-          if (inputImages.length === 0) {
-            showStatusMessage.value = true;
-            statusMessage.value = '병합할 이미지가 없습니다.';
-            setTimeout(() => { showStatusMessage.value = false }, 3000);
-            return null;
-          }
-
-          // 병합 파라미터 처리
-          const processedParams = {};
-          if (node.data.params) {
-            Object.entries(node.data.params).forEach(([key, paramObj]) => {
-              // Object.prototype.hasOwnProperty 대신 Object.hasOwn 사용
-              processedParams[key] = Object.hasOwn(paramObj, 'value') ? paramObj.value : paramObj;
-            });
-          }
-          
-          // FormData 생성
-          const formData = new FormData();
-          
-          // 이미지 추가
-          for (let i = 0; i < inputImages.length; i++) {
-            const image = inputImages[i];
-            if (image.startsWith('blob:') || image.startsWith('data:')) {
-              const response = await fetch(image);
-              const blob = await response.blob();
-              formData.append('images', blob, `image_${i}.png`);
-            }
-          }
-          
-          // 파라미터 JSON 추가
-          formData.append('params', JSON.stringify(processedParams));
-          
-          console.log(`병합 노드 ${node.id} 파라미터:`, processedParams);
-
-          // API 호출
-          const response = await fetch(`http://localhost:8000/api/msa5/process/merge`, {
-              method: 'POST',
-              body: formData
-          });
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('API 오류 응답:', errorText);
-            throw new Error(`API 오류 (${response.status}): ${errorText}`);
-          }
-
-          const contentType = response.headers.get('Content-Type');
-          if (contentType && contentType.includes('image/')) {
-            const blob = await response.blob();
-            return URL.createObjectURL(blob);
-          }
-
-          const result = await response.json();
-          if (result.status === 'success' && result.image) {
-            return result.image;
-          }
-
-          throw new Error(result.message || '이미지 병합 실패');
-        } catch (error) {
-          console.error('이미지 병합 오류:', error);
-          throw error;
+    // 백엔드에서 사용 가능한 노드 로드
+    const loadAvailableNodes = async () => {
+      isNodesLoading.value = true
+      try {
+        // 가상의 노드 목록 설정 (실제 구현에서는 백엔드에서 로드)
+        availableNodes.value = [
+          { id: 'resize', label: '크기 조정', icon: 'fas fa-expand' },
+          { id: 'crop', label: '이미지 자르기', icon: 'fas fa-crop' },
+          { id: 'rotate', label: '회전', icon: 'fas fa-sync' },
+          { id: 'brightness', label: '밝기 조정', icon: 'fas fa-sun' },
+          { id: 'blur', label: '블러 효과', icon: 'fas fa-blur' },
+          { id: 'merge', label: '이미지 병합', icon: 'fas fa-object-group' }
+        ]
+        
+        defaultOptions.value = {
+          resize: { width: 800, height: 600 },
+          crop: { x: 0, y: 0, width: 200, height: 200 },
+          rotate: { angle: 90 },
+          brightness: { factor: 1.2 },
+          blur: { radius: 5 },
+          merge: { merge_type: 'horizontal', spacing: 10 }
         }
+        
+        // 초기 엘리먼트 설정
+        elements.value = [
+          { 
+            id: 'start', 
+            type: 'start', 
+            position: { x: 100, y: 100 }, 
+            data: { label: '시작' } 
+          },
+          { 
+            id: 'end', 
+            type: 'end', 
+            position: { x: 500, y: 300 }, 
+            data: { label: '종료' } 
+          }
+        ]
+      } catch (error) {
+        console.error('노드 로드 중 오류 발생:', error)
+        statusMessage.value = '노드 로드 중 오류가 발생했습니다.'
+        showStatusMessage.value = true
+        setTimeout(() => { showStatusMessage.value = false }, 3000)
+      } finally {
+        isNodesLoading.value = false
+      }
     }
 
-    const onDragStart = (event, node) => {
-      event.dataTransfer.setData('application/vueflow', JSON.stringify(node))
-      event.dataTransfer.effectAllowed = 'move'
+    // 이미지 업데이트 핸들러
+    const handleImageUpdate = (event) => {
+      console.log('MSA1에서 이미지 업데이트 이벤트 수신:', event)
+      
+      let imageUrl = null
+      
+      if (event.detail && event.detail.imageUrl) {
+        imageUrl = event.detail.imageUrl
+      }
+      
+      if (imageUrl) {
+        inputImage.value = imageUrl
+        processedImages['start'] = imageUrl
+        console.log('이미지 업데이트 완료')
+        
+        // 상태 메시지 표시
+        showStatusMessage.value = true;
+        statusMessage.value = 'MSA1에서 이미지 수신됨';
+        
+        // 몇 초 후 상태 메시지 숨김
+        setTimeout(() => {
+          showStatusMessage.value = false;
+        }, 3000);
+      }
     }
 
-    const onDragOver = (event) => {
-      event.preventDefault()
-      event.dataTransfer.dropEffect = 'move'
-    }
-
+    // 노드 추가 시 히스토리 저장 추가
     const onDrop = (event) => {
       event.preventDefault()
 
@@ -814,8 +937,8 @@ export default {
 
       const nodeData = JSON.parse(event.dataTransfer.getData('application/vueflow'))
 
-      // 사용되지 않는 nodeParams 제거
-      // const nodeParams = availableNodes.value.find(n => n.id === nodeData.id)?.params || {}
+      // 현재 상태 저장
+      saveToHistory()
 
       const newNode = {
         id: `${nodeData.id}-${Date.now()}`,
@@ -833,484 +956,83 @@ export default {
       elements.value.push(newNode)
     }
 
+    // 연결 시 히스토리 저장 추가
     const onConnect = (params) => {
-      const { source, target } = params
-      if (isValidConnection(source, target)) {
+      const { source, target, sourceHandle, targetHandle } = params
+      if (isValidConnection(source, target, sourceHandle, targetHandle)) {
+        // 현재 상태 저장
+        saveToHistory()
+        
+        // 연결 생성
         elements.value.push({
-          id: `e${source}-${target}`,
+          id: `e${source}-${target}${sourceHandle ? `-${sourceHandle}` : ''}${targetHandle ? `-${targetHandle}` : ''}`,
           source,
           target,
+          sourceHandle,
+          targetHandle,
           type: 'smoothstep'
         })
-        if (source === 'start') hasInput.value = true
-        if (target === 'end') hasOutput.value = true
+        
+        // 입력/출력 연결 상태 업데이트
+        updateConnections()
       }
     }
 
-    const onNodeDragStop = (event) => {
-      console.log('Node dragged:', event.node.id)
-    }
-
-    const onNodeClick = (event) => {
-      const { node } = event
-      if (node && node.type && node.type !== 'smoothstep' && node.data && node.id !== 'start' && node.id !== 'end') {
-         if (!node.data.params) {
-           console.warn(`Node ${node.id} data is missing params object. Initializing.`)
-           node.data.params = getDefaultParams(node.data.id, defaultOptions.value)
-         }
-         selectedNode.value = node
-         console.log('Node selected:', selectedNode.value)
-      } else {
-         selectedNode.value = null
-         console.log('Node deselected or invalid node clicked.')
-      }
-    }
-
-    const isValidConnection = (source, target) => {
+    // 유효한 연결인지 확인 (병합 노드의 경우 여러 입력 허용)
+    const isValidConnection = (source, target, sourceHandle, targetHandle) => {
       if (source === target) return false
       if (source === 'end') return false
       if (target === 'start') return false
       
+      // 이미 같은 연결이 있는지 확인
       const existingConnection = elements.value.find(
         el => el.type === 'smoothstep' && 
-        ((el.source === source && el.target === target) || 
-         (el.source === target && el.target === source))
+        el.source === source && 
+        el.target === target &&
+        el.sourceHandle === sourceHandle &&
+        el.targetHandle === targetHandle
       )
+      
+      // 병합 노드가 아닌 경우 한 개의 입력만 허용
+      const targetNode = elements.value.find(el => el.id === target)
+      if (targetNode && targetNode.type !== 'merge' && target !== 'end') {
+        const incomingConnections = elements.value.filter(
+          el => el.type === 'smoothstep' && el.target === target
+        )
+        
+        if (incomingConnections.length > 0) {
+          console.log('이미 입력이 있는 노드:', target)
+          return false
+        }
+      }
       
       return !existingConnection
     }
 
-    const toggleMaximize = () => {
-      isMaximized.value = !isMaximized.value
-    }
-
-    const onInit = (instance) => {
-      flowInstance.value = instance
-      console.log('VueFlow initialized')
-    }
-
-    const onPaneReady = (instance) => {
-      console.log('VueFlow pane ready')
-      if (instance) {
-        const workflowArea = document.querySelector('.workflow-area')
-        console.log('Workflow area dimensions:', {
-          width: workflowArea?.clientWidth,
-          height: workflowArea?.clientHeight,
-          offsetWidth: workflowArea?.offsetWidth,
-          offsetHeight: workflowArea?.offsetHeight
-        })
-        
-        instance.fitView({ padding: 0.2, duration: 200 })
-        setTimeout(() => {
-          instance.setTransform({ x: 0, y: 0, zoom: 0.9 })
-          console.log('VueFlow viewport after transform:', instance.getViewport())
-        }, 300)
-      }
-    }
-
-    const openImagePreview = (imageUrl) => {
-      previewImageUrl.value = imageUrl
-      document.addEventListener('keydown', handleEscKey)
-    }
-
-    const closeImagePreview = () => {
-      previewImageUrl.value = null
-      document.removeEventListener('keydown', handleEscKey)
-    }
-
-    const handleEscKey = (event) => {
-      if (event.key === 'Escape') {
-        closeImagePreview()
-      }
-    }
-
-    const getNodeIcon = (nodeId) => {
-      const icons = {
-        resize: 'fas fa-expand',
-        crop: 'fas fa-crop',
-        rotate: 'fas fa-sync',
-        flip: 'fas fa-exchange-alt',
-        brightness: 'fas fa-sun',
-        contrast: 'fas fa-adjust',
-        blur: 'fas fa-blur',
-        sharpen: 'fas fa-cut',
-        grayscale: 'fas fa-image',
-        threshold: 'fas fa-tachometer-alt',
-        edge: 'fas fa-border-style',
-        hue: 'fas fa-palette',
-        merge: 'fas fa-object-group'
-      }
-      return icons[nodeId] || 'fas fa-image'
-    }
-
-    const getDefaultParams = (nodeId, defaults) => {
-      // 백엔드에서 받은 기본 옵션만 사용
-      const nodeDefaults = defaults[nodeId] || {}
-      const params = {}
-
-      console.log(`${nodeId} 노드의 기본값:`, nodeDefaults);
-
-      // 백엔드에서 받은 기본값을 UI 파라미터 구조로 변환
-      switch (nodeId) {
-        case 'resize':
-          params.width = { label: '너비', value: nodeDefaults.width, min: 1, max: 5000, step: 1 }
-          params.height = { label: '높이', value: nodeDefaults.height, min: 1, max: 5000, step: 1 }
-          break
-        case 'crop':
-          params.x = { label: 'X 좌표', value: nodeDefaults.x, min: 0, max: 5000, step: 1 }
-          params.y = { label: 'Y 좌표', value: nodeDefaults.y, min: 0, max: 5000, step: 1 }
-          params.width = { label: '너비', value: nodeDefaults.width, min: 1, max: 5000, step: 1 }
-          params.height = { label: '높이', value: nodeDefaults.height, min: 1, max: 5000, step: 1 }
-          break
-        case 'rotate':
-          params.angle = { label: '각도', value: nodeDefaults.angle, min: -360, max: 360, step: 1 }
-          break
-        case 'flip':
-          params.direction = {
-            label: '방향',
-            value: nodeDefaults.direction,
-            options: ['horizontal', 'vertical', 'both']
-          }
-          break
-        case 'brightness':
-          params.factor = { label: '밝기', value: nodeDefaults.factor, min: 0, max: 3, step: 0.1 }
-          break
-        case 'contrast':
-          params.factor = { label: '대비', value: nodeDefaults.factor, min: 0, max: 3, step: 0.1 }
-          break
-        case 'blur':
-          params.radius = { label: '반경', value: nodeDefaults.radius, min: 0, max: 20, step: 1 }
-          break
-        case 'sharpen':
-          params.radius = { label: '반경', value: nodeDefaults.radius, min: 0, max: 20, step: 1 }
-          params.percent = { label: '강도(%)', value: nodeDefaults.percent, min: 0, max: 500, step: 10 }
-          break
-        case 'threshold':
-          params.threshold = { label: '임계값', value: nodeDefaults.threshold, min: 0, max: 255, step: 1 }
-          break
-        case 'edge':
-          params.method = {
-            label: '방법',
-            value: nodeDefaults.method,
-            options: ['canny', 'sobel', 'prewitt', 'laplacian']
-          }
-          params.low_threshold = { label: '낮은 임계값', value: nodeDefaults.low_threshold, min: 0, max: 255, step: 1 }
-          params.high_threshold = { label: '높은 임계값', value: nodeDefaults.high_threshold, min: 0, max: 255, step: 1 }
-          break
-        case 'hue':
-          params.hue_factor = { label: '색조 변화량', value: nodeDefaults.hue_factor, min: -180, max: 180, step: 1 }
-          break
-        case 'grayscale':
-          params.enabled = { label: '활성화', value: nodeDefaults.enabled, type: 'boolean' }
-          break
-        case 'invert':
-          params.enabled = { label: '활성화', value: nodeDefaults.enabled, type: 'boolean' }
-          break
-        case 'merge':
-          params.merge_type = { 
-            label: '병합 방식', 
-            value: nodeDefaults.merge_type,
-            options: ['horizontal', 'vertical', 'grid', 'overlay']
-          }
-          params.spacing = { label: '간격', value: nodeDefaults.spacing, min: 0, max: 100, step: 1 }
-          break
-        default:
-          console.warn(`Node type "${nodeId}" has no default parameters defined.`)
-      }
-
-      return params
-    }
-
-    const requestMSA1Image = () => {
-      console.log('[MSA5] MSA1에 직접 이미지 요청 시도...');
-      
-      // 이미지가 이미 있으면 요청하지 않음
-      if (inputImage.value) {
-        console.log('[MSA5] 이미 이미지가 있어 요청 취소');
-        return;
-      }
-      
-      // 글로벌 이벤트 발송
-      window.dispatchEvent(new CustomEvent('request-msa1-image', {
-        detail: { requestor: 'MSA5', timestamp: new Date().toISOString() }
-      }));
-      
-      // DOM에서 MSA1 이미지 직접 찾기 시도
-      try {
-        const msa1ImageElement = document.querySelector('.msa1-image img, .msa1 .image-container img, #msa1-image');
-        if (msa1ImageElement && msa1ImageElement.src) {
-          console.log('[MSA5] DOM에서 MSA1 이미지 직접 발견:', msa1ImageElement.src.substring(0, 30) + '...');
-          handleDirectImageUpdate(msa1ImageElement.src);
-          return;
-        }
-      } catch (err) {
-        console.warn('[MSA5] DOM에서 MSA1 이미지 검색 실패:', err);
-      }
-      
-      // window 객체에서 이미지 찾기
-      if (window.msa1ImageUrl) {
-        console.log('[MSA5] 전역 변수에서 MSA1 이미지 발견');
-        handleDirectImageUpdate(window.msa1ImageUrl);
-      }
-    }
-    
-    // 새로운 함수: 이미지를 직접 업데이트 
-    const handleDirectImageUpdate = (imageUrl) => {
-      if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('data:image')) {
-        console.warn('[MSA5] 유효하지 않은 이미지 URL:', typeof imageUrl);
-        return;
-      }
-      
-      console.log('[MSA5] 직접 이미지 업데이트:', imageUrl.substring(0, 30) + '...');
-      
-      // processedImages 초기화
-      Object.keys(processedImages).forEach(key => delete processedImages[key]);
-      
-      // 이미지 설정
-      inputImage.value = imageUrl;
-      processedImages['start'] = imageUrl;
-      hasInput.value = true;
-      
-      console.log('[MSA5] 직접 이미지 업데이트 완료, 상태 업데이트됨');
-      
-      // DOM에서 시작 노드 이미지 강제 갱신을 위한 트릭
-      setTimeout(() => {
-        const startNodeImage = document.querySelector('.start-node .node-image img');
-        if (startNodeImage) {
-          startNodeImage.src = imageUrl;
-          console.log('[MSA5] 시작 노드 이미지 DOM 직접 업데이트 완료');
-        }
-      }, 100);
-    }
-
-    const updateElementPositions = () => {
-      console.log('Window resize detected, updating element positions...');
-      
-      if (containerRef.value) {
-        const containerWidth = containerRef.value.clientWidth;
-        const containerHeight = containerRef.value.clientHeight;
-        
-        console.log('Container dimensions:', {
-          width: containerWidth,
-          height: containerHeight,
-          offsetWidth: containerRef.value.offsetWidth,
-          offsetHeight: containerRef.value.offsetHeight,
-          scrollWidth: containerRef.value.scrollWidth,
-          scrollHeight: containerRef.value.scrollHeight
-        });
-        
-        // 시작 노드 위치 (왼쪽 10% 지점, 최대 200px)
-        const startX = Math.max(100, Math.min(containerWidth * 0.1, 200));
-        const startY = Math.max(100, Math.min(containerHeight * 0.1, 200));
-        
-        console.log('Start node position:', {
-          x: startX,
-          y: startY,
-          containerWidth,
-          containerHeight
-        });
-        
-        // 종료 노드 위치 계산 수정 - 작은 화면에서도 캔버스 내에 표시되도록 개선
-        let minEndX, maxEndX, defaultEndX;
-        
-        // 화면 크기에 따른 동적 조정
-        if (containerWidth < 600) {
-          // 매우 작은 화면
-          minEndX = startX + 200;  // 최소 거리 감소
-          maxEndX = containerWidth - 80; // 오른쪽 여백 감소
-          defaultEndX = containerWidth * 0.35; // 더 왼쪽으로
-        } else if (containerWidth < 800) {
-          // 작은 화면
-          minEndX = startX + 250;
-          maxEndX = containerWidth - 100;
-          defaultEndX = containerWidth * 0.4;
-        } else {
-          // 보통 크기 이상 화면
-          minEndX = startX + 300;
-          maxEndX = Math.min(containerWidth - 120, containerWidth * 0.7);
-          defaultEndX = containerWidth * 0.5;
-        }
-        
-        // 항상 화면 안에 들어오도록 보정
-        if (maxEndX > containerWidth - 10) {
-          maxEndX = containerWidth - 10;
-        }
-        
-        const endX = Math.min(maxEndX, Math.max(minEndX, defaultEndX));
-        const endY = Math.max(200, Math.min(containerHeight * 0.5, containerHeight - 150));
-        
-        console.log('End node position calculation:', {
-          minEndX,
-          maxEndX,
-          defaultEndX,
-          finalEndX: endX,
-          finalEndY: endY,
-          containerWidth,
-          containerHeight
-        });
-        
-        // 현재 elements에서 시작/종료 노드 외의 다른 노드들 보존
-        const otherNodes = elements.value.filter(el => 
-          el.id !== 'start' && el.id !== 'end' && el.type !== 'smoothstep'
-        );
-        const connections = elements.value.filter(el => el.type === 'smoothstep');
-        
-        elements.value = [
-          { 
-            id: 'start', 
-            type: 'start', 
-            position: { x: startX, y: startY }, 
-            data: { label: '시작' } 
-          },
-          { 
-            id: 'end', 
-            type: 'end', 
-            position: { x: endX, y: endY }, 
-            data: { label: '종료' } 
-          },
-          ...otherNodes,
-          ...connections
-        ];
-        
-        console.log('Updated elements:', elements.value);
-        
-        // VueFlow 인스턴스가 있으면 뷰를 업데이트
-        if (flowInstance.value) {
-          console.log('Updating VueFlow viewport...');
-          setTimeout(() => {
-            flowInstance.value.fitView({ padding: 0.2, duration: 200 });
-            // Viewport 정보 로깅 추가
-            const viewport = flowInstance.value.getViewport();
-            console.log('VueFlow viewport after transform:', viewport);
-            
-            // 추가: 현재 뷰포트의 실제 크기 확인
-            const workflowArea = document.querySelector('.workflow-area');
-            if (workflowArea) {
-              console.log('Workflow area dimensions:', {
-                clientWidth: workflowArea.clientWidth,
-                clientHeight: workflowArea.clientHeight,
-                offsetWidth: workflowArea.offsetWidth,
-                offsetHeight: workflowArea.offsetHeight
-              });
-            }
-          }, 50);
-        } else {
-          console.warn('VueFlow instance not available during resize');
-        }
-      } else {
-        console.warn('Container reference not available during resize');
-      }
-    }
-
+    // 컴포넌트 마운트/언마운트 시 이벤트 처리 변경
     onMounted(() => {
-      console.log('=========== MSA5 COMPONENT MOUNTED ==========');
-      
-      // 초기 elements 설정
-      elements.value = [
-        { 
-          id: 'start', 
-          type: 'start', 
-          position: { 
-            x: 100,
-            y: 100
-          }, 
-          data: { label: '시작' } 
-        },
-        { 
-          id: 'end', 
-          type: 'end', 
-          position: { 
-            x: 400,  // 초기값을 시작 위치보다 적당히 떨어진 위치로 설정
-            y: 300
-          }, 
-          data: { label: '종료' } 
-        }
-      ];
-      
+      // 노드 로드
       loadAvailableNodes();
       
-      // 즉시 MSA1에 현재 이미지 요청
-      requestMSA1Image();
+      // MSA1에서 이미지 업데이트 이벤트 리스너 등록
+      document.addEventListener('msa1-to-msa5-image', handleImageUpdate);
       
-      // 모든 가능한 이벤트 리스닝
-      const possibleEvents = [
-        'msa1-image-selected', 
-        'msa1-image-update', 
-        'image-selected', 
-        'msa1-clipboard-image',
-        'paste-image',
-        'image-pasted',
-        'imageSelected',
-        'image-update'
-      ];
-      
-      possibleEvents.forEach(eventName => {
-        window.addEventListener(eventName, (event) => {
-          console.log(`[MSA5] ${eventName} 이벤트 감지됨:`, event);
-          handleImageUpdate(event);
-        });
-        console.log(`[MSA5] ${eventName} 이벤트 리스너 등록 완료`);
-      });
-      
-      // MSA4 이벤트 리스너도 추가
-      window.addEventListener('msa4-image-selected', handleImageUpdate);
-      
-      // 직접 window.msa1Image 폴링 (전역변수로 저장된 경우)
-      const checkGlobalImage = setInterval(() => {
-        if (window.msa1Image && !inputImage.value) {
-          console.log('[MSA5] 전역 MSA1 이미지 발견:', typeof window.msa1Image);
-          handleDirectImageUpdate(window.msa1Image);
-          clearInterval(checkGlobalImage);
-        }
-      }, 500);
-      
-      // 고전적인 이벤트 버스 접근법 - 전역 이벤트 발송
-      window.dispatchEvent(new CustomEvent('request-current-image', {
-        detail: { component: 'MSA5', timestamp: new Date().toISOString() }
-      }));
-      
-      // 이미지 폴링 - 다른 컴포넌트에서 수동으로 확인
-      setTimeout(requestMSA1Image, 1000);
-      setTimeout(requestMSA1Image, 3000);
-      
-      // 페이지 paste 이벤트 리스닝
-      document.addEventListener('paste', (e) => {
-        console.log('[MSA5] 페이지 paste 이벤트 감지');
-        if (e.clipboardData && e.clipboardData.items) {
-          const items = e.clipboardData.items;
-          for (let i = 0; i < items.length; i++) {
-            if (items[i].type.indexOf('image') !== -1) {
-              const blob = items[i].getAsFile();
-              const reader = new FileReader();
-              reader.onload = (event) => {
-                console.log('[MSA5] 클립보드에서 이미지 로드 완료');
-                handleDirectImageUpdate(event.target.result);
-              };
-              reader.readAsDataURL(blob);
-            }
-          }
-        }
-      });
-
-      // containerRef가 준비될 때까지 기다린 후 초기 위치 설정 및 리사이즈 이벤트 리스너 등록
-      const checkContainerRef = setInterval(() => {
-        if (containerRef.value) {
-          console.log('Container reference is now available');
-          updateElementPositions();
-          window.addEventListener('resize', updateElementPositions);
-          clearInterval(checkContainerRef);
+      // 컴포넌트에 포커스 - 키보드 이벤트를 받을 수 있게 함
+      setTimeout(() => {
+        const componentEl = document.querySelector('.msa-component');
+        if (componentEl) {
+          componentEl.focus();
         }
       }, 100);
-    })
+    });
 
     onUnmounted(() => {
       // 이벤트 리스너 해제
-      window.removeEventListener('msa4-image-selected', handleImageUpdate);
-      window.removeEventListener('msa1-image-selected', handleImageUpdate);
-      window.removeEventListener('resize', updateElementPositions)
-    })
+      document.removeEventListener('msa1-to-msa5-image', handleImageUpdate);
+    });
 
     return {
+      // 상태 변수
       isMaximized,
       hasInput,
       hasOutput,
@@ -1318,30 +1040,34 @@ export default {
       selectedNode,
       inputImage,
       processedImages,
-      processingStatus,
       previewImageUrl,
       statusMessage,
       showStatusMessage,
+      containerRef,
       availableNodes,
       isNodesLoading,
-      flowInstance,
-      handleImageUpdate,
-      clearProcessedImages,
-      processStart,
+      filteredNodes,
+      mergeNode,
+      
+      // 이벤트 핸들러
       onDragStart,
       onDragOver,
       onDrop,
       onConnect,
       onNodeDragStop,
       onNodeClick,
-      isValidConnection,
       toggleMaximize,
       onInit,
       onPaneReady,
+      processStart,
       openImagePreview,
       closeImagePreview,
-      getNodeIcon,
-      getDefaultParams
+      handleKeyDown,
+      
+      // 실행 취소/다시 실행 함수
+      undo,
+      redo,
+      deleteSelectedNode,
     }
   }
 }
@@ -1358,6 +1084,24 @@ export default {
   width: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;
+  outline: none;
+}
+
+/* 로딩 표시기 스타일 */
+.loading-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #64748b;
+  gap: 0.5rem;
+}
+
+.loading-placeholder i {
+  font-size: 1.5rem;
+  color: #8b5cf6;
 }
 
 .component-header {
@@ -1481,99 +1225,240 @@ export default {
   overflow: hidden;
   height: 100%;
   cursor: default;
-  min-width: 0; /* 추가: flexbox 내에서 올바른 크기 계산을 위해 */
-  min-height: 0; /* 추가: flexbox 내에서 올바른 크기 계산을 위해 */
+  min-width: 0;
+  min-height: 0;
 }
 
 .workflow-area.dragging {
   cursor: move;
 }
 
-.workflow-node,
-.start-node,
-.end-node {
+/* Basic node styles */
+.workflow-node {
   background: white;
-  border-radius: 4px;
+  border-radius: 8px;
   padding: 1rem;
-  min-width: 200px;
-  border: 1px solid rgba(124, 58, 237, 0.2);
+  min-width: 180px;
+  border: 1px solid #e2e8f0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
   position: relative;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-}
-
-.handle {
-  width: 24px;
-  height: 24px;
-  background: #8b5cf6;
-  border-radius: 50%;
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  border: 3px solid white;
-  box-shadow: 0 0 0 3px #8b5cf6;
-  cursor: crosshair;
-  z-index: 10;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   transition: all 0.2s ease;
 }
 
-.handle.source {
-  right: -12px;
+.workflow-node:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
 }
 
-.handle.target {
-  left: -12px;
-}
-
-.handle:hover {
-  background: #7c3aed;
-  box-shadow: 0 0 0 4px #7c3aed;
-  transform: translateY(-50%) scale(1.1);
-}
-
+/* Node header */
 .node-header {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-size: 0.9rem;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #1e293b;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #f1f5f9;
 }
 
-.node-params {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+.node-header i {
+  font-size: 1.1rem;
+  color: #8b5cf6;
 }
 
-.param-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.param-item label {
-  font-size: 0.8rem;
-  color: #64748b;
-}
-
-.param-item input {
-  padding: 0.25rem;
+/* Node image container */
+.node-image {
+  margin-top: 0.5rem;
   border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  font-size: 0.9rem;
+  border-radius: 6px;
+  overflow: hidden;
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #4ade80;  /* 녹색 배경 */
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
+.node-image:hover {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+  transform: scale(1.02);
+}
+
+.node-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* 이미지가 있을 때의 스타일 */
+.node-image:has(img) {
+  background: #f8fafc;
+}
+
+/* Start node styles */
 .start-node {
-  background: #10B981;
-  color: white;
-  border-color: #059669;
+  width: 180px !important;
+  height: auto !important;
+  min-height: 120px !important;
+  background: linear-gradient(135deg, #a5f3fc, #0ea5e9) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 8px !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 5 !important;
+  overflow: visible !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+  transition: all 0.2s ease !important;
 }
 
+.start-node.has-image {
+  min-height: auto !important;
+}
+
+.start-node .node-header {
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding-bottom: 0.5rem !important;
+  margin-bottom: 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.start-node.has-image .node-header {
+  justify-content: flex-start !important;
+}
+
+.start-node .node-header i {
+  color: white !important;
+}
+
+.start-node .node-image {
+  width: 150px !important;
+  height: 150px !important;
+  margin-top: 10px !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  position: relative !important;
+  z-index: 6 !important;
+}
+
+.start-node .node-image img {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  display: block !important;
+}
+
+/* End node styles */
 .end-node {
-  background: #EF4444;
-  color: white;
-  border-color: #DC2626;
+  width: 180px !important;
+  height: auto !important;
+  min-height: 120px !important;
+  background: linear-gradient(135deg, #fecaca, #ef4444) !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 8px !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 5 !important;
+  overflow: visible !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+  transition: all 0.2s ease !important;
+}
+
+.end-node.has-image {
+  min-height: auto !important;
+}
+
+.end-node .node-header {
+  width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding-bottom: 0.5rem !important;
+  margin-bottom: 0 !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.end-node.has-image .node-header {
+  justify-content: flex-start !important;
+}
+
+.end-node .node-header i {
+  color: white !important;
+}
+
+.end-node .node-image {
+  width: 150px !important;
+  height: 150px !important;
+  margin-top: 10px !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  position: relative !important;
+  z-index: 6 !important;
+}
+
+.end-node .node-image img {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  display: block !important;
+}
+
+/* Image indicators */
+.image-loaded-indicator {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 16px;
+  height: 16px;
+  background-color: #22c55e;
+  border-radius: 50%;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  z-index: 10;
+}
+
+.image-not-loaded {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0,0,0,0.05);
+  color: #64748b;
+  font-size: 12px;
 }
 
 .msa-component.maximized {
@@ -1593,7 +1478,7 @@ export default {
 }
 
 .options-panel {
-  width: 250px;
+  width: 280px;
   background: white;
   border-left: 1px solid #e2e8f0;
   display: flex;
@@ -1603,8 +1488,17 @@ export default {
   top: 0;
   bottom: 0;
   z-index: 1000;
-  box-shadow: -2px 0 4px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s ease;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+}
+
+.options-panel.fullscreen-panel {
+  right: 0;
+  position: fixed;
+  height: 100%;
+  top: 0;
+  z-index: 10000;
+  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.1);
 }
 
 .options-panel.hidden {
@@ -1616,7 +1510,8 @@ export default {
 }
 
 .panel-header {
-  padding: 1rem;
+  padding: 1.25rem;
+  background: rgba(139, 92, 246, 0.1);
   border-bottom: 1px solid #e2e8f0;
   display: flex;
   justify-content: space-between;
@@ -1625,8 +1520,9 @@ export default {
 
 .panel-header h3 {
   margin: 0;
-  font-size: 1rem;
-  font-weight: 500;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #7c3aed;
 }
 
 .close-btn {
@@ -1634,8 +1530,9 @@ export default {
   border: none;
   color: #64748b;
   cursor: pointer;
-  padding: 0.25rem;
-  border-radius: 4px;
+  padding: 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
 }
 
 .close-btn:hover {
@@ -1644,134 +1541,128 @@ export default {
 }
 
 .panel-content {
-  padding: 1rem;
+  padding: 1.25rem;
   overflow-y: auto;
+  flex: 1;
 }
 
 .param-item {
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
 }
 
 .param-item label {
   display: block;
   margin-bottom: 0.5rem;
   font-size: 0.9rem;
+  font-weight: 500;
   color: #1e293b;
 }
 
 .param-input {
   width: 100%;
-  padding: 0.5rem;
+  padding: 0.75rem;
   border: 1px solid #e2e8f0;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 0.9rem;
+  background: #f8fafc;
+  transition: all 0.2s ease;
 }
 
 .param-input:focus {
   outline: none;
   border-color: #8b5cf6;
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
+  background: white;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
 }
 
 select.param-input {
   appearance: none;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
-  background-position: right 0.5rem center;
-  padding-right: 2rem;
+  background-position: right 0.75rem center;
+  padding-right: 2.5rem;
 }
 
+/* Merge node styles */
+.merge-node {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  min-width: 180px;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  position: relative;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.merge-node .node-header {
+  background: rgba(139, 92, 246, 0.05);
+  padding: 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+}
+
+.merge-node .node-header i {
+  color: #8b5cf6;
+}
+
+.merge-node .node-image {
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+}
+
+.merge-node .node-image:hover {
+  border-color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.05);
+}
+
+/* Node handle styles */
 :deep(.vue-flow__handle) {
-  width: 11px !important;
-  height: 11px !important;
+  width: 12px !important;
+  height: 12px !important;
   border-radius: 50% !important;
   background: #8b5cf6 !important;
   border: 2px solid white !important;
   box-shadow: 0 0 0 2px #8b5cf6 !important;
-}
-
-:deep(.vue-flow__handle.connectable) {
+  transition: transform 0.2s ease !important;
   cursor: crosshair !important;
+  transform: none !important;
+  position: absolute !important;
 }
 
 :deep(.vue-flow__handle:hover) {
   background: #7c3aed !important;
-  box-shadow: 0 0 0 3px #7c3aed !important;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.3) !important;
+  transform: scale(1.1) !important;
 }
 
-:deep(.vue-flow__minimap) {
-  position: absolute;
-  right: 20px;
-  bottom: 20px;
-  background-color: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  overflow: hidden;
-  width: 200px !important;
-  height: 150px !important;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  z-index: 5;
+:deep(.vue-flow__handle-left) {
+  left: -6px !important;
 }
 
-:deep(.vue-flow__minimap svg) {
-  width: 100% !important;
-  height: 100% !important;
+:deep(.vue-flow__handle-right) {
+  right: -6px !important;
 }
 
-:deep(.vue-flow__minimap-mask) {
-  fill: rgba(139, 92, 246, 0.1);
-  stroke: #8b5cf6;
-  stroke-width: 2;
-  pointer-events: all;
-  cursor: move;
+/* Merge node handle positions */
+.merge-node :deep(.vue-flow__handle-left) {
+  left: -6px !important;
 }
 
-:deep(.vue-flow__minimap-node) {
-  fill: #8b5cf6;
-  stroke: white;
-  stroke-width: 1;
+.merge-node :deep(.vue-flow__handle-right) {
+  right: -6px !important;
 }
 
-:deep(.vue-flow__minimap-edge) {
-  stroke: #8b5cf6;
-  stroke-width: 1;
+.merge-node :deep(.vue-flow__handle-top) {
+  top: -6px !important;
 }
 
-.custom-minimap {
-  position: absolute !important;
-  right: 20px !important;
-  bottom: 20px !important;
-  width: 200px !important;
-  height: 150px !important;
-  z-index: 100 !important;
-  user-select: none !important;
-}
-
-.node-image {
-  margin-top: 0.5rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 4px;
-  overflow: hidden;
-  width: 180px;
-  height: 180px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f8fafc;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.node-image:hover {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
-  transform: scale(1.02);
-}
-
-.node-image img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+/* Selected node style */
+:deep(.selected) {
+  box-shadow: 0 0 0 2px #8b5cf6 !important;
+  border-color: #8b5cf6 !important;
 }
 
 /* 이미지 프리뷰 팝업 스타일 */
@@ -1787,7 +1678,7 @@ select.param-input {
   justify-content: center;
   z-index: 100000;
   backdrop-filter: blur(5px);
-  transform: translateZ(0); /* 새 레이어로 렌더링하여 성능 향상 */
+  transform: translateZ(0);
 }
 
 .image-preview-container {
@@ -1832,7 +1723,7 @@ select.param-input {
   max-width: 100%;
   max-height: 85vh;
   object-fit: contain;
-  min-width: 500px; /* 최소 너비 설정 */
+  min-width: 500px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
@@ -1885,184 +1776,5 @@ select.param-input {
   10% { opacity: 1; transform: translate(-50%, 0); }
   80% { opacity: 1; transform: translate(-50%, 0); }
   100% { opacity: 0; transform: translate(-50%, -10px); }
-}
-
-/* 병합 노드 스타일 수정 */
-.merge-node {
-  position: relative;
-  width: 180px;
-  height: auto;
-  background: white;
-  border-radius: 4px;
-  border: 1px solid rgba(124, 58, 237, 0.2);
-  display: flex;
-  flex-direction: column;
-  padding: 0.75rem;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-}
-
-.merge-node :deep(.vue-flow__handle) {
-  width: 11px !important;
-  height: 11px !important;
-  background: #8b5cf6 !important;
-  border: 2px solid white !important;
-  box-shadow: 0 0 0 2px #8b5cf6 !important;
-  transform: none !important;
-  pointer-events: all !important;
-  z-index: 10 !important;
-}
-
-/* 병합 노드 핸들 위치 수정 - 표준 left/right 포지션 사용 */
-.merge-node :deep(.vue-flow__handle.target#input-lefttop) {
-  top: 20px !important;
-  transform: none !important;
-}
-
-.merge-node :deep(.vue-flow__handle.target#input-leftbottom) {
-  bottom: 20px !important;
-  transform: none !important;
-}
-
-.merge-node :deep(.vue-flow__handle.target#input-righttop) {
-  top: 20px !important;
-  transform: none !important;
-}
-
-.merge-node :deep(.vue-flow__handle.source#output-rightbottom) {
-  bottom: 20px !important;
-  transform: none !important;
-}
-
-/* 엣지 스타일 수정 */
-:deep(.vue-flow__edge-path) {
-  stroke: #8b5cf6 !important;
-  stroke-width: 2 !important;
-  pointer-events: all !important;
-}
-
-:deep(.vue-flow__edge) {
-  pointer-events: all !important;
-}
-
-:deep(.vue-flow__connection-path) {
-  stroke: #8b5cf6 !important;
-  stroke-width: 2 !important;
-  pointer-events: all !important;
-}
-
-:deep(.vue-flow__edge-text) {
-  pointer-events: all !important;
-}
-
-:deep(.vue-flow__edge-textbg) {
-  pointer-events: all !important;
-}
-
-:deep(.vue-flow__connection) {
-  pointer-events: all !important;
-}
-
-:deep(.vue-flow__connection-path) {
-  pointer-events: all !important;
-}
-
-/* 다이아몬드 프리뷰 스타일 복원 */
-.diamond-preview {
-  width: 30px;
-  height: 30px;
-  background: white;
-  transform: none;
-  border: 2px solid #8b5cf6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  border-radius: 4px;
-}
-
-.diamond-preview i {
-  transform: none;
-  color: #8b5cf6;
-  font-size: 0.9rem;
-}
-
-/* 전처리 노드 래퍼 컨테이너 추가 */
-.preprocessing-nodes-wrapper {
-  flex: 1;
-  min-height: 0;
-  position: relative;
-  overflow: hidden;
-}
-
-/* 전처리 노드 컨테이너 스크롤 개선 */
-.preprocessing-nodes-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 1rem;
-  overflow-y: scroll;
-  overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-/* 스크롤바 스타일링 */
-.preprocessing-nodes-container::-webkit-scrollbar {
-  width: 6px;
-}
-
-.preprocessing-nodes-container::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-
-.preprocessing-nodes-container::-webkit-scrollbar-thumb {
-  background-color: #cbd5e1;
-  border-radius: 3px;
-}
-
-/* 병합 노드 섹션 개선 */
-.merge-palette-section {
-  padding: 1rem;
-  background: rgba(139, 92, 246, 0.05);
-  border-top: 1px solid #e2e8f0;
-  flex-shrink: 0;
-}
-
-/* 병합 노드 컨테이너 스타일 복원 */
-.merge-node-container {
-  background: white;
-  border-radius: 6px;
-  border: 1px solid rgba(124, 58, 237, 0.3);
-  padding: 1rem;
-  cursor: move;
-  transition: all 0.2s ease;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  box-shadow: 0 2px 4px rgba(124, 58, 237, 0.1);
-}
-
-.merge-node-container:hover {
-  border-color: #8b5cf6;
-  box-shadow: 0 4px 8px rgba(139, 92, 246, 0.2);
-  transform: translateY(-2px);
-}
-
-/* 병합 노드 헤더 스타일 복원 */
-.merge-node-preview {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-weight: 500;
-  color: #7c3aed;
-}
-
-.merge-node-desc {
-  font-size: 0.8rem;
-  color: #64748b;
-  line-height: 1.4;
 }
 </style> 

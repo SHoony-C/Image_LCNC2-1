@@ -9,7 +9,7 @@ router = APIRouter()
 UPLOAD_DIR = "./uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-@router.post("/msa1/upload")
+@router.post("/upload")
 async def upload_image(file: UploadFile = File(...)):
     try:
         # 파일 저장
@@ -29,7 +29,7 @@ async def upload_image(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/msa1/images")
+@router.get("/list")
 async def get_images():
     try:
         # 업로드된 이미지 목록 조회

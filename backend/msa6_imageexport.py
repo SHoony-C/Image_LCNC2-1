@@ -1,75 +1,57 @@
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import List, Dict, Any
 import os
 import shutil
 from datetime import datetime
+from fastapi.responses import FileResponse
 
 router = APIRouter()
 
 EXPORT_DIR = "./exports"
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
-@router.post("/msa6/export")
-async def export_image(image_data: Dict[str, Any]):
+@router.post("/export")
+async def export_image(file: UploadFile = File(...)):
     try:
-        # 이미지 내보내기 로직
-        source_path = image_data.get("path")
-        if not source_path or not os.path.exists(source_path):
-            raise HTTPException(status_code=400, detail="Invalid image path")
-
-        # 내보내기 파일명 생성
+        # 파일 저장
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = os.path.basename(source_path)
-        export_filename = f"export_{timestamp}_{filename}"
-        export_path = os.path.join(EXPORT_DIR, export_filename)
-
-        # 파일 복사
-        shutil.copy2(source_path, export_path)
-
+        filename = f"{timestamp}_{file.filename}"
+        file_path = os.path.join(EXPORT_DIR, filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
         return {
             "status": "success",
             "message": "Image exported successfully",
-            "export_path": export_path,
-            "export_time": timestamp
+            "filename": filename,
+            "path": file_path
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/msa6/download/{filename}")
+@router.get("/download/{filename}")
 async def download_image(filename: str):
     try:
-        # 이미지 다운로드
         file_path = os.path.join(EXPORT_DIR, filename)
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail="File not found")
-
-        with open(file_path, "rb") as f:
-            content = f.read()
-
-        return Response(
-            content=content,
-            media_type="image/jpeg",
-            headers={
-                "Content-Disposition": f"attachment; filename={filename}"
-            }
-        )
+        return FileResponse(file_path)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/msa6/exports")
-async def get_exported_images():
+@router.get("/list")
+async def get_exports():
     try:
-        # 내보낸 이미지 목록 조회
-        exports = []
+        # 내보내기된 이미지 목록 조회
+        images = []
         for filename in os.listdir(EXPORT_DIR):
-            if filename.startswith('export_') and filename.endswith(('.jpg', '.jpeg', '.png')):
-                full_path = os.path.join(EXPORT_DIR, filename)
-                exports.append({
+            if filename.endswith(('.jpg', '.jpeg', '.png')):
+                images.append({
                     "filename": filename,
-                    "path": full_path,
-                    "export_time": os.path.getctime(full_path),
-                    "size": os.path.getsize(full_path)
+                    "path": os.path.join(EXPORT_DIR, filename),
+                    "export_time": os.path.getctime(os.path.join(EXPORT_DIR, filename))
                 })
-        return {"status": "success", "exports": exports}
+        return {"status": "success", "images": images}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 

@@ -6,6 +6,9 @@ import base64
 import io
 from PIL import Image, ImageOps, ImageEnhance, ImageFilter
 import numpy as np
+import os
+import shutil
+from datetime import datetime
 
 router = APIRouter()
 
@@ -19,6 +22,9 @@ class ImageMergeRequest(BaseModel):
 class ImageProcessResponse(BaseModel):
     status: str
     message: Optional[str] = None
+
+LCNC_DIR = "./lcnc"
+os.makedirs(LCNC_DIR, exist_ok=True)
 
 # 유틸리티 함수
 def decode_image(image_data):
@@ -415,4 +421,40 @@ async def process_merge(images: List[UploadFile] = File(...), params: str = Form
         return JSONResponse(
             status_code=400,
             content={"status": "error", "message": str(e)}
-        ) 
+        )
+
+@router.post("/process")
+async def process_lcnc(file: UploadFile = File(...)):
+    try:
+        # 파일 저장
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}_{file.filename}"
+        file_path = os.path.join(LCNC_DIR, filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        return {
+            "status": "success",
+            "message": "LCNC processed successfully",
+            "filename": filename,
+            "path": file_path
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/list")
+async def get_lcnc_images():
+    try:
+        # LCNC 처리된 이미지 목록 조회
+        images = []
+        for filename in os.listdir(LCNC_DIR):
+            if filename.endswith(('.jpg', '.jpeg', '.png')):
+                images.append({
+                    "filename": filename,
+                    "path": os.path.join(LCNC_DIR, filename),
+                    "process_time": os.path.getctime(os.path.join(LCNC_DIR, filename))
+                })
+        return {"status": "success", "images": images}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) 

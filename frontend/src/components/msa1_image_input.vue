@@ -21,10 +21,13 @@
           style="display: none" 
           @change="handleFileSelect"
         >
-        <div v-if="!previewImage" class="upload-placeholder">
-          <i class="fas fa-image"></i>
-          <p>이미지를 드래그하거나 클릭하여 업로드</p>
-          <p class="sub-text">또는 Ctrl+V로 붙여넣기</p>
+        <div v-if="!previewImage" class="paste-image-prompt">
+          <div class="image-icon-wrapper">
+            <i class="fas fa-cloud-upload-alt"></i>
+            <i class="fas fa-image"></i>
+          </div>
+          <h3>이미지를 추가하세요</h3>
+          <p>Ctrl+V로 붙여넣거나 이미지를 드래그하세요</p>
         </div>
         <div v-else class="preview-container">
           <img :src="previewImage" alt="Preview" class="preview-image">
@@ -85,14 +88,25 @@ export default {
           this.statusText = '이미지 준비됨'
           this.isActive = true
           
-          // MSA5 컴포넌트에 이미지 업데이트 이벤트 발생
-          const event = new CustomEvent('msa1-image-updated', { 
+          // MSA4로 이미지 전송
+          const msa4Event = new CustomEvent('msa1-to-msa4-image', { 
             detail: { 
-              imageUrl: e.target.result 
-            },
-            bubbles: true
+              imageUrl: e.target.result,
+              imageName: file.name
+            }
           })
-          window.dispatchEvent(event)
+          document.dispatchEvent(msa4Event)
+          console.log('[MSA1] 이미지가 MSA4로 전송됨:', file.name)
+          
+          // MSA5로 이미지 전송
+          const msa5Event = new CustomEvent('msa1-to-msa5-image', { 
+            detail: { 
+              imageUrl: e.target.result,
+              imageName: file.name
+            }
+          })
+          document.dispatchEvent(msa5Event)
+          console.log('[MSA1] 이미지가 MSA5로 전송됨:', file.name)
         }
         reader.readAsDataURL(file)
       }
@@ -267,5 +281,61 @@ h3 {
 .remove-btn:hover {
   background: #dc2626;
   transform: scale(1.1);
+}
+
+.paste-image-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  background: linear-gradient(135deg, #f5f7fa, #e4edf9);
+  border-radius: 12px;
+  border: 2px dashed #c3d0e6;
+  text-align: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.paste-image-prompt:hover {
+  border-color: #8b5cf6;
+  box-shadow: 0 5px 15px rgba(139, 92, 246, 0.15);
+  transform: translateY(-2px);
+}
+
+.image-icon-wrapper {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.image-icon-wrapper i.fa-cloud-upload-alt {
+  font-size: 42px;
+  color: #8b5cf6;
+  margin-bottom: 10px;
+}
+
+.image-icon-wrapper i.fa-image {
+  position: absolute;
+  bottom: -5px;
+  right: -10px;
+  font-size: 24px;
+  color: #4ade80;
+  background: white;
+  padding: 5px;
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.paste-image-prompt h3 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #4b5563;
+  margin: 0 0 8px 0;
+}
+
+.paste-image-prompt p {
+  font-size: 14px;
+  color: #6b7280;
+  margin: 0;
 }
 </style> 

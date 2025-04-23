@@ -78,24 +78,24 @@ export default {
 
 <style scoped>
 .main-view {
-  padding: 2rem;
+  padding: 1rem;
   background: var(--primary-50);
   min-height: 100vh;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1rem;
   position: relative;
 }
 
 .page-title {
   width: 100%;
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
 }
 
 .page-title h1 {
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 700;
   color: var(--primary-800);
   margin: 0;
@@ -103,10 +103,10 @@ export default {
 }
 
 .title-underline {
-  width: 60px;
-  height: 4px;
+  width: 50px;
+  height: 3px;
   background: var(--primary-600);
-  margin: 1rem auto 0;
+  margin: 0.5rem auto 0;
   border-radius: 2px;
 }
 
@@ -114,76 +114,67 @@ export default {
   flex: 1;
   display: flex;
   flex-direction: column;
-  margin-bottom: 3rem;
-  height: calc(100vh - 13rem);
-  min-height: 800px;
+  margin-bottom: 2rem;
+  height: calc(100vh - 10rem);
+  min-height: 600px;
+  overflow: hidden;
 }
 
 .msa-grid {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  padding: 1rem;
+  gap: 0.75rem;
+  padding: 0.75rem;
   width: 100%;
   height: 100%;
+  flex: 1;
+  margin-bottom: 1rem;
 }
 
 .top-row {
   display: grid;
   grid-template-columns: 1.2fr 2fr 2fr;
-  gap: 2rem;
+  gap: 0.5rem;
   width: 100%;
-  height: 40%;
-  min-height: 300px;
+  height: 48%;
+  min-height: 200px;
+  flex: 1;
 }
 
 .bottom-row {
   display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: 2rem;
+  grid-template-columns: 2fr 3fr 1fr;
+  gap: 0.5rem;
   width: 100%;
-  height: 60%;
-  min-height: 400px;
+  height: 48%;
+  min-height: 200px;
+  flex: 1;
 }
 
 .msa5-6-container {
-  display: grid;
-  grid-template-columns: 1fr 300px;
-  gap: 2rem;
+  display: contents;
   height: 100%;
 }
 
 .msa-card {
   background: white;
   border-radius: 15px;
-  padding: 1.5rem;
+  padding: 0.75rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.msa1 {
   height: 100%;
+  flex: 1;
 }
 
-.msa2, .msa3 {
-  height: 100%;
-}
-
-.msa4 {
-  height: 100%;
-  width: 300px;
-}
-
-.msa5 {
-  height: 100%;
-}
-
-.msa6 {
+.msa1, .msa2, .msa3, .msa4, .msa5, .msa6 {
   height: 100%;
   width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .msa-card:hover {
@@ -217,37 +208,24 @@ export default {
     grid-template-columns: 1fr;
     height: auto;
     gap: 1rem;
+    min-height: 300px;
   }
 
   .bottom-row {
     grid-template-columns: 1fr;
     height: auto;
     gap: 1rem;
+    min-height: 300px;
+  }
+
+  .msa1, .msa2, .msa3, .msa4, .msa5, .msa6 {
+    min-height: 300px;
+    height: auto;
   }
 
   .msa5-6-container {
     grid-template-columns: 1fr;
     gap: 1rem;
-  }
-
-  .msa1, .msa2, .msa3 {
-    min-height: 250px;
-    height: auto;
-  }
-
-  .msa4 {
-    width: 100%;
-    height: 300px;
-  }
-
-  .msa5 {
-    min-height: 400px;
-    width: 100%;
-  }
-
-  .msa6 {
-    width: 100%;
-    height: 400px;
   }
 
   .msa-card {
@@ -264,14 +242,6 @@ export default {
 }
 
 @media (max-width: 768px) {
-  .msa1, .msa2, .msa3, .msa4 {
-    min-height: 200px;
-  }
-
-  .msa5, .msa6 {
-    height: 300px;
-  }
-
   .msa-grid {
     gap: 1rem;
     padding: 0.5rem;
@@ -405,5 +375,10 @@ export default {
   height: 100vh;
   background: rgba(0, 0, 0, 0.5);
   z-index: 999;
+}
+
+.msa4-container {
+  height: calc(100vh - 200px); /* 뷰포트 높이에서 헤더와 여백을 뺀 크기 */
+  min-height: 500px;
 }
 </style> 

@@ -1,51 +1,45 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import List, Dict, Any
 import os
-from PIL import Image
-import numpy as np
+import shutil
+from datetime import datetime
 
 router = APIRouter()
 
-PROCESSED_DIR = "./processed"
-os.makedirs(PROCESSED_DIR, exist_ok=True)
+PROCESS_DIR = "./processed"
+os.makedirs(PROCESS_DIR, exist_ok=True)
 
-@router.post("/msa2/process")
-async def process_image(image_data: Dict[str, Any]):
+@router.post("/process")
+async def process_image(file: UploadFile = File(...)):
     try:
-        # 이미지 처리 로직
-        input_path = image_data.get("path")
-        if not input_path or not os.path.exists(input_path):
-            raise HTTPException(status_code=400, detail="Invalid image path")
-
-        # 이미지 처리 예시 (실제로는 더 복잡한 처리 필요)
-        with Image.open(input_path) as img:
-            # 이미지 처리 작업
-            processed_img = img.convert('L')  # 그레이스케일 변환 예시
+        # 파일 저장
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}_{file.filename}"
+        file_path = os.path.join(PROCESS_DIR, filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
             
-            # 처리된 이미지 저장
-            filename = os.path.basename(input_path)
-            output_path = os.path.join(PROCESSED_DIR, f"processed_{filename}")
-            processed_img.save(output_path)
-
         return {
             "status": "success",
             "message": "Image processed successfully",
-            "output_path": output_path
+            "filename": filename,
+            "path": file_path
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/msa2/processed")
+@router.get("/list")
 async def get_processed_images():
     try:
         # 처리된 이미지 목록 조회
         images = []
-        for filename in os.listdir(PROCESSED_DIR):
-            if filename.startswith('processed_') and filename.endswith(('.jpg', '.jpeg', '.png')):
+        for filename in os.listdir(PROCESS_DIR):
+            if filename.endswith(('.jpg', '.jpeg', '.png')):
                 images.append({
                     "filename": filename,
-                    "path": os.path.join(PROCESSED_DIR, filename),
-                    "process_time": os.path.getctime(os.path.join(PROCESSED_DIR, filename))
+                    "path": os.path.join(PROCESS_DIR, filename),
+                    "process_time": os.path.getctime(os.path.join(PROCESS_DIR, filename))
                 })
         return {"status": "success", "images": images}
     except Exception as e:
