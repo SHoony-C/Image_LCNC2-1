@@ -31,10 +31,8 @@
         </div>
         <div class="bottom-row">
           <MSA4VectorTransform class="msa-card msa4" />
-          <div class="msa5-6-container">
-            <MSA5ImageLCNC class="msa-card msa5" />
-            <MSA6FinalResult class="msa-card msa6" />
-          </div>
+          <MSA5ImageLCNC class="msa-card msa5" />
+          <MSA6FinalResult class="msa-card msa6" />
         </div>
       </div>
     </div>
@@ -117,7 +115,8 @@ export default {
   margin-bottom: 2rem;
   height: calc(100vh - 10rem);
   min-height: 600px;
-  overflow: hidden;
+  overflow: hidden !important;
+  position: relative;
 }
 
 .msa-grid {
@@ -129,6 +128,8 @@ export default {
   height: 100%;
   flex: 1;
   margin-bottom: 1rem;
+  overflow: hidden !important;
+  position: relative;
 }
 
 .top-row {
@@ -136,24 +137,23 @@ export default {
   grid-template-columns: 1.2fr 2fr 2fr;
   gap: 0.5rem;
   width: 100%;
-  height: 48%;
+  height: 35% !important;
   min-height: 200px;
-  flex: 1;
+  max-height: 35% !important;
+  overflow: hidden !important;
+  position: relative;
 }
 
 .bottom-row {
   display: grid;
-  grid-template-columns: 2fr 3fr 1fr;
+  grid-template-columns: 1.5fr 3.5fr 1fr;
   gap: 0.5rem;
   width: 100%;
-  height: 48%;
+  height: 65% !important;
   min-height: 200px;
-  flex: 1;
-}
-
-.msa5-6-container {
-  display: contents;
-  height: 100%;
+  max-height: 65% !important;
+  overflow: hidden !important;
+  position: relative;
 }
 
 .msa-card {
@@ -164,17 +164,21 @@ export default {
   transition: all 0.3s ease;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  height: 100%;
-  flex: 1;
+  overflow: hidden !important;
+  height: [MSA4] No vector data available, creating dummy visualization
+  !important;
+  width: 100% !important;
+  position: relative;
 }
 
 .msa1, .msa2, .msa3, .msa4, .msa5, .msa6 {
-  height: 100%;
-  width: 100%;
+  height: 100% !important;
+  width: 100% !important;
   flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden !important;
+  position: relative;
 }
 
 .msa-card:hover {
@@ -191,11 +195,11 @@ export default {
 @media (max-width: 1400px) {
   .top-row {
     grid-template-columns: 1fr 1fr 1fr;
-    height: 45%;
+    height: 35% !important;
   }
 
   .bottom-row {
-    height: 55%;
+    height: 65% !important;
   }
 }
 
@@ -207,15 +211,11 @@ export default {
   .top-row {
     grid-template-columns: 1fr;
     height: auto;
-    gap: 1rem;
-    min-height: 300px;
   }
-
+  
   .bottom-row {
     grid-template-columns: 1fr;
     height: auto;
-    gap: 1rem;
-    min-height: 300px;
   }
 
   .msa1, .msa2, .msa3, .msa4, .msa5, .msa6 {
@@ -380,5 +380,35 @@ export default {
 .msa4-container {
   height: calc(100vh - 200px); /* 뷰포트 높이에서 헤더와 여백을 뺀 크기 */
   min-height: 500px;
+}
+
+/* Plotly and SVG elements styles to ensure fixed heights */
+:deep(.js-plotly-plot),
+:deep(.plotly), 
+:deep(.plot-container),
+:deep(.svg-container),
+:deep(.main-svg) {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* Ensure all components maintain fixed size */
+:deep(.msa-component),
+:deep(.msa-container),
+:deep(.main-layout) {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Fixed size for msa4 component */
+:deep(.msa4) .msa-component {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
 }
 </style> 

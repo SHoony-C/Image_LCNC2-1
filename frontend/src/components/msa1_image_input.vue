@@ -213,11 +213,11 @@ h3 {
   margin-top: 1rem;
   border: 2px dashed rgba(124, 58, 237, 0.3);
   border-radius: 12px;
-  padding: 1.5rem;
+  padding: 1rem;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  min-height: 200px;
+  min-height: 170px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -251,12 +251,12 @@ h3 {
   position: relative;
   width: 100%;
   height: 100%;
-  min-height: 200px;
+  min-height: 170px;
 }
 
 .preview-image {
   max-width: 100%;
-  max-height: 200px;
+  max-height: 170px;
   object-fit: contain;
   border-radius: 8px;
 }
@@ -288,7 +288,7 @@ h3 {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px;
+  padding: 25px;
   background: linear-gradient(135deg, #f5f7fa, #e4edf9);
   border-radius: 12px;
   border: 2px dashed #c3d0e6;

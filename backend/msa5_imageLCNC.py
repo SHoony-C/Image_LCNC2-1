@@ -427,8 +427,7 @@ async def process_merge(images: List[UploadFile] = File(...), params: str = Form
 async def process_lcnc(file: UploadFile = File(...)):
     try:
         # 파일 저장
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{file.filename}"
+        filename = file.filename
         file_path = os.path.join(LCNC_DIR, filename)
         
         with open(file_path, "wb") as buffer:
@@ -456,5 +455,42 @@ async def get_lcnc_images():
                     "process_time": os.path.getctime(os.path.join(LCNC_DIR, filename))
                 })
         return {"status": "success", "images": images}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/upload")
+async def upload_image(file: UploadFile = File(...)):
+    try:
+        # 원본 파일명 사용 (타임스탬프 제거)
+        filename = file.filename
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        return {
+            "status": "success",
+            "message": "Image uploaded successfully",
+            "filename": filename,
+            "path": file_path
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) 
+@router.post("/upload")
+async def upload_image(file: UploadFile = File(...)):
+    try:
+        # 원본 파일명 사용 (타임스탬프 제거)
+        filename = file.filename
+        file_path = os.path.join(UPLOAD_DIR, filename)
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        return {
+            "status": "success",
+            "message": "Image uploaded successfully",
+            "filename": filename,
+            "path": file_path
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 

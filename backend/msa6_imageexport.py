@@ -10,12 +10,11 @@ router = APIRouter()
 EXPORT_DIR = "./exports"
 os.makedirs(EXPORT_DIR, exist_ok=True)
 
-@router.post("/export")
-async def export_image(file: UploadFile = File(...)):
+@router.post("/upload")
+async def upload_image(file: UploadFile = File(...)):
     try:
-        # 파일 저장
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{file.filename}"
+        # 원본 파일명 사용 (타임스탬프 제거)
+        filename = file.filename
         file_path = os.path.join(EXPORT_DIR, filename)
         
         with open(file_path, "wb") as buffer:
@@ -23,7 +22,7 @@ async def export_image(file: UploadFile = File(...)):
             
         return {
             "status": "success",
-            "message": "Image exported successfully",
+            "message": "Image uploaded successfully",
             "filename": filename,
             "path": file_path
         }

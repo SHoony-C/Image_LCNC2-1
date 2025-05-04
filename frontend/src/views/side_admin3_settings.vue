@@ -10,7 +10,7 @@
         <div class="setting-item">
           <div class="setting-info">
             <h3>테스트 이미지 로드 및 벡터 변환</h3>
-            <p>지정된 경로에서 이미지를 로드하고 벡터로 변환합니다.</p>
+            <p>지정된 경로에서 이미지를 로드하고 벡터로 변환합니다. 각 이미지당 하나의 벡터만 저장합니다.</p>
             <div class="directory-input">
               <label>이미지 경로:</label>
               <input 
@@ -40,6 +40,70 @@
               <div class="vector-count" v-if="processingStatus.details.vectors">벡터 변환: {{ processingStatus.details.vectors }} 개</div>
               <div class="error-count" v-if="processingStatus.details.errors">오류: {{ processingStatus.details.errors }} 개</div>
             </div>
+            
+            <!-- 벡터 변환 결과 표시 -->
+            <div class="vector-results" v-if="processingStatus.details && processingStatus.details.vectors > 0 && vectorResults.length > 0">
+              <h4>변환 결과 미리보기 (3D 좌표)</h4>
+              <div class="vector-results-explanation">
+                <p>이미지가 3D 공간에 배치된 좌표입니다. 유사한 이미지는 3D 공간에서 서로 가까이 위치합니다.</p>
+              </div>
+              <div class="vector-table-container">
+                <table class="vector-table">
+                  <thead>
+                    <tr>
+                      <th>이미지</th>
+                      <th>X</th>
+                      <th>Y</th>
+                      <th>Z</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(item, index) in vectorResults.slice(0, 10)" :key="index">
+                      <td class="image-name">{{ item.filename }}</td>
+                      <td class="coordinate">{{ item.coordinates[0].toFixed(4) }}</td>
+                      <td class="coordinate">{{ item.coordinates[1].toFixed(4) }}</td>
+                      <td class="coordinate">{{ item.coordinates[2].toFixed(4) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <div class="more-results" v-if="vectorResults.length > 10">
+                  <p>... 외 {{ vectorResults.length - 10 }}개 이미지</p>
+                  <button @click="showAllResults = !showAllResults" class="toggle-button">
+                    {{ showAllResults ? '접기' : '모두 보기' }}
+                  </button>
+                </div>
+              </div>
+              
+              <!-- 모든 결과 표시 다이얼로그 -->
+              <div class="all-results-dialog" v-if="showAllResults">
+                <div class="dialog-content">
+                  <div class="dialog-header">
+                    <h3>전체 변환 결과 ({{ vectorResults.length }}개)</h3>
+                    <button @click="showAllResults = false" class="close-button">&times;</button>
+                  </div>
+                  <div class="dialog-body">
+                    <table class="vector-table full-table">
+                      <thead>
+                        <tr>
+                          <th>이미지</th>
+                          <th>X</th>
+                          <th>Y</th>
+                          <th>Z</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(item, index) in vectorResults" :key="index">
+                          <td class="image-name">{{ item.filename }}</td>
+                          <td class="coordinate">{{ item.coordinates[0].toFixed(4) }}</td>
+                          <td class="coordinate">{{ item.coordinates[1].toFixed(4) }}</td>
+                          <td class="coordinate">{{ item.coordinates[2].toFixed(4) }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -54,7 +118,9 @@ export default {
     return {
       isProcessing: false,
       imageDirectory: 'D:\\홈피\\image_lcnc_msa2\\frontend\\public\\test_image',
-      processingStatus: null
+      processingStatus: null,
+      vectorResults: [],
+      showAllResults: false
     }
   },
   methods: {
@@ -89,6 +155,9 @@ export default {
         const data = await response.json();
         
         if (data.status === 'success' || data.status === 'partial_success') {
+          // 벡터 데이터 조회 및 처리
+          const processedResponse = await this.processVectorData();
+          
           this.processingStatus = {
             type: data.status === 'success' ? 'success' : 'warning',
             message: data.status === 'success' 
@@ -96,10 +165,17 @@ export default {
               : '일부 이미지만 처리되었습니다.',
             details: {
               processed: data.processed?.length || 0,
-              vectors: data.vector_extraction?.count || 0,
+              vectors: processedResponse?.processed || data.vector_extraction?.count || 0,
               errors: data.errors?.length || 0
             }
           };
+          
+          // 벡터 추출 API에서 3D 좌표 결과 데이터 사용 (없으면 계산된 결과 사용)
+          if (data.vector_extraction && data.vector_extraction.results) {
+            this.vectorResults = data.vector_extraction.results;
+          } else if (processedResponse && processedResponse.results) {
+            this.vectorResults = processedResponse.results;
+          }
         } else {
           this.processingStatus = {
             type: 'error',
@@ -118,6 +194,170 @@ export default {
       } finally {
         this.isProcessing = false;
       }
+    },
+    
+    async processVectorData() {
+      try {
+        // 먼저 벡터 데이터를 가져옵니다
+        const response = await fetch('http://localhost:8000/api/msa4/vectors', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API returned status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.vectors || !data.vectors.length) {
+          console.warn('No vector data returned from API');
+          return { 
+            status: 'warning', 
+            message: '벡터 데이터가 없습니다', 
+            processed: 0 
+          };
+        }
+        
+        // 각 이미지당 하나의 벡터만 남기도록 처리
+        // 파일명으로 그룹화하여 이미지당 하나의 대표 벡터만 저장
+        const uniqueFilenames = new Set();
+        const uniqueLabels = [];
+        const uniqueVectors = [];
+        const imageToVectors = {};
+        
+        // 동일한 이미지에서 온 벡터들을 그룹화
+        data.metadata.forEach((filename, index) => {
+          if (!uniqueFilenames.has(filename)) {
+            uniqueFilenames.add(filename);
+            uniqueLabels.push(filename);
+            uniqueVectors.push(data.vectors[index]);
+          } else {
+            // 이미 있는 이미지의 경우 벡터 목록에 추가 (나중에 평균 계산용)
+            if (!imageToVectors[filename]) {
+              // 첫 번째 벡터 추가
+              const firstIndex = uniqueLabels.indexOf(filename);
+              imageToVectors[filename] = [data.vectors[firstIndex]];
+            }
+            imageToVectors[filename].push(data.vectors[index]);
+          }
+        });
+        
+        // 이미 저장된 대표 벡터를 평균 벡터로 업데이트
+        uniqueLabels.forEach((filename, index) => {
+          if (imageToVectors[filename] && imageToVectors[filename].length > 1) {
+            // 벡터 평균 계산
+            const vectors = imageToVectors[filename];
+            const avgVector = [];
+            
+            // 벡터의 각 차원에 대해 평균 계산
+            for (let i = 0; i < vectors[0].length; i++) {
+              let sum = 0;
+              for (let j = 0; j < vectors.length; j++) {
+                sum += vectors[j][i];
+              }
+              avgVector.push(sum / vectors.length);
+            }
+            
+            // 평균 벡터로 대체
+            uniqueVectors[index] = avgVector;
+          }
+        });
+        
+        // 이미지당 하나의 벡터만 포함하는 새 데이터 생성
+        const processedData = {
+          vectors: uniqueVectors,
+          metadata: uniqueLabels
+        };
+        
+        // 처리된 데이터 저장
+        const saveResponse = await fetch('http://localhost:8000/api/msa4/save-processed-vectors', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(processedData)
+        });
+        
+        if (!saveResponse.ok) {
+          throw new Error(`Failed to save processed vectors: ${saveResponse.status}`);
+        }
+        
+        console.log(`Processed ${uniqueVectors.length} unique vectors for ${uniqueLabels.length} images`);
+        
+        // 3D 좌표 계산
+        const projectedVectors = this.computeProjectedVectors(uniqueVectors);
+        
+        // 결과 데이터 생성 (파일명과 3D 좌표)
+        const results = uniqueLabels.map((filename, index) => ({
+          filename,
+          coordinates: projectedVectors[index] || [0, 0, 0]
+        }));
+        
+        // 벡터 결과 설정
+        this.vectorResults = results;
+        
+        return {
+          status: 'success',
+          message: `각 이미지당 하나의 벡터로 처리 완료: 총 ${uniqueVectors.length}개`,
+          processed: uniqueVectors.length,
+          results: results
+        };
+      } catch (error) {
+        console.error('Error processing vector data:', error);
+        return {
+          status: 'error',
+          message: '벡터 처리 중 오류가 발생했습니다: ' + error.message,
+          processed: 0
+        };
+      }
+    },
+    
+    // 3D 투영 함수 추가
+    computeProjectedVectors(vectors) {
+      const projectedVectors = [];
+      
+      for (const vec of vectors) {
+        if (!vec || vec.length < 3) {
+          projectedVectors.push([0, 0, 0]);
+          continue;
+        }
+        
+        // 벡터를 3개의 그룹으로 나누어 평균 계산
+        const vectorLength = vec.length;
+        const groupSize = Math.floor(vectorLength / 3);
+        
+        const groups = [
+          vec.slice(0, groupSize),
+          vec.slice(groupSize, 2 * groupSize),
+          vec.slice(2 * groupSize)
+        ];
+        
+        const projected = [
+          groups[0].reduce((sum, val) => sum + val, 0) / groups[0].length,
+          groups[1].reduce((sum, val) => sum + val, 0) / groups[1].length,
+          groups[2].reduce((sum, val) => sum + val, 0) / groups[2].length
+        ];
+        
+        projectedVectors.push(projected);
+      }
+      
+      // 정규화
+      const dimensions = [0, 1, 2].map(dim => ({
+        min: Math.min(...projectedVectors.map(v => v[dim])),
+        max: Math.max(...projectedVectors.map(v => v[dim]))
+      }));
+      
+      return projectedVectors.map(vec => 
+        vec.map((val, i) => {
+          const min = dimensions[i].min;
+          const max = dimensions[i].max;
+          // 분모가 0이 되는 것 방지
+          return max > min ? (val - min) / (max - min) : 0.5;
+        })
+      );
     }
   }
 }
@@ -278,5 +518,114 @@ h1 {
 
 .status-details div {
   margin-bottom: 0.25rem;
+}
+
+.vector-results {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--gray-300);
+}
+
+.vector-results-explanation {
+  margin-bottom: 0.5rem;
+}
+
+.vector-table-container {
+  margin-bottom: 1rem;
+}
+
+.vector-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.vector-table th,
+.vector-table td {
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.vector-table th {
+  background-color: var(--gray-200);
+}
+
+.image-name {
+  font-weight: 500;
+}
+
+.coordinate {
+  text-align: right;
+}
+
+.more-results {
+  text-align: right;
+}
+
+.toggle-button {
+  padding: 0.25rem 0.5rem;
+  background-color: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+.all-results-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.dialog-content {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 1rem;
+  max-width: 80%;
+  max-height: 80%;
+  overflow: auto;
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.dialog-header h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--gray-500);
+  cursor: pointer;
+}
+
+.dialog-body {
+  overflow: auto;
+}
+
+.vector-table.full-table {
+  width: 100%;
+}
+
+.vector-table.full-table th,
+.vector-table.full-table td {
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.vector-table.full-table th {
+  background-color: var(--gray-200);
 }
 </style> 

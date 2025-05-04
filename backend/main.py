@@ -114,7 +114,7 @@ async def health():
 app.include_router(msa1_router, prefix="/api/msa1", tags=["msa1"])
 app.include_router(msa2_router, prefix="/api/msa2", tags=["msa2"])
 app.include_router(msa3_router, prefix="/api/msa3", tags=["msa3"])
-app.include_router(msa4_router, prefix="/api/msa4", tags=["msa4"])
+app.include_router(msa4_router, prefix="/api", tags=["msa4"])
 app.include_router(msa5_router, prefix="/api/msa5", tags=["msa5"])
 app.include_router(msa6_router, prefix="/api/msa6", tags=["msa6"])
 

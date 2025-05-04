@@ -82,9 +82,8 @@ def extract_vector(image_path):
 @router.post("/store")
 async def store_image(file: UploadFile = File(...)):
     try:
-        # 파일 저장
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{file.filename}"
+        # 파일 저장 (원본 파일명 그대로 사용)
+        filename = file.filename
         file_path = os.path.join(STORAGE_DIR, filename)
         
         with open(file_path, "wb") as buffer:
@@ -134,14 +133,59 @@ async def extract_vectors():
         # 모든 이미지에서 벡터 추출
         vectors = []
         filenames = []
+        errors = []
         
+        # 파일명 기준 그룹화 (타임스탬프 제거)
+        grouped_images = {}
         for image in images:
+            clean_filename = remove_timestamp(image["filename"])
+            if clean_filename not in grouped_images:
+                grouped_images[clean_filename] = []
+            grouped_images[clean_filename].append(image)
+        
+        # 각 그룹(이미지)당 하나의 벡터만 저장
+        for clean_filename, image_group in grouped_images.items():
             try:
-                vector = extract_vector(image["path"])
-                vectors.append(vector.tolist())
-                filenames.append(image["filename"])
+                if len(image_group) == 1:
+                    # 단일 이미지인 경우 직접 추출
+                    image = image_group[0]
+                    vector = extract_vector(image["path"])
+                    vectors.append(vector.tolist())
+                    filenames.append(clean_filename)  # 정리된 파일명 사용
+                else:
+                    # 여러 이미지가 같은 이름을 가진 경우 (타임스탬프만 다른 경우)
+                    # 각 이미지에서 벡터 추출 후 평균 계산
+                    group_vectors = []
+                    for image in image_group:
+                        try:
+                            vector = extract_vector(image["path"])
+                            group_vectors.append(vector.tolist())
+                        except Exception as e:
+                            print(f"Error extracting vector from group member {image['filename']}: {str(e)}")
+                    
+                    if group_vectors:
+                        # 벡터 평균 계산
+                        vector_length = len(group_vectors[0])
+                        avg_vector = [0] * vector_length
+                        
+                        for vec in group_vectors:
+                            for i in range(vector_length):
+                                avg_vector[i] += vec[i]
+                        
+                        avg_vector = [val / len(group_vectors) for val in avg_vector]
+                        vectors.append(avg_vector)
+                        filenames.append(clean_filename)
+                    else:
+                        errors.append({
+                            "filename": clean_filename,
+                            "error": "모든 그룹 이미지에서 벡터 추출 실패"
+                        })
             except Exception as e:
-                print(f"Error extracting vector from {image['filename']}: {str(e)}")
+                errors.append({
+                    "filename": clean_filename,
+                    "error": str(e)
+                })
+                print(f"Error processing image group {clean_filename}: {str(e)}")
         
         # 벡터와 메타데이터 저장
         vectors_path = os.path.join(VECTORS_DIR, "vectors.json")
@@ -153,46 +197,113 @@ async def extract_vectors():
         with open(metadata_path, 'w') as f:
             json.dump(filenames, f)
         
+        # 바로 processed-vectors에도 동일하게 저장 (이미지당 하나의 벡터)
+        processed_vectors_path = os.path.join(VECTORS_DIR, "processed_vectors.json")
+        processed_metadata_path = os.path.join(VECTORS_DIR, "processed_metadata.json")
+        
+        with open(processed_vectors_path, 'w') as f:
+            json.dump(vectors, f)
+        
+        with open(processed_metadata_path, 'w') as f:
+            json.dump(filenames, f)
+        
+        # 3D 투영 좌표 계산 (간단한 PCA 유사 방식)
+        projected_vectors = []
+        
+        for vec in vectors:
+            if not vec or len(vec) < 3:
+                projected_vectors.append([0, 0, 0])
+                continue
+                
+            # 벡터를 3개의 그룹으로 나누어 평균 계산
+            vector_length = len(vec)
+            group_size = vector_length // 3
+            
+            groups = [
+                vec[:group_size],
+                vec[group_size:2*group_size],
+                vec[2*group_size:]
+            ]
+            
+            projected = [
+                sum(groups[0]) / len(groups[0]) if groups[0] else 0,
+                sum(groups[1]) / len(groups[1]) if groups[1] else 0,
+                sum(groups[2]) / len(groups[2]) if groups[2] else 0
+            ]
+            
+            projected_vectors.append(projected)
+        
+        # 결과에 3D 좌표를 포함하여 반환
+        results = []
+        for i, filename in enumerate(filenames):
+            if i < len(projected_vectors):
+                results.append({
+                    "filename": filename,
+                    "coordinates": projected_vectors[i]
+                })
+        
         return {
             "status": "success",
             "message": f"Extracted vectors from {len(vectors)} images",
-            "count": len(vectors)
+            "count": len(vectors),
+            "filenames": filenames[:10] if len(filenames) > 10 else filenames,  # 처음 10개만 반환
+            "errors": errors,  # 에러 정보도 함께 반환
+            "results": results  # 3D 좌표 포함
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/vectors")
 async def get_vectors():
-    """저장된 벡터 데이터를 조회합니다."""
+    """저장된 벡터와 메타데이터를 반환합니다."""
     try:
         vectors_path = os.path.join(VECTORS_DIR, "vectors.json")
         metadata_path = os.path.join(VECTORS_DIR, "metadata.json")
         
+        # 벡터 파일이 없으면 벡터 추출 실행
         if not os.path.exists(vectors_path) or not os.path.exists(metadata_path):
-            return {
-                "status": "warning",
-                "message": "Vectors not yet extracted, please run extract-vectors first"
-            }
+            extract_result = await extract_vectors()
+            if extract_result.get("status") == "warning":
+                raise HTTPException(status_code=404, detail="No images found to extract vectors from")
         
-        with open(vectors_path, 'r') as f:
-            vectors = json.load(f)
+        # 벡터와 메타데이터 로드
+        try:
+            with open(vectors_path, 'r') as f:
+                vectors = json.load(f)
+            with open(metadata_path, 'r') as f:
+                labels = json.load(f)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Vector data not found")
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=500, detail="Error decoding vector data")
         
-        with open(metadata_path, 'r') as f:
-            metadata = json.load(f)
+        if not vectors or not labels or len(vectors) != len(labels):
+            raise HTTPException(status_code=500, detail="Invalid vector data format")
         
         return {
-            "status": "success",
             "vectors": vectors,
-            "metadata": metadata,
-            "count": len(vectors)
+            "labels": labels
         }
+        
+    except HTTPException as he:
+        raise he
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# 타임스탬프 제거 함수 추가
+def remove_timestamp(filename):
+    """파일명에서 타임스탬프(YYYYMMDD_HHMMSS_) 형식을 제거합니다."""
+    import re
+    return re.sub(r'^\d{8}_\d{6}_', '', filename)
 
 @router.get("/similar-images/{image_name}")
 async def find_similar_images(image_name: str, count: int = 5):
     """특정 이미지와 가장 유사한 이미지를 찾습니다."""
     try:
+        # 타임스탬프 제거한 원본 이미지 이름
+        original_name = remove_timestamp(image_name)
+        print(f"Finding similar images for: {original_name} (original input: {image_name})")
+        
         # 벡터 데이터 로드
         vectors_path = os.path.join(VECTORS_DIR, "vectors.json")
         metadata_path = os.path.join(VECTORS_DIR, "metadata.json")
@@ -209,21 +320,31 @@ async def find_similar_images(image_name: str, count: int = 5):
         with open(metadata_path, 'r') as f:
             filenames = json.load(f)
         
-        # 입력 이미지 인덱스 찾기
-        try:
-            query_idx = filenames.index(image_name)
-        except ValueError:
+        # 모든 파일명에서 타임스탬프 제거한 버전 맵 생성
+        clean_filenames = [remove_timestamp(fname) for fname in filenames]
+        
+        # 원본 이름으로 인덱스 찾기 시도 (타임스탬프 제거 후)
+        matching_indices = []
+        for i, (fname, clean_fname) in enumerate(zip(filenames, clean_filenames)):
+            if clean_fname == original_name:
+                matching_indices.append(i)
+                print(f"Found matching index {i}: {fname} -> {clean_fname}")
+        
+        if not matching_indices:
             return {
                 "status": "error",
-                "message": f"Image '{image_name}' not found in the dataset"
+                "message": f"Image '{original_name}' not found in the dataset"
             }
         
+        # 첫 번째 매칭 인덱스 사용
+        query_idx = matching_indices[0]
         query_vector = vectors[query_idx]
         
         # 유사도 계산 (코사인 유사도)
         similarities = []
         for i, vec in enumerate(vectors):
-            if i == query_idx:  # 자기 자신은 건너뛰기
+            # 자기 자신 및 동일 원본 이미지는 건너뛰기
+            if i == query_idx or (i in matching_indices):
                 continue
                 
             # 코사인 유사도 계산
@@ -232,8 +353,14 @@ async def find_similar_images(image_name: str, count: int = 5):
             norm_b = sum(b * b for b in vec) ** 0.5
             similarity = dot_product / (norm_a * norm_b)
             
+            # 동일한 원본 이미지(타임스탬프만 다른)는 제외
+            if clean_filenames[i] == original_name:
+                print(f"Skipping same original image: {filenames[i]} -> {clean_filenames[i]}")
+                continue
+                
             similarities.append({
                 "filename": filenames[i],
+                "clean_filename": clean_filenames[i],
                 "similarity": similarity,
                 "index": i
             })
@@ -241,20 +368,39 @@ async def find_similar_images(image_name: str, count: int = 5):
         # 유사도 기준으로 정렬
         similarities.sort(key=lambda x: x["similarity"], reverse=True)
         
-        # 상위 N개 결과 반환
-        top_results = similarities[:count]
+        # 중복 제거 (동일 원본 이름은 가장 유사도가 높은 것만 유지)
+        seen_clean_names = set()
+        unique_results = []
         
-        # 이미지 URL 생성
+        for item in similarities:
+            clean_name = item["clean_filename"]
+            if clean_name not in seen_clean_names:
+                seen_clean_names.add(clean_name)
+                unique_results.append(item)
+                if len(unique_results) >= count:
+                    break
+        
+        # 상위 N개 결과 반환
+        top_results = unique_results[:count]
+        
+        # 이미지 URL 생성 및 불필요한 필드 제거
         for result in top_results:
             result["image_url"] = f"/storage/{result['filename']}"
+            # 원본 파일명으로 대체
+            result["filename"] = result["clean_filename"]
+            # 임시 필드 제거
+            result.pop("clean_filename", None)
         
         return {
             "status": "success",
-            "query_image": image_name,
+            "query_image": original_name,
             "query_image_url": f"/storage/{image_name}",
             "similar_images": top_results
         }
     except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"Error in find_similar_images: {str(e)}\n{error_detail}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/load-local-images")
@@ -262,7 +408,10 @@ async def load_local_images(directory_path: Optional[str] = Query(None, descript
                             data: Optional[Dict[str, Any]] = Body(None)):
     """지정된 로컬 디렉토리에서 이미지를 자동으로 로드하고 벡터를 추출합니다."""
     try:
-        # 경로 결정 (Query 파라미터 또는 JSON 바디에서)
+        processed_images = []
+        errors = []
+        
+        # 디렉토리 경로 결정 (Query 파라미터 또는 JSON 바디에서)
         path = directory_path
         if not path and data and "directory_path" in data:
             path = data["directory_path"]
@@ -270,9 +419,6 @@ async def load_local_images(directory_path: Optional[str] = Query(None, descript
         if not path:
             raise HTTPException(status_code=400, detail="Directory path is required")
             
-        processed_images = []
-        errors = []
-        
         # 지정된 디렉토리가 존재하는지 확인
         if not os.path.exists(path):
             raise HTTPException(status_code=404, detail=f"Directory not found: {path}")
@@ -283,20 +429,17 @@ async def load_local_images(directory_path: Optional[str] = Query(None, descript
                 file_path = os.path.join(path, filename)
                 
                 try:
-                    # 파일 복사 및 저장
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    new_filename = f"{timestamp}_{filename}"
-                    dest_path = os.path.join(STORAGE_DIR, new_filename)
-                    
+                    # 파일 복사 및 저장 (원본 파일명 그대로 사용)
+                    dest_path = os.path.join(STORAGE_DIR, filename)
                     shutil.copy2(file_path, dest_path)
                     
                     processed_images.append({
                         "original_path": file_path,
-                        "stored_filename": new_filename,
+                        "stored_filename": filename,
                         "stored_path": dest_path
                     })
                     
-                    print(f"Loaded image: {filename} -> {new_filename}")
+                    print(f"Loaded image: {filename}")
                 except Exception as e:
                     errors.append({
                         "filename": filename,
@@ -330,4 +473,73 @@ async def load_local_images(directory_path: Optional[str] = Query(None, descript
 async def load_test_images():
     """테스트 이미지 디렉토리에서 이미지를 자동으로 로드합니다."""
     directory_path = "D:\\홈피\\image_lcnc_msa2\\frontend\\public\\test_image"
-    return await load_local_images(directory_path=directory_path) 
+    return await load_local_images(directory_path=directory_path)
+
+@router.post("/save-processed-vectors")
+async def save_processed_vectors(data: Dict[str, Any]):
+    """전처리된 벡터 데이터를 저장합니다 (각 이미지당 하나의 벡터만 포함)."""
+    try:
+        # 데이터 유효성 검사
+        if not data.get("vectors") or not data.get("metadata"):
+            raise HTTPException(status_code=400, detail="Vectors and metadata are required")
+        
+        # 벡터와 메타데이터 길이 확인
+        if len(data["vectors"]) != len(data["metadata"]):
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Vectors and metadata length mismatch: {len(data['vectors'])} vectors vs {len(data['metadata'])} metadata items"
+            )
+        
+        # 처리된 벡터 데이터 저장 경로 설정
+        processed_vectors_path = os.path.join(VECTORS_DIR, "processed_vectors.json")
+        processed_metadata_path = os.path.join(VECTORS_DIR, "processed_metadata.json")
+        
+        # 데이터 저장
+        with open(processed_vectors_path, 'w') as f:
+            json.dump(data["vectors"], f)
+        
+        with open(processed_metadata_path, 'w') as f:
+            json.dump(data["metadata"], f)
+        
+        # 성공 응답
+        return {
+            "status": "success",
+            "message": f"Saved {len(data['vectors'])} processed vectors",
+            "count": len(data["vectors"]),
+            "filenames": data["metadata"][:5] + (["..."] if len(data["metadata"]) > 5 else [])  # 처음 5개만 샘플로 표시
+        }
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"Error in save_processed_vectors: {str(e)}\n{error_detail}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/processed-vectors")
+async def get_processed_vectors():
+    """저장된 처리된 벡터 데이터를 조회합니다 (각 이미지당 하나의 벡터만 포함)."""
+    try:
+        processed_vectors_path = os.path.join(VECTORS_DIR, "processed_vectors.json")
+        processed_metadata_path = os.path.join(VECTORS_DIR, "processed_metadata.json")
+        
+        if not os.path.exists(processed_vectors_path) or not os.path.exists(processed_metadata_path):
+            # 처리된 벡터가 없으면 일반 벡터 API 호출
+            return await get_vectors()
+        
+        with open(processed_vectors_path, 'r') as f:
+            vectors = json.load(f)
+        
+        with open(processed_metadata_path, 'r') as f:
+            metadata = json.load(f)
+        
+        return {
+            "status": "success",
+            "vectors": vectors,
+            "metadata": metadata,
+            "count": len(vectors),
+            "is_processed": True
+        }
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"Error in get_processed_vectors: {str(e)}\n{error_detail}")
+        raise HTTPException(status_code=500, detail=str(e)) 

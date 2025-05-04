@@ -13,8 +13,7 @@ os.makedirs(ANALYSIS_DIR, exist_ok=True)
 async def analyze_image(file: UploadFile = File(...)):
     try:
         # 파일 저장
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{file.filename}"
+        filename = file.filename
         file_path = os.path.join(ANALYSIS_DIR, filename)
         
         with open(file_path, "wb") as buffer:
