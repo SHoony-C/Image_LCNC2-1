@@ -232,6 +232,22 @@ export default {
     const processingQueue = ref([])
     const containerRef = ref(null)
     
+    // 이미지 해시 계산 함수
+    const calculateImageHash = async (base64Image) => {
+      // base64 데이터 추출
+      const base64Data = base64Image.split(',')[1];
+      // ArrayBuffer로 변환
+      const binaryData = atob(base64Data);
+      const bytes = new Uint8Array(binaryData.length);
+      for (let i = 0; i < binaryData.length; i++) {
+        bytes[i] = binaryData.charCodeAt(i);
+      }
+      // 해시 계산
+      const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+    
     // 노드 필터링을 위한 computed 속성
     const filteredNodes = computed(() => {
       return availableNodes.value ? availableNodes.value.filter(n => n && n.id !== 'merge') : [];
@@ -472,7 +488,7 @@ export default {
     }
 
     // 워크플로우 처리 시작
-    const processStart = () => {
+    const processStart = async () => {
       if (!inputImage.value) return
       
       showStatusMessage.value = true
@@ -496,7 +512,68 @@ export default {
       }
       
       console.log('처리할 워크플로우 경로:', workflow)
-      processWorkflow()
+      
+      try {
+        // 워크플로우 처리
+        await processWorkflow()
+        
+        // MongoDB에 워크플로우 저장
+        if (processedImages['end']) {
+          // 세션 ID 생성 (현재 시간 기반)
+          const sessionId = `workflow_${Date.now()}`
+          
+          // 저장할 워크플로우 데이터 구성
+          const workflowData = {
+            session_id: sessionId,
+            input_image_hash: await calculateImageHash(inputImage.value),
+            elements: elements.value.map(element => {
+              if (element.type === 'smoothstep') return element;
+              
+              // 노드 데이터 구조화 - 실제 값만 저장
+              const nodeData = {
+                id: element.data.id,
+                label: element.data.label,
+                position: element.position
+              };
+
+              // params에서 실제 값만 추출하여 상위 레벨로 이동
+              if (element.data.params) {
+                Object.entries(element.data.params).forEach(([key, param]) => {
+                  nodeData[key] = param.value;
+                });
+              }
+
+              return nodeData;
+            }),
+            timestamp: new Date().toISOString()
+          }
+          
+          // API 호출하여 MongoDB에 저장
+          const response = await fetch('http://localhost:8000/api/msa5/save-workflow', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(workflowData)
+          })
+          
+          const result = await response.json()
+          
+          if (result.status === 'success') {
+            console.log('워크플로우가 MongoDB에 성공적으로 저장되었습니다')
+            // 세션 ID를 localStorage에 저장 (측정 결과 저장 시 사용)
+            localStorage.setItem('current_workflow_session_id', sessionId)
+          } else {
+            console.error('워크플로우 저장 실패:', result.message)
+          }
+        }
+      } catch (error) {
+        console.error('워크플로우 처리 또는 저장 중 오류 발생:', error)
+        processingStatus.value = 'error'
+        statusMessage.value = `처리 오류: ${error.message || '알 수 없는 오류'}`
+        showStatusMessage.value = true
+        setTimeout(() => { showStatusMessage.value = false }, 5000)
+      }
     }
     
     // 워크플로우 처리 경로 찾기 (시작 노드부터 종료 노드까지)
@@ -740,6 +817,7 @@ export default {
         statusMessage.value = `처리 오류: ${error.message || '알 수 없는 오류'}`
         showStatusMessage.value = true
         setTimeout(() => { showStatusMessage.value = false }, 5000)
+        throw error; // 에러를 다시 던져서 상위 호출자가 처리할 수 있게 함
       }
     }
     

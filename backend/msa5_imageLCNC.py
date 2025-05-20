@@ -9,6 +9,8 @@ import numpy as np
 import os
 import shutil
 from datetime import datetime
+from database import lcnc_results, async_lcnc_results
+import json
 
 router = APIRouter()
 
@@ -476,21 +478,96 @@ async def upload_image(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
-@router.post("/upload")
-async def upload_image(file: UploadFile = File(...)):
+
+# 워크플로우 결과 MongoDB에 저장
+@router.post("/save-workflow")
+async def save_workflow_to_mongodb(workflow_data: Dict[str, Any] = Body(...)):
+    """
+    워크플로우 데이터를 MongoDB에 저장합니다.
+    이미지 데이터는 제외하고 노드 옵션 정보만 저장합니다.
+    같은 세션의 같은 입력 이미지에 대해서는 덮어쓰기를 수행합니다.
+    """
     try:
-        # 원본 파일명 사용 (타임스탬프 제거)
-        filename = file.filename
-        file_path = os.path.join(UPLOAD_DIR, filename)
+        # 현재 타임스탬프 추가
+        workflow_data["timestamp"] = datetime.now()
         
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # 노드 데이터 추출 및 구조화
+        nodes_data = []
+        for element in workflow_data.get("elements", []):
+            if element.get("type") not in ["smoothstep", "start", "end"]:
+                # 기본 노드 데이터
+                node_data = {
+                    "id": element.get("id"),
+                    "label": element.get("label"),
+                    "position": element.get("position")
+                }
+                
+                # params를 상위 레벨로 이동
+                params = element.get("data", {}).get("params", {})
+                node_data.update(params)
+                
+                nodes_data.append(node_data)
+        
+        # 저장할 데이터 구성
+        save_data = {
+            "session_id": workflow_data.get("session_id"),
+            "input_image_hash": workflow_data.get("input_image_hash"),
+            "nodes": nodes_data,
+            "timestamp": workflow_data["timestamp"]
+        }
+        
+        # 입력 이미지 해시로 기존 문서 찾기
+        existing_doc = await async_lcnc_results.find_one({
+            "input_image_hash": save_data["input_image_hash"]
+        })
+        
+        if existing_doc:
+            # 기존 문서 업데이트
+            result = await async_lcnc_results.update_one(
+                {"_id": existing_doc["_id"]},
+                {"$set": save_data}
+            )
+            return {
+                "status": "success",
+                "message": "워크플로우가 성공적으로 업데이트되었습니다",
+                "modified": result.modified_count > 0,
+                "document_id": str(existing_doc["_id"])
+            }
+        else:
+            # 새 문서 추가
+            result = await async_lcnc_results.insert_one(save_data)
+            return {
+                "status": "success",
+                "message": "워크플로우가 성공적으로 저장되었습니다",
+                "inserted_id": str(result.inserted_id)
+            }
             
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"워크플로우 저장 중 오류 발생: {str(e)}")
+
+# 워크플로우 결과 MongoDB에서 조회
+@router.get("/get-workflow/{session_id}")
+async def get_workflow_from_mongodb(session_id: str):
+    """
+    MongoDB에서 워크플로우 데이터를 조회합니다.
+    """
+    try:
+        # MongoDB에서 조회
+        workflow_data = await async_lcnc_results.find_one({"session_id": session_id})
+        
+        if not workflow_data:
+            return JSONResponse(
+                status_code=404,
+                content={"status": "error", "message": f"세션 ID {session_id}에 해당하는 워크플로우를 찾을 수 없습니다"}
+            )
+        
+        # _id 필드 제거 (JSON 직렬화 불가)
+        workflow_data.pop("_id", None)
+        
+        # 응답 반환
         return {
             "status": "success",
-            "message": "Image uploaded successfully",
-            "filename": filename,
-            "path": file_path
+            "data": workflow_data
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) 
+        raise HTTPException(status_code=500, detail=f"워크플로우 조회 중 오류 발생: {str(e)}") 

@@ -21,6 +21,11 @@ from side_4_management import router as management_router
 from side_5_settings import router as settings_router
 from side_6_help import router as help_router
 
+# Authentication router import
+from auth_routes import router as auth_router
+# SQLAlchemy based user router
+from user_routes import router as user_router
+
 # 환경 변수 로드
 load_dotenv()
 
@@ -58,6 +63,7 @@ async def startup_event():
     os.makedirs("./results", exist_ok=True)
     os.makedirs("./storage", exist_ok=True)
     os.makedirs("./exports", exist_ok=True)
+    os.makedirs("./certs", exist_ok=True)
     
     print("=== 이미지 처리 MSA API 서버가 시작되었습니다 ===")
 
@@ -81,6 +87,11 @@ async def root():
                 "side4": "관리 (관리자)",
                 "side5": "설정",
                 "side6": "도움말"
+            },
+            "auth": {
+                "login": "로그인",
+                "sso": "Single Sign-On (SSO)",
+                "management": "사용자 관리"
             }
         },
         "documentation": "/docs"
@@ -106,7 +117,8 @@ async def health():
                 "side4": "up (관리자)",
                 "side5": "up",
                 "side6": "up"
-            }
+            },
+            "auth": "up"
         }
     }
 
@@ -124,6 +136,11 @@ app.include_router(workflow_router, prefix="/api/workflow", tags=["workflow"])
 app.include_router(management_router, prefix="/api/management", tags=["management"])
 app.include_router(settings_router, prefix="/api/settings", tags=["settings"])
 app.include_router(help_router, prefix="/api/help", tags=["help"])
+
+# 인증 라우터 등록
+app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+# SQL 기반 사용자 라우터 등록
+app.include_router(user_router, prefix="/api/users", tags=["users"])
 
 # 서버 시작
 if __name__ == "__main__":

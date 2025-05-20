@@ -16,7 +16,7 @@ import '@mdi/font/css/materialdesignicons.css'
 
 // axios 글로벌 설정
 import axios from 'axios'
-axios.defaults.baseURL = process.env.VUE_APP_API_URL || 'http://localhost:3000'
+axios.defaults.baseURL = process.env.VUE_APP_API_URL || 'http://localhost:8000'
 axios.defaults.headers.common['Content-Type'] = 'application/json'
 
 // Vue 프로덕션 하이드레이션 경고 해결

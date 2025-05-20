@@ -111,10 +111,6 @@
               </div>
 
               <div class="results-panel">
-                <h5>측정 결과</h5>
-                <div class="results-summary">
-                  <span>총 측정: {{ measurementMode === 'defect' ? defectMeasurements.length : filteredMeasurements.length }}</span>
-                </div>
                 <div class="results-table-container">
                   <table class="results-table" v-if="measurementMode !== 'defect'">
                     <thead>
@@ -180,6 +176,19 @@
                       </tr>
                     </tbody>
                   </table>
+                </div>
+                <div class="results-bottom-bar">
+                  <div class="results-summary">
+                    <span>총 측정: {{ measurementMode === 'defect' ? defectMeasurements.length : filteredMeasurements.length }}</span>
+                  </div>
+                  <button 
+                    class="save-measurements-btn" 
+                    @click="saveMeasurementsToMongoDB"
+                    :disabled="isSaving || (measurementMode === 'defect' ? defectMeasurements.length === 0 : filteredMeasurements.length === 0)"
+                  >
+                    <i class="fas fa-save"></i>
+                    {{ isSaving ? '저장 중...' : '측정 결과 저장' }}
+                  </button>
                 </div>
               </div>
             </div>
@@ -271,6 +280,7 @@ export default {
       selectedAreaRect: null,
       defectMeasurements: [],
       selectedDefects: [],
+      isSaving: false,
     };
   },
   mounted() {
@@ -1067,7 +1077,7 @@ export default {
           throw new Error('선택된 영역이 없습니다.');
         }
         
-        const response = await fetch('/api/analyze-image', {
+        const response = await fetch('http://localhost:8000/api/analyze-image', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1134,6 +1144,62 @@ export default {
         this.render();
       }
     },
+    toggleImageSelection(image, selected) {
+      // 이미지 선택 토글
+      this.selectedImages[image.id] = selected;
+    },
+    saveMeasurementsToMongoDB() {
+      if (this.isSaving || (this.measurementMode === 'defect' ? this.defectMeasurements.length === 0 : this.filteredMeasurements.length === 0)) return;
+      
+      this.isSaving = true;
+      
+      // 세션 ID 가져오기 (localStorage에서)
+      const sessionId = localStorage.getItem('current_workflow_session_id');
+      
+      if (!sessionId) {
+        alert('워크플로우 세션을 찾을 수 없습니다. 먼저 워크플로우를 실행해 주세요.');
+        this.isSaving = false;
+        return;
+      }
+      
+      // 측정 데이터 준비
+      const measurementData = {
+        session_id: sessionId,
+        measurements: this.measurementMode === 'defect' ? this.defectMeasurements : this.filteredMeasurements,
+        measurement_mode: this.measurementMode,
+        measurement_config: {
+          magnification: this.magnification,
+          lineCount: this.lineCount,
+          brightnessThreshold: this.brightnessThreshold,
+          isReversed: this.isReversed
+        },
+        timestamp: new Date().toISOString()
+      };
+      
+      // MongoDB에 저장 API 호출
+      fetch('http://localhost:8000/api/msa6/save-measurement', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(measurementData)
+      })
+      .then(response => response.json())
+      .then(result => {
+        if (result.status === 'success') {
+          alert('측정 결과가 성공적으로 저장되었습니다.');
+        } else {
+          alert(`저장 실패: ${result.message || '알 수 없는 오류'}`);
+        }
+      })
+      .catch(error => {
+        console.error('측정 데이터 저장 중 오류:', error);
+        alert(`저장 오류: ${error.message || '알 수 없는 오류'}`);
+      })
+      .finally(() => {
+        this.isSaving = false;
+      });
+    }
   }
 };
 </script>
@@ -1161,6 +1227,8 @@ export default {
   flex-direction: column;
   overflow: hidden;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+  position: relative;
+  height: 100%;
 }
 
 .measurement-header {
@@ -1299,6 +1367,75 @@ export default {
   border-left: 1px solid #e9ecef;
   display: flex;
   flex-direction: column;
+  height: 100%;
+}
+
+.results-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.results-table-container {
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  overflow: auto;
+  height: 600px;
+  max-height: 65vh;
+}
+
+.results-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  gap: 1.5rem;
+  padding: 1.25rem 1.5rem 1.5rem 1.5rem;
+  background: #fff;
+  border-top: 1px solid #e9ecef;
+  flex-shrink: 0;
+  position: static;
+  margin-top: auto;
+}
+
+.results-bottom-bar .results-summary {
+  margin: 0;
+  padding: 0;
+  background: none;
+  font-size: 1rem;
+  color: #7950f2;
+  font-weight: 600;
+}
+
+.save-measurements-btn {
+  padding: 12px 28px;
+  background-color: #7950f2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.1rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(121, 80, 242, 0.12);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.save-measurements-btn:hover:not(:disabled) {
+  background-color: #6741d9;
+  box-shadow: 0 6px 20px rgba(121, 80, 242, 0.18);
+}
+
+.save-measurements-btn:disabled {
+  background-color: #b197fc;
+  cursor: not-allowed;
+}
+
+.save-measurements-btn i {
+  font-size: 20px;
 }
 
 .panel-section {
@@ -1372,13 +1509,6 @@ export default {
 .btn-apply:disabled {
   background: #dee2e6;
   cursor: not-allowed;
-}
-
-.results-table-container {
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
-  overflow: auto;
-  max-height: calc(100vh - 400px);
 }
 
 .results-table {
@@ -1640,7 +1770,7 @@ export default {
 }
 
 .send-api-btn:hover:not(:disabled) {
-  background: #2f9e44;
+  background-color: #2f9e44;
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }

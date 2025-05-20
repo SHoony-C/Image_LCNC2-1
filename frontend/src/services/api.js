@@ -7,7 +7,8 @@ const apiClient = axios.create({
     'Content-Type': 'application/json',
     'Accept': 'application/json'
   },
-  timeout: 10000
+  timeout: 10000,
+  withCredentials: true // CORS 요청에 credential 정보 포함
 });
 
 // 요청 인터셉터 - JWT 토큰 추가

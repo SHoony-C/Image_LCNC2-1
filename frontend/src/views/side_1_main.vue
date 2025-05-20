@@ -1,43 +1,105 @@
 <template>
   <div class="main-view">
-    <div class="mobile-header">
-      <button class="hamburger-btn" @click="toggleSidebar">
-        <i class="fas fa-bars"></i>
-      </button>
-    </div>
-    <div class="page-title">
-      <h1>I-App Main</h1>
-      <div class="title-underline"></div>
-    </div>
-    <div class="content">
-      <div class="sidebar" :class="{ 'sidebar-open': isSidebarOpen }">
-        <div class="sidebar-header">
-          <h3>메뉴</h3>
-          <button class="close-btn" @click="toggleSidebar">
-            <i class="fas fa-times"></i>
-          </button>
+    <!-- Server connection error component -->
+    <ServerConnectionError v-if="serverError" />
+    
+    <div v-else>
+      <!-- User icon in top right -->
+      <div class="user-auth-section">
+        <div v-if="isAuthenticated" class="user-icon-container">
+          <div class="user-avatar-circle" @click="toggleUserMenu">
+            <i class="fas fa-user"></i>
+          </div>
+          
+          <!-- User dropdown menu -->
+          <div class="user-dropdown" v-show="showUserMenu">
+            <div class="dropdown-header">
+              <div class="user-avatar-large">
+                <i class="fas fa-user"></i>
+              </div>
+              <div class="user-details">
+                <div class="user-email">{{ currentUser.email || currentUser.username }}</div>
+                <div class="user-id">1</div>
+              </div>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-menu-items">
+              <a href="#" class="dropdown-item">
+                <i class="fas fa-key"></i> Set OpenAI API Key
+              </a>
+              <a href="#" class="dropdown-item">
+                <i class="fas fa-robot"></i> Set Custom Llama API
+              </a>
+              <a href="#" class="dropdown-item">
+                <i class="fas fa-user-cog"></i> Profile Settings
+              </a>
+              <a href="#" class="dropdown-item">
+                <i class="fas fa-link"></i> Add Links
+              </a>
+              <a href="#" class="dropdown-item">
+                <i class="fas fa-shield-alt"></i> Security
+              </a>
+              <a href="#" class="dropdown-item" v-if="hasRole('admin')" @click.prevent="goToManagement">
+                <i class="fas fa-cog"></i> Administration
+              </a>
+            </div>
+            <div class="dropdown-divider"></div>
+            <div class="dropdown-menu-items">
+              <a href="#" class="dropdown-item logout-item" @click.prevent="handleLogout">
+                <i class="fas fa-sign-out-alt"></i> Logout
+              </a>
+            </div>
+          </div>
         </div>
-        <nav class="sidebar-nav">
-          <a href="#" class="nav-item">메뉴 1</a>
-          <a href="#" class="nav-item">메뉴 2</a>
-          <a href="#" class="nav-item">메뉴 3</a>
-        </nav>
       </div>
-      <div class="msa-grid">
-        <div class="top-row">
-          <MSA1ImageInput class="msa-card msa1" />
-          <MSA2LLMAnalysis class="msa-card msa2" />
-          <MSA3LLMAnalysis2 class="msa-card msa3" />
+      
+      <div class="mobile-header">
+        <button class="hamburger-btn" @click="toggleSidebar">
+          <i class="fas fa-bars"></i>
+        </button>
+      </div>
+      <div class="page-title">
+        <h1>I-App Main</h1>
+        <div class="title-underline"></div>
+      </div>
+
+      <div class="content">
+        <div class="sidebar" :class="{ 'sidebar-open': isSidebarOpen }">
+          <div class="sidebar-header">
+            <h3>메뉴</h3>
+            <button class="close-btn" @click="toggleSidebar">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <nav class="sidebar-nav">
+            <a href="#" class="nav-item">메뉴 1</a>
+            <a href="#" class="nav-item">메뉴 2</a>
+            <a href="#" class="nav-item">메뉴 3</a>
+          </nav>
         </div>
-        <div class="bottom-row">
-          <MSA4VectorTransform class="msa-card msa4" />
-          <MSA5ImageLCNC class="msa-card msa5" />
-          <MSA6FinalResult class="msa-card msa6" />
+        <div class="msa-grid">
+          <div class="top-row">
+            <MSA1ImageInput class="msa-card msa1" />
+            <MSA2LLMAnalysis class="msa-card msa2" />
+            <MSA3LLMAnalysis2 class="msa-card msa3" />
+          </div>
+          <div class="bottom-row">
+            <MSA4VectorTransform class="msa-card msa4" />
+            <MSA5ImageLCNC class="msa-card msa5" />
+            <MSA6FinalResult class="msa-card msa6" />
+          </div>
         </div>
       </div>
+      <MainFooter />
+      <div class="sidebar-overlay" v-if="isSidebarOpen" @click="toggleSidebar"></div>
+      
+      <!-- 로그인 모달 추가 -->
+      <LoginModal 
+        :show="showLoginModal" 
+        @close="showLoginModal = false"
+        @login-success="handleLoginSuccess"
+      />
     </div>
-    <MainFooter />
-    <div class="sidebar-overlay" v-if="isSidebarOpen" @click="toggleSidebar"></div>
   </div>
 </template>
 
@@ -49,6 +111,24 @@ import MSA4VectorTransform from '@/components/msa4_vector_transform.vue'
 import MSA5ImageLCNC from '@/components/msa5_image_lcnc.vue'
 import MSA6FinalResult from '@/components/msa6_final_result.vue'
 import MainFooter from '@/views/m0_footer.vue'
+import LoginModal from '@/components/login_modal.vue'
+import ServerConnectionError from '@/components/ServerConnectionError.vue'
+import axios from 'axios'
+
+// Add click-outside directive
+const clickOutside = {
+  beforeMount: (el, binding) => {
+    el.clickOutsideEvent = (event) => {
+      if (!(el === event.target || el.contains(event.target))) {
+        binding.value(event);
+      }
+    };
+    document.addEventListener('click', el.clickOutsideEvent);
+  },
+  unmounted: (el) => {
+    document.removeEventListener('click', el.clickOutsideEvent);
+  },
+};
 
 export default {
   name: 'MSADashboard',
@@ -59,16 +139,191 @@ export default {
     MSA4VectorTransform,
     MSA5ImageLCNC,
     MSA6FinalResult,
-    MainFooter
+    MainFooter,
+    LoginModal,
+    ServerConnectionError
+  },
+  directives: {
+    clickOutside
   },
   data() {
     return {
-      isSidebarOpen: false
+      isSidebarOpen: false,
+      showLoginModal: false,
+      isAuthenticated: false,
+      currentUser: null,
+      authChecked: false,
+      serverError: false,
+      showUserMenu: false
     }
+  },
+  created() {
+    // Add event listener for clicks outside dropdown
+    document.addEventListener('click', this.closeOnOutsideClick);
+    
+    // URL 파라미터에서 토큰 확인 (SSO 리다이렉트 처리)
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const userId = urlParams.get('user_id');
+    const errorParam = urlParams.get('error');
+    
+    if (token && userId) {
+      // SSO로부터 받은 토큰 저장
+      localStorage.setItem('token', token);
+      
+      // URL에서 파라미터 제거 (보안을 위해)
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
+      
+      // 사용자 정보 조회
+      this.checkAuthentication();
+    } else if (errorParam) {
+      alert('로그인 중 오류가 발생했습니다. 다시 시도해주세요.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+      // 기존 로그인 세션 확인
+      this.checkAuthentication();
+    }
+    
+    // Test server connection
+    this.testServerConnection();
+  },
+  beforeUnmount() {
+    // Clean up event listener
+    document.removeEventListener('click', this.closeOnOutsideClick);
   },
   methods: {
     toggleSidebar() {
       this.isSidebarOpen = !this.isSidebarOpen;
+    },
+    toggleUserMenu(event) {
+      // Stop event propagation to prevent immediate closing
+      if (event) {
+        event.stopPropagation();
+      }
+      console.log("Toggling user menu, current state:", this.showUserMenu);
+      this.showUserMenu = !this.showUserMenu;
+    },
+    closeOnOutsideClick(event) {
+      const dropdown = document.querySelector('.user-dropdown');
+      const avatar = document.querySelector('.user-avatar-circle');
+      
+      if (this.showUserMenu && 
+          dropdown && 
+          avatar && 
+          !dropdown.contains(event.target) && 
+          !avatar.contains(event.target)) {
+        this.showUserMenu = false;
+      }
+    },
+    async testServerConnection() {
+      try {
+        // Try to connect to the health endpoint
+        await axios.get('/health');
+        this.serverError = false;
+      } catch (error) {
+        console.error('Server connection test failed:', error);
+        if (error.code === 'ERR_NETWORK') {
+          this.serverError = true;
+        }
+      }
+    },
+    async checkAuthentication() {
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        this.isAuthenticated = false;
+        this.currentUser = null;
+        this.authChecked = true;
+        // Automatically show login modal if not authenticated
+        this.showLoginModal = true;
+        return;
+      }
+      
+      try {
+        const response = await axios.get('/api/auth/check-auth', {
+          params: { token }
+        });
+        
+        if (response.data.authenticated) {
+          this.isAuthenticated = true;
+          this.currentUser = response.data.user;
+        } else {
+          this.isAuthenticated = false;
+          this.currentUser = null;
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          // Automatically show login modal if authentication check fails
+          this.showLoginModal = true;
+        }
+      } catch (error) {
+        console.error('Authentication check error:', error);
+        this.isAuthenticated = false;
+        this.currentUser = null;
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        // Automatically show login modal if authentication check errors
+        this.showLoginModal = true;
+        
+        // Check if it's a network error
+        if (error.code === 'ERR_NETWORK') {
+          this.serverError = true;
+        }
+      }
+      
+      this.authChecked = true;
+    },
+    handleLoginSuccess(user) {
+      this.isAuthenticated = true;
+      this.currentUser = user;
+    },
+    async handleLogout() {
+      try {
+        await axios.get('/api/auth/slo');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('remember');
+        
+        this.isAuthenticated = false;
+        this.currentUser = null;
+        this.showUserMenu = false;
+      } catch (error) {
+        console.error('Logout error:', error);
+        
+        // Force logout even if server request fails
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('remember');
+        
+        this.isAuthenticated = false;
+        this.currentUser = null;
+        
+        // Check if it's a network error
+        if (error.code === 'ERR_NETWORK') {
+          this.serverError = true;
+        }
+      }
+    },
+    getRoleClass(roles) {
+      if (roles && roles.includes('admin')) return 'role-admin';
+      if (roles && roles.includes('manager')) return 'role-manager';
+      return 'role-user';
+    },
+    getRoleLabel(roles) {
+      if (roles && roles.includes('admin')) return '관리자';
+      if (roles && roles.includes('manager')) return '매니저';
+      return '사용자';
+    },
+    hasRole(roleName) {
+      return this.currentUser && this.currentUser.roles && this.currentUser.roles.includes(roleName);
+    },
+    goToManagement() {
+      this.$router.push('/admin/users');
+    },
+    viewProfile() {
+      // Implement profile view functionality
+      alert('프로필 기능은 개발 중입니다.');
+      this.showUserMenu = false;
     }
   }
 }
@@ -89,6 +344,7 @@ export default {
 .page-title {
   width: 100%;
   text-align: center;
+  margin-top: 3rem; /* Add space for the user icon at the top */
   margin-bottom: 1rem;
 }
 
@@ -410,5 +666,140 @@ export default {
   height: 100% !important;
   max-height: 100% !important;
   overflow: hidden !important;
+}
+
+/* User auth section */
+.user-auth-section {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 999;
+}
+
+.user-icon-container {
+  position: relative;
+}
+
+.user-avatar-circle {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background-color: #4a5568;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  font-size: 1.2rem;
+  transition: background-color 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.user-avatar-circle:hover {
+  background-color: #2d3748;
+}
+
+/* User dropdown menu */
+.user-dropdown {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  width: 280px;
+  background: #1a202c;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  overflow: hidden;
+  animation: slideDown 0.2s ease-out;
+  color: #e2e8f0;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-header {
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background-color: #2d3748;
+}
+
+.user-avatar-large {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background-color: #4a5568;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.5rem;
+}
+
+.user-details {
+  flex: 1;
+}
+
+.user-email {
+  font-weight: 500;
+  color: #e2e8f0;
+  margin-bottom: 0.25rem;
+}
+
+.user-id {
+  font-size: 0.875rem;
+  color: #a0aec0;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background-color: #4a5568;
+  margin: 0;
+}
+
+.dropdown-menu-items {
+  padding: 0.5rem 0;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: #cbd5e0;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.dropdown-item:hover {
+  background-color: #2d3748;
+}
+
+.dropdown-item i {
+  width: 1.5rem;
+  text-align: center;
+  color: #a0aec0;
+}
+
+.logout-item {
+  color: #fc8181;
+}
+
+.logout-item i {
+  color: #fc8181;
+}
+
+/* Hide the previous user bar */
+.user-auth-bar {
+  display: none;
 }
 </style> 
