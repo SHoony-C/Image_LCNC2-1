@@ -1,24 +1,13 @@
 # image_lcnc_msa2
 
-## Project setup
+## To Do List (Out)
 ```
-npm install
-```
-
-### Compiles and hot-reloads for development
-```
-npm run serve
+ - 기준선 만들기
+ - Mongo DB 적재 기능
+ - 측정 결과 Push 기능
 ```
 
-### Compiles and minifies for production
+## To Do List (In)
 ```
-npm run build
+ - SSO 로그인 (LLM mini 참고)
 ```
-
-### Lints and fixes files
-```
-npm run lint
-```
-
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
