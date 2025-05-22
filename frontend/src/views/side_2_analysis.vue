@@ -1,5 +1,8 @@
 <template>
   <div class="analysis-container">
+    <!-- AppHeader 컴포넌트 추가 -->
+    <AppHeader pageTitle="Analysis" />
+    
     <div class="chart-container">
       <div class="chart-card">
         <div class="chart-header">
@@ -154,7 +157,7 @@
             </tr>
           </thead>
           <tbody>
-            <template v-for="(group, groupIndex) in Object.values(groupDataByImage)" :key="'group-' + groupIndex">
+            <template v-for="(group, groupIndex) in Object.values(groupDataByImage)">
               <tr v-for="(point, index) in group.points" 
                   :key="'point-' + groupIndex + '-' + index"
                   :class="{ 
@@ -201,7 +204,7 @@
             </tr>
           </thead>
           <tbody>
-            <template v-for="(group, groupIndex) in Object.values(groupDefectDataByImage)" :key="'group-' + groupIndex">
+            <template v-for="(group, groupIndex) in Object.values(groupDefectDataByImage)">
               <tr v-for="(point, index) in group.points" 
                   :key="'point-' + groupIndex + '-' + index"
                   :class="{ 
@@ -268,9 +271,13 @@
 <script>
 import { ref, onMounted, computed, watch, reactive } from 'vue'
 import axios from 'axios'
+import AppHeader from '@/components/AppHeader.vue'
 
 export default {
   name: 'Side2Analysis',
+  components: {
+    AppHeader
+  },
   setup() {
     const chartContainer = ref(null)
     const width = ref(800)

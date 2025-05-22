@@ -336,4 +336,14 @@ async def update_user_role(user_id: int, role_update: RoleUpdate, current_user: 
         return {"status": "success"}
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Role update failed: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"Role update failed: {str(e)}")
+
+@router.post("/logout")
+async def logout():
+    """사용자 로그아웃 처리
+    
+    클라이언트에서 로컬 스토리지의 토큰을 제거하는 것이 주요 로그아웃 메커니즘이지만,
+    서버에서도 로그아웃 이벤트를 기록하고 응답을 반환합니다.
+    """
+    print("로그아웃 요청 처리됨")
+    return {"status": "success", "message": "Successfully logged out"} 

@@ -7,6 +7,7 @@ import UserManagement from '@/views/side_admin2_users.vue'
 import SettingsView from '@/views/side_admin3_settings.vue'
 import UserCountView from '@/views/side_admin4_user-count.vue'
 import UserManagementView from '@/views/side_4_management.vue'
+import store from '@/store'
 
 const routes = [
   {
@@ -31,22 +32,26 @@ const routes = [
   {
     path: '/admin/dashboard',
     name: 'AdminDashboard',
-    component: AdminDashboard
+    component: AdminDashboard,
+    meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
     path: '/admin/users',
     name: 'UserManagement',
-    component: UserManagement
+    component: UserManagement,
+    meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
     path: '/admin/settings',
     name: 'Settings',
-    component: SettingsView
+    component: SettingsView,
+    meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
     path: '/admin/user-count',
     name: 'UserCount',
-    component: UserCountView
+    component: UserCountView,
+    meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
     path: '/management',
@@ -62,30 +67,40 @@ const router = createRouter({
 })
 
 // Navigation guard for authentication
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   // Check if route requires authentication
   if (to.matched.some(record => record.meta.requiresAuth)) {
-    const token = localStorage.getItem('token');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    // Ensure auth state is checked
+    if (!store.getters['auth/isAuthChecked']) {
+      await store.dispatch('auth/checkAuth')
+    }
     
-    if (!token) {
-      // Redirect to login page if not authenticated
-      next({ name: 'Main', query: { redirect: to.fullPath } });
-      return;
+    const isAuthenticated = store.getters['auth/isAuthenticated']
+    const user = store.state.auth.user
+    
+    if (!isAuthenticated) {
+      // Store intended destination for after login
+      sessionStorage.setItem('redirectAfterLogin', to.fullPath)
+      
+      // Allow navigation to continue to root route where login modal will show
+      next({ path: '/' })
+      return
     }
     
     // Check if route requires admin role
     if (to.matched.some(record => record.meta.requiresAdmin)) {
-      const hasAdminRole = user.roles && user.roles.includes('admin');
+      // Check if user has admin role
+      const hasAdminRole = user && 
+        (user.roles?.includes('admin') || user.permission === 'admin')
       
       if (!hasAdminRole) {
-        next({ name: 'Main' });
-        return;
+        next({ path: '/' })
+        return
       }
     }
   }
   
-  next();
-});
+  next()
+})
 
 export default router 

@@ -17,7 +17,6 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(255), unique=True, nullable=False, index=True)
     department = Column(String(255), nullable=True)
-    full_name = Column(String(255), nullable=True)
     hashed_password = Column(String(255), nullable=True)  # Nullable for SSO users
     is_active = Column(Boolean, default=True)
     permission = Column(String(50), default="user")  # 권한 필드 추가 (기본값: user)
@@ -32,7 +31,7 @@ class User(Base):
             "id": self.id,
             "username": self.username,
             "email": self.email,
-            "full_name": self.full_name,
+            "full_name": self.username,
             "department": self.department,
             "permission": self.permission,
             "is_active": self.is_active,

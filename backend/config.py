@@ -2,22 +2,17 @@
 
 # OAuth/SSO Configuration
 IDP_Config = {
-    # Auth server URL (replace with actual URL)
-    'Idp.AuthUrl': 'https://your-auth-server/oauth2/authorize',
-    
-    # Sign out URL
-    'Idp.SignoutUrl': 'https://your-auth-server/oauth2/logout',
-    
-    # Certificate file details for JWT verification
-    'CertFile_Path': './certs/',
-    'CertFile_Name': 'public_key.pem',
-    
-    # Client settings
-    'ClientId': 'your-client-id',
-    'RedirectUri': 'https://10.166.248.21/acs',
-    
-    # Scopes
-    'Scopes': 'openid profile',
+    'ClientId': '844891853332-s785qgm7br1io04pbvtpsic4kqce8d7o.apps.googleusercontent.com',  # Google OAuth Client ID
+    'ClientSecret': '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',  # Google OAuth Client Secret
+    'RedirectUri': 'http://localhost:8000/api/auth/acs',  # Callback URL
+    'AuthorizeUrl': 'https://accounts.google.com/o/oauth2/v2/auth',  # Google OAuth endpoint
+    'Idp.AuthUrl': 'https://accounts.google.com/o/oauth2/v2/auth',  # Google OAuth endpoint
+    'Idp.SignoutUrl': 'https://accounts.google.com/logout',  # Google logout URL
+    'CertFile_Path': './certificates/',  # Directory where certificates are stored
+    'CertFile_Name': 'public_key.pem',  # Public key file name for JWT verification
+    'Frontend_Redirect_Uri': 'http://localhost:8080/',  # Frontend URL to redirect after auth
+    'Scopes': 'openid email profile',  # OAuth scopes
+    'ResponseType': 'id_token token',  # OAuth response type
 }
 
 # Authentication settings
@@ -38,4 +33,14 @@ MONGODB_SETTINGS = {
 }
 
 # Available user roles
-USER_ROLES = ['admin', 'manager', 'user'] 
+USER_ROLES = ['admin', 'manager', 'user']
+
+# MySQL settings for SQL database
+MYSQL_SETTINGS = {
+    'HOST': 'localhost',
+    'PORT': 3306,
+    'USER': 'root',
+    'PASSWORD': 'root',
+    'DATABASE': 'lcnc_app',
+    'CHARSET': 'utf8mb4'
+} 

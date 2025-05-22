@@ -61,6 +61,9 @@
             <button type="button" class="sso-btn" @click="handleSSOLogin">
               <i class="fas fa-building"></i> 기업계정으로 로그인
             </button>
+            <button type="button" class="google-btn" @click="handleGoogleLogin">
+              <i class="fab fa-google"></i> Google 계정으로 로그인
+            </button>
           </div>
 
           <div class="signup-link">
@@ -302,6 +305,26 @@ export default {
     handleSSOLogin() {
       // SSO 로그인 페이지로 리다이렉트
       window.location.href = '/api/auth/auth_sh';
+    },
+    handleGoogleLogin() {
+      // Google OAuth 로그인 엔드포인트로 리다이렉트
+      console.log('Google 로그인 시도: Google OAuth 엔드포인트로 리다이렉트');
+      try {
+        // 현재 환경에 따라 URL 설정
+        const baseUrl = process.env.NODE_ENV === 'production' 
+          ? window.location.origin 
+          : 'http://localhost:8000';
+        
+        // 디버깅용 URL 로깅
+        const loginUrl = `${baseUrl}/api/auth/google/login`;
+        console.log('Google 로그인 URL:', loginUrl);
+        
+        // 직접 리다이렉트 (fetch 요청 제거하여 더 간단하게)
+        window.location.href = loginUrl;
+      } catch (error) {
+        console.error('Google 로그인 리다이렉트 오류:', error);
+        this.error = '구글 로그인 처리 중 오류가 발생했습니다.';
+      }
     }
   }
 };
@@ -500,8 +523,10 @@ export default {
 
 /* SSO 로그인 스타일 */
 .sso-login-section {
-  margin-top: 12px;
-  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .divider {
@@ -530,24 +555,38 @@ export default {
   right: 0;
 }
 
-.sso-btn {
-  width: 100%;
-  padding: 14px;
-  background-color: #2d3748;
-  color: white;
-  border: none;
+.sso-btn, .google-btn {
+  padding: 12px;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  font-weight: 600;
   display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
 .sso-btn:hover {
-  background-color: #1a202c;
+  background-color: #e2e8f0;
+}
+
+.google-btn {
+  background-color: #ffffff;
+  border: 1px solid #dadce0;
+  color: #3c4043;
+}
+
+.google-btn:hover {
+  background-color: #f8f9fa;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.3);
+}
+
+.google-btn i {
+  color: #4285F4;
+  font-size: 18px;
 }
 
 @media (max-width: 480px) {

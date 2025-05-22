@@ -25,6 +25,14 @@
     <main class="main-content">
       <router-view />
     </main>
+    
+    <!-- Login Modal -->
+    <LoginModal 
+      v-if="showLoginModal" 
+      :show="showLoginModal"
+      @close="showLoginModal = false"
+      @login-success="handleLoginSuccess"
+    />
   </div>
 </template>
 
@@ -33,19 +41,25 @@ import { computed, ref, onMounted } from 'vue'
 import { useStore } from 'vuex'
 import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '@/views/Sidebar.vue'
+import LoginModal from '@/components/login_modal.vue'
 
 export default {
   name: 'App',
   components: {
-    AppSidebar
+    AppSidebar,
+    LoginModal
   },
   setup() {
     const store = useStore()
     const router = useRouter()
     const route = useRoute()
     const isLoading = ref(true)
+    const showLoginModal = ref(false)
 
     const username = computed(() => store.state.auth.user?.username || '게스트')
+    const isAuthenticated = computed(() => store.getters['auth/isAuthenticated'])
+    const isAuthChecked = computed(() => store.getters['auth/isAuthChecked'])
+    
     const currentPath = computed(() => {
       const paths = {
         '/': '대시보드',
@@ -60,18 +74,77 @@ export default {
       await store.dispatch('auth/logout')
       router.push('/login')
     }
+    
+    const handleLoginSuccess = () => {
+      showLoginModal.value = false
+    }
 
     const isSidebarCollapsed = ref(false)
 
     const handleSidebarToggle = (isCollapsed) => {
       isSidebarCollapsed.value = isCollapsed
     }
+    
+    // Check for URL parameters from OAuth redirects
+    const checkForAuthRedirect = async () => {
+      console.log('App.vue - 인증 리다이렉트 확인 시작')
+      console.log('현재 URL:', window.location.href)
+      console.log('URL 해시 존재:', !!window.location.hash)
+      
+      // URL 해시나 쿼리 파라미터에서 토큰을 찾기 위해 
+      // Vuex 스토어의 handleAuthRedirect 액션을 직접 호출
+      try {
+        console.log('auth/handleAuthRedirect 호출')
+        const success = await store.dispatch('auth/handleAuthRedirect')
+        
+        if (success) {
+          console.log('인증 성공, 세션 유지')
+          
+          // Clean URL after processing
+          if (window.location.search || window.location.hash) {
+            console.log('URL 파라미터 제거')
+            window.history.replaceState({}, document.title, window.location.pathname)
+          }
+          
+          // 메인 페이지로 리다이렉트 (이미 메인 페이지라면 새로고침하지 않음)
+          if (router.currentRoute.value.path !== '/main') {
+            router.push('/main')
+          }
+          return true
+        } else {
+          console.error('토큰 검증 실패')
+          showLoginModal.value = true
+          return false
+        }
+      } catch (error) {
+        console.error('OAuth 리다이렉트 처리 오류:', error)
+        showLoginModal.value = true
+        return false
+      }
+    }
+    
+    // Check authentication status
+    const checkAuth = async () => {
+      // First check if we have OAuth redirect parameters
+      const redirectSuccess = await checkForAuthRedirect()
+      
+      if (!redirectSuccess) {
+        // If no redirect parameters or redirect failed, check existing auth
+        const isLoggedIn = await store.dispatch('auth/checkAuth')
+        
+        if (!isLoggedIn) {
+          showLoginModal.value = true
+        }
+      }
+    }
 
-    onMounted(() => {
-      // Simulate loading time
+    onMounted(async () => {
+      // Simulate loading time while checking auth
+      await checkAuth()
+      
       setTimeout(() => {
         isLoading.value = false
-      }, 1500)
+      }, 1000)
     })
 
     return {
@@ -80,7 +153,11 @@ export default {
       logout,
       isSidebarCollapsed,
       handleSidebarToggle,
-      isLoading
+      isLoading,
+      isAuthenticated,
+      isAuthChecked,
+      showLoginModal,
+      handleLoginSuccess
     }
   }
 }

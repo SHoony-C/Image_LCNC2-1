@@ -78,12 +78,12 @@ const authService = {
       })
       .catch(() => {
         // Fall back to old endpoint if new one fails
-        return apiClient.post('/auth/refresh-token')
-          .then(response => {
-            if (response.data.token) {
-              localStorage.setItem('token', response.data.token);
-            }
-            return response.data;
+    return apiClient.post('/auth/refresh-token')
+      .then(response => {
+        if (response.data.token) {
+          localStorage.setItem('token', response.data.token);
+        }
+        return response.data;
           });
       });
   },
@@ -97,7 +97,7 @@ const authService = {
     return apiClient.post('/users/forgot-password', { email })
       .catch(() => {
         // Fall back to old endpoint if new one fails
-        return apiClient.post('/auth/forgot-password', { email });
+    return apiClient.post('/auth/forgot-password', { email });
       });
   },
 
@@ -111,7 +111,7 @@ const authService = {
     return apiClient.post('/users/reset-password', { token, newPassword })
       .catch(() => {
         // Fall back to old endpoint if new one fails
-        return apiClient.post('/auth/reset-password', { token, newPassword });
+    return apiClient.post('/auth/reset-password', { token, newPassword });
       });
   }
 };

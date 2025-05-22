@@ -156,6 +156,15 @@
               >
             </div>
             <div class="form-group">
+              <label for="department">부서</label>
+              <input 
+                type="text" 
+                id="department" 
+                v-model="newUser.department"
+                placeholder="부서 입력"
+              >
+            </div>
+            <div class="form-group">
               <label for="password">비밀번호 *</label>
               <div class="password-input">
                 <input 
@@ -226,7 +235,17 @@
               <input 
                 type="text" 
                 id="edit-fullName" 
-                v-model="editingUser.fullName"
+                v-model="editingUser.full_name"
+                placeholder="이름 입력"
+              >
+            </div>
+            <div class="form-group">
+              <label for="edit-department">부서</label>
+              <input 
+                type="text" 
+                id="edit-department" 
+                v-model="editingUser.department"
+                placeholder="부서 입력"
               >
             </div>
             <div class="form-group">
@@ -316,6 +335,7 @@ export default {
       searchQuery: '',
       roleFilters: {
         admin: true,
+        'sub-admin': true,
         manager: true,
         user: true
       },
@@ -328,16 +348,17 @@ export default {
         username: '',
         email: '',
         fullName: '',
+        department: '',
         password: '',
         permission: 'user'
       },
       editingUser: {
-        id: '',
+        id: null,
         username: '',
         email: '',
-        fullName: '',
-        password: '',
-        permission: 'user',
+        full_name: '',
+        department: '',
+        permission: '',
         is_active: true
       },
       userToDelete: null
@@ -455,7 +476,8 @@ export default {
         id: user.id,
         username: user.username,
         email: user.email || '',
-        fullName: user.full_name || '',
+        full_name: user.full_name || '',
+        department: user.department || '',
         password: '',
         permission: user.permission,
         is_active: user.is_active
@@ -471,7 +493,8 @@ export default {
         // 사용자 정보 업데이트
         const userData = {
           email: this.editingUser.email,
-          full_name: this.editingUser.fullName,
+          full_name: this.editingUser.full_name,
+          department: this.editingUser.department,
           permission: this.editingUser.permission
         };
         
@@ -531,6 +554,7 @@ export default {
         formData.append('email', this.newUser.email);
         formData.append('password', this.newUser.password);
         formData.append('full_name', this.newUser.fullName);
+        formData.append('department', this.newUser.department);
         formData.append('permission', this.newUser.permission);
         
         // 사용자 추가 정보 로깅
@@ -541,10 +565,11 @@ export default {
         console.log("  username:", this.newUser.username);
         console.log("  email:", this.newUser.email);
         console.log("  full_name:", this.newUser.fullName);
+        console.log("  department:", this.newUser.department);
         console.log("  permission:", this.newUser.permission);
         console.log("  password: [보안 정보 - 표시하지 않음]");
-        console.log("- 예상 SQL 쿼리: INSERT INTO users (username, email, full_name, permission, hashed_password) VALUES (?, ?, ?, ?, ?)");
-        console.log("- 쿼리 파라미터:", [this.newUser.username, this.newUser.email, this.newUser.fullName, this.newUser.permission, "[해시된 암호]"]);
+        console.log("- 예상 SQL 쿼리: INSERT INTO users (username, email, full_name, department, permission, hashed_password) VALUES (?, ?, ?, ?, ?, ?)");
+        console.log("- 쿼리 파라미터:", [this.newUser.username, this.newUser.email, this.newUser.fullName, this.newUser.department, this.newUser.permission, "[해시된 암호]"]);
         console.log("요청 시작 시간:", new Date().toISOString());
         
         // API 호출
@@ -685,6 +710,7 @@ export default {
         username: '',
         email: '',
         fullName: '',
+        department: '',
         password: '',
         permission: 'user'
       };

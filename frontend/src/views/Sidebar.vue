@@ -27,8 +27,8 @@
         </router-link>
       </nav>
 
-      <div class="section-title">ADMIN</div>
-      <nav class="nav-menu">
+      <div v-if="isAdmin" class="section-title">ADMIN</div>
+      <nav v-if="isAdmin" class="nav-menu">
         <router-link to="/admin/dashboard" class="nav-item" active-class="active">
           <i class="fas fa-tachometer-alt"></i>
           <span v-if="!isCollapsed">Dashboard</span>
@@ -51,8 +51,24 @@
 </template>
 
 <script>
+import { computed } from 'vue';
+import { useStore } from 'vuex';
+
 export default {
   name: 'AppSidebar',
+  setup() {
+    const store = useStore();
+    
+    // 현재 사용자가 관리자인지 확인
+    const isAdmin = computed(() => {
+      const user = store.state.auth.user;
+      return user && (user.permission === 'admin' || (user.roles && user.roles.includes('admin')));
+    });
+    
+    return {
+      isAdmin
+    };
+  },
   data() {
     return {
       isCollapsed: false

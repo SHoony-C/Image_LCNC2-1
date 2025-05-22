@@ -1,7 +1,6 @@
 from fastapi import FastAPI, APIRouter
 import uvicorn
 import os
-import httpx
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -22,7 +21,7 @@ from side_5_settings import router as settings_router
 from side_6_help import router as help_router
 
 # Authentication router import
-from auth_routes import router as auth_router
+from auth import router as auth_router
 # SQLAlchemy based user router
 from user_routes import router as user_router
 
@@ -64,6 +63,7 @@ async def startup_event():
     os.makedirs("./storage", exist_ok=True)
     os.makedirs("./exports", exist_ok=True)
     os.makedirs("./certs", exist_ok=True)
+    os.makedirs("./certificates", exist_ok=True)  # 인증서 디렉토리 추가
     
     print("=== 이미지 처리 MSA API 서버가 시작되었습니다 ===")
 

@@ -4,63 +4,13 @@
     <ServerConnectionError v-if="serverError" />
     
     <div v-else>
-      <!-- User icon in top right -->
-      <div class="user-auth-section">
-        <div v-if="isAuthenticated" class="user-icon-container">
-          <div class="user-avatar-circle" @click="toggleUserMenu">
-            <i class="fas fa-user"></i>
-          </div>
-          
-          <!-- User dropdown menu -->
-          <div class="user-dropdown" v-show="showUserMenu">
-            <div class="dropdown-header">
-              <div class="user-avatar-large">
-                <i class="fas fa-user"></i>
-              </div>
-              <div class="user-details">
-                <div class="user-email">{{ currentUser.email || currentUser.username }}</div>
-                <div class="user-id">1</div>
-              </div>
-            </div>
-            <div class="dropdown-divider"></div>
-            <div class="dropdown-menu-items">
-              <a href="#" class="dropdown-item">
-                <i class="fas fa-key"></i> Set OpenAI API Key
-              </a>
-              <a href="#" class="dropdown-item">
-                <i class="fas fa-robot"></i> Set Custom Llama API
-              </a>
-              <a href="#" class="dropdown-item">
-                <i class="fas fa-user-cog"></i> Profile Settings
-              </a>
-              <a href="#" class="dropdown-item">
-                <i class="fas fa-link"></i> Add Links
-              </a>
-              <a href="#" class="dropdown-item">
-                <i class="fas fa-shield-alt"></i> Security
-              </a>
-              <a href="#" class="dropdown-item" v-if="hasRole('admin')" @click.prevent="goToManagement">
-                <i class="fas fa-cog"></i> Administration
-              </a>
-            </div>
-            <div class="dropdown-divider"></div>
-            <div class="dropdown-menu-items">
-              <a href="#" class="dropdown-item logout-item" @click.prevent="handleLogout">
-                <i class="fas fa-sign-out-alt"></i> Logout
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- 기존 사용자 아이콘 섹션 제거하고 AppHeader 추가 -->
+      <AppHeader pageTitle="I-App Main" />
       
       <div class="mobile-header">
         <button class="hamburger-btn" @click="toggleSidebar">
           <i class="fas fa-bars"></i>
         </button>
-      </div>
-      <div class="page-title">
-        <h1>I-App Main</h1>
-        <div class="title-underline"></div>
       </div>
 
       <div class="content">
@@ -113,6 +63,7 @@ import MSA6FinalResult from '@/components/msa6_final_result.vue'
 import MainFooter from '@/views/m0_footer.vue'
 import LoginModal from '@/components/login_modal.vue'
 import ServerConnectionError from '@/components/ServerConnectionError.vue'
+import AppHeader from '@/components/AppHeader.vue'
 import axios from 'axios'
 
 // Add click-outside directive
@@ -141,7 +92,8 @@ export default {
     MSA6FinalResult,
     MainFooter,
     LoginModal,
-    ServerConnectionError
+    ServerConnectionError,
+    AppHeader
   },
   directives: {
     clickOutside
@@ -331,7 +283,7 @@ export default {
 
 <style scoped>
 .main-view {
-  padding: 1rem;
+  padding: clamp(1.5rem, 3vw, 2.5rem);
   background: var(--primary-50);
   min-height: 100vh;
   width: 100%;
@@ -365,14 +317,11 @@ export default {
 }
 
 .content {
-  flex: 1;
+  margin-top: 1rem;
   display: flex;
   flex-direction: column;
-  margin-bottom: 2rem;
-  height: calc(100vh - 10rem);
-  min-height: 600px;
-  overflow: hidden !important;
-  position: relative;
+  gap: 1.5rem;
+  flex: 1;
 }
 
 .msa-grid {
@@ -670,10 +619,7 @@ export default {
 
 /* User auth section */
 .user-auth-section {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  z-index: 999;
+  display: none; /* 기존 사용자 인증 섹션 숨김 */
 }
 
 .user-icon-container {

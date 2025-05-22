@@ -1,9 +1,6 @@
 <template>
   <div class="addon-view">
-    <div class="page-title">
-      <h1>추가 기능</h1>
-      <div class="title-underline"></div>
-    </div>
+    <AppHeader pageTitle="추가 기능" />
     <div class="content">
       <div class="addon-grid">
         <div class="addon-card">
@@ -88,8 +85,13 @@
 </template>
 
 <script>
+import AppHeader from '@/components/AppHeader.vue';
+
 export default {
   name: 'AddonView',
+  components: {
+    AppHeader
+  },
   setup() {
     return {
       // Add your component logic here

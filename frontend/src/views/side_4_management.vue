@@ -1212,7 +1212,7 @@ export default {
   }
   
   .action-buttons {
-    flex-direction: column;
+  flex-direction: column;
     gap: 0.25rem;
   }
   
