@@ -301,8 +301,7 @@ async def find_similar_images(image_name: str, count: int = 5):
     """특정 이미지와 가장 유사한 이미지를 찾습니다."""
     try:
         # 타임스탬프 제거한 원본 이미지 이름
-        original_name = remove_timestamp(image_name)
-        print(f"Finding similar images for: {original_name} (original input: {image_name})")
+        print(f"Finding similar images for: {image_name} )")
         
         # 벡터 데이터 로드
         vectors_path = os.path.join(VECTORS_DIR, "vectors.json")
@@ -313,7 +312,6 @@ async def find_similar_images(image_name: str, count: int = 5):
                 "status": "warning",
                 "message": "Vectors not yet extracted, please run extract-vectors first"
             }
-        
         with open(vectors_path, 'r') as f:
             vectors = json.load(f)
         
@@ -321,19 +319,19 @@ async def find_similar_images(image_name: str, count: int = 5):
             filenames = json.load(f)
         
         # 모든 파일명에서 타임스탬프 제거한 버전 맵 생성
-        clean_filenames = [remove_timestamp(fname) for fname in filenames]
+        clean_filenames = [fname for fname in filenames]
         
         # 원본 이름으로 인덱스 찾기 시도 (타임스탬프 제거 후)
         matching_indices = []
         for i, (fname, clean_fname) in enumerate(zip(filenames, clean_filenames)):
-            if clean_fname == original_name:
+            if clean_fname == image_name:
                 matching_indices.append(i)
                 print(f"Found matching index {i}: {fname} -> {clean_fname}")
         
         if not matching_indices:
             return {
                 "status": "error",
-                "message": f"Image '{original_name}' not found in the dataset"
+                "message": f"Image '{image_name}' not found in the dataset"
             }
         
         # 첫 번째 매칭 인덱스 사용
@@ -354,7 +352,7 @@ async def find_similar_images(image_name: str, count: int = 5):
             similarity = dot_product / (norm_a * norm_b)
             
             # 동일한 원본 이미지(타임스탬프만 다른)는 제외
-            if clean_filenames[i] == original_name:
+            if clean_filenames[i] == image_name:
                 print(f"Skipping same original image: {filenames[i]} -> {clean_filenames[i]}")
                 continue
                 
@@ -385,7 +383,8 @@ async def find_similar_images(image_name: str, count: int = 5):
         
         # 이미지 URL 생성 및 불필요한 필드 제거
         for result in top_results:
-            result["image_url"] = f"/storage/{result['filename']}"
+            # 실제 이미지 경로인 /images/를 사용
+            result["image_url"] = f"/images/{result['filename']}"
             # 원본 파일명으로 대체
             result["filename"] = result["clean_filename"]
             # 임시 필드 제거
@@ -393,8 +392,8 @@ async def find_similar_images(image_name: str, count: int = 5):
         
         return {
             "status": "success",
-            "query_image": original_name,
-            "query_image_url": f"/storage/{image_name}",
+            "query_image": image_name,
+            "query_image_url": f"/images/{image_name}",
             "similar_images": top_results
         }
     except Exception as e:
@@ -416,36 +415,68 @@ async def load_local_images(directory_path: Optional[str] = Query(None, descript
         if not path and data and "directory_path" in data:
             path = data["directory_path"]
         
+        # '_before' 접미사 필터 옵션 확인
+        include_before_only = False
+        if data and "includeBeforeImagesOnly" in data:
+            include_before_only = data["includeBeforeImagesOnly"]
+        
+        print(f"필터링 옵션 상태: includeBeforeImagesOnly = {include_before_only}")
+        
         if not path:
             raise HTTPException(status_code=400, detail="Directory path is required")
             
         # 지정된 디렉토리가 존재하는지 확인
         if not os.path.exists(path):
             raise HTTPException(status_code=404, detail=f"Directory not found: {path}")
-            
-        # 디렉토리에서 이미지 파일 찾기
+        
+        # 디렉토리에서 이미지 파일 찾기 
+        filtered_files = []
+        skipped_files = []
         for filename in os.listdir(path):
             if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
-                file_path = os.path.join(path, filename)
+                # 정확히 '_before'가 포함된 파일만 필터링
+                if include_before_only:
+                    if '_before' in filename:
+                        filtered_files.append(filename)
+                    else:
+                        skipped_files.append(filename)
+                        continue  # '_before'가 없는 이미지는 건너뜀
+                else:
+                    filtered_files.append(filename)
                 
-                try:
-                    # 파일 복사 및 저장 (원본 파일명 그대로 사용)
-                    dest_path = os.path.join(STORAGE_DIR, filename)
-                    shutil.copy2(file_path, dest_path)
+                # 파일이 필터링을 통과한 경우에만 처리
+                if (not include_before_only) or (include_before_only and '_before' in filename):
+                    file_path = os.path.join(path, filename)
                     
-                    processed_images.append({
-                        "original_path": file_path,
-                        "stored_filename": filename,
-                        "stored_path": dest_path
-                    })
-                    
-                    print(f"Loaded image: {filename}")
-                except Exception as e:
-                    errors.append({
-                        "filename": filename,
-                        "error": str(e)
-                    })
-                    print(f"Error loading image {filename}: {str(e)}")
+                    try:
+                        # 파일 복사 및 저장 (원본 파일명 그대로 사용)
+                        dest_path = os.path.join(STORAGE_DIR, filename)
+                        shutil.copy2(file_path, dest_path)
+                        
+                        processed_images.append({
+                            "original_path": file_path,
+                            "stored_filename": filename,
+                            "stored_path": dest_path
+                        })
+                        
+                        print(f"Loaded image: {filename}")
+                    except Exception as e:
+                        errors.append({
+                            "filename": filename,
+                            "error": str(e)
+                        })
+                        print(f"Error loading image {filename}: {str(e)}")
+        
+        # 처리된 결과를 로그로 요약
+        print(f"필터링 결과: 선택된 파일 {len(filtered_files)}개, 제외된 파일 {len(skipped_files)}개")
+        if filtered_files:
+            print(f"필터링 통과 파일: {filtered_files}")
+        if skipped_files:
+            print(f"필터링 제외 파일: {skipped_files}")
+        
+        print(f"처리 결과: 총 {len(processed_images)}개 이미지 처리됨, {len(errors)}개 오류 발생")
+        if processed_images:
+            print(f"처리된 파일: {[img['stored_filename'] for img in processed_images]}")
         
         result = {
             "status": "success" if not errors or processed_images else "partial_success" if errors and processed_images else "error",

@@ -88,7 +88,7 @@ export default {
     
     const handleLogout = async () => {
       await store.dispatch('auth/logout');
-      router.push('/login');
+      router.push('/main');
     };
     
     const goToManagement = () => {

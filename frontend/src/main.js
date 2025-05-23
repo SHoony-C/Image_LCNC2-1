@@ -4,6 +4,7 @@ import App from './App.vue'
 import router from './router'
 import store from './store'
 import './assets/main.css'
+import LogService from './utils/logService'
 
 // Font Awesome
 import '@fortawesome/fontawesome-free/css/all.css'
@@ -41,6 +42,12 @@ axios.interceptors.response.use(
       console.warn('인증 오류 발생, 인증 상태 초기화')
       store.commit('auth/CLEAR_AUTH')
       
+      // 401 오류 로깅
+      LogService.logAction('auth_error', {
+        status: 401,
+        path: window.location.pathname
+      }).catch(e => console.error('로깅 실패:', e))
+      
       // 로그인 페이지로 리다이렉트
       if (router.currentRoute.value.path !== '/') {
         router.push('/')
@@ -61,10 +68,31 @@ app.config.errorHandler = (err, vm, info) => {
   console.error('App Error:', err)
   console.log('Vue Instance:', vm)
   console.log('Error Info:', info)
+  
+  // 애플리케이션 오류 로깅
+  LogService.logAction('app_error', {
+    error: err.message,
+    info: info,
+    component: vm?.$options?.name || 'unknown'
+  }).catch(e => console.error('로깅 실패:', e))
 }
 
-// 앱 마운트 전 인증 확인
-store.dispatch('auth/checkAuth').then(() => {
+// 앱 마운트 전 인증 확인 및 앱 시작 로깅
+Promise.all([
+  store.dispatch('auth/checkAuth'),
+  LogService.logAction('app_start', {
+    url: window.location.href,
+    userAgent: navigator.userAgent,
+    timestamp: new Date().toISOString()
+  }).catch(e => console.error('시작 로깅 실패:', e))
+]).then(() => {
+  app.use(pinia)
+  app.use(store)
+  app.use(router)
+  app.mount('#app')
+}).catch(err => {
+  console.error('앱 초기화 오류:', err)
+  // 에러가 발생해도 앱은 시작
   app.use(pinia)
   app.use(store)
   app.use(router)

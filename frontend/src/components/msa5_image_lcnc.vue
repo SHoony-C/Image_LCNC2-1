@@ -385,6 +385,7 @@ import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import '@vue-flow/core/dist/style.css'
+import LogService from '../utils/logService'
 
 export default {
   name: 'MSA5ImageLCNC',
@@ -755,6 +756,27 @@ export default {
         return
       }
       
+      // 디버깅 로그 추가
+      console.log('MSA5: processStart 버튼 클릭됨');
+      
+      // 액션 로깅 데이터 준비
+      const logData = {
+        component: 'MSA5',
+        hasImage: !!inputImage.value,
+        nodeCount: elements.value.filter(el => el.type !== 'smoothstep').length - 2,
+        connectionCount: elements.value.filter(el => el.type === 'smoothstep').length
+      };
+      console.log('MSA5: 로그 데이터 준비됨:', logData);
+      
+      try {
+        // 액션 로깅 - 프로세스 시작
+        console.log('MSA5: LogService.logAction 호출 시작 - process_start');
+        const logResult = await LogService.logAction('process_start', logData);
+        console.log('MSA5: LogService.logAction 호출 완료:', logResult);
+      } catch (err) {
+        console.error('MSA5: 로그 저장 실패:', err);
+      }
+      
       // 시작 전에 워크플로우 검증 수행
       const validationResult = validateWorkflow()
       if (!validationResult.valid) {
@@ -846,6 +868,15 @@ export default {
             console.log('워크플로우가 MongoDB에 성공적으로 저장되었습니다')
             // 세션 ID를 localStorage에 저장 (측정 결과 저장 시 사용)
             localStorage.setItem('current_workflow_session_id', sessionId)
+            
+            // 로그 기록 - 워크플로우 실제 저장 완료
+            LogService.logAction('workflow_saved', {
+              component: 'MSA5',
+              workflow_name: workflowName.value,
+              session_id: sessionId,
+              nodeCount: getNodeCount(),
+              connectionCount: getConnectionCount()
+            }).catch(err => console.error('로그 저장 실패:', err))
           } else {
             console.error('워크플로우 저장 실패:', result.message)
           }
@@ -1345,7 +1376,7 @@ export default {
     }
 
     // 이미지 업데이트 핸들러
-    const handleImageUpdate = (event) => {
+    const handleImageUpdate = async (event) => {
       console.log('MSA1에서 이미지 업데이트 이벤트 수신:', event)
       
       let imageUrl = null
@@ -1355,18 +1386,75 @@ export default {
       }
       
       if (imageUrl) {
-        inputImage.value = imageUrl
-        processedImages['start'] = imageUrl
-        console.log('이미지 업데이트 완료')
-        
-        // 상태 메시지 표시
-        showStatusMessage.value = true;
-        statusMessage.value = 'MSA1에서 이미지 수신됨';
-        
-        // 몇 초 후 상태 메시지 숨김
-        setTimeout(() => {
-          showStatusMessage.value = false;
-        }, 3000);
+        try {
+          // 이미지 설정
+          inputImage.value = imageUrl
+          processedImages['start'] = imageUrl
+          console.log('이미지 업데이트 완료')
+          
+          // 상태 메시지 표시
+          showStatusMessage.value = true;
+          statusMessage.value = 'MSA1에서 이미지 수신됨, 유사 이미지 검색 중...';
+          
+          // 벡터 DB에서 유사 이미지 검색 API 호출
+          const formData = new FormData();
+          
+          // Base64 이미지를 Blob으로 변환
+          const base64Response = await fetch(imageUrl);
+          const blob = await base64Response.blob();
+          
+          // 파일명 생성 (현재 시간 기준)
+          const filename = `search_${Date.now()}.png`;
+          
+          // FormData에 파일 추가
+          formData.append('file', blob, filename);
+          
+          // 유사 이미지 검색 API 호출
+          const response = await fetch('http://localhost:8000/api/msa5/upload-and-find-similar', {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            throw new Error(`API 요청 실패: ${response.status}`);
+          }
+          
+          const result = await response.json();
+          
+          if (result.status === 'success') {
+            console.log('유사 이미지 검색 결과:', result);
+            
+            // 유사 이미지 결과를 MSA4로 전달
+            const similarEvent = new CustomEvent('msa5-to-msa4-similar-images', {
+              detail: {
+                originalImage: {
+                  url: imageUrl,
+                  filename: filename
+                },
+                similarImages: result.similar_images.map(img => ({
+                  ...img,
+                  url: img.url || img.image_url,  // URL 필드 확인
+                  image_url: img.image_url || img.url  // image_url 필드 확인
+                }))
+              }
+            });
+            
+            document.dispatchEvent(similarEvent);
+            
+            // 성공 메시지 표시
+            statusMessage.value = 'MSA1에서 이미지 수신 및 유사 이미지 검색 완료';
+          } else {
+            throw new Error(result.message || '유사 이미지를 찾을 수 없습니다.');
+          }
+        } catch (error) {
+          console.error('이미지 처리 또는 유사 이미지 검색 중 오류:', error);
+          statusMessage.value = `오류: ${error.message || '알 수 없는 오류'}`;
+        } finally {
+          // 몇 초 후 상태 메시지 숨김
+          setTimeout(() => {
+            showStatusMessage.value = false;
+          }, 3000);
+        }
       }
     }
 
@@ -1463,6 +1551,28 @@ export default {
           showStatusMessage.value = false
         }, 3000)
         return
+      }
+      
+      // 디버깅 로그 추가
+      console.log('MSA5: saveWorkflow 버튼 클릭됨');
+      
+      // 액션 로깅 데이터 준비
+      const logData = {
+        component: 'MSA5',
+        hasImage: !!inputImage.value,
+        hasResult: !!processedImages['end'],
+        nodeCount: elements.value.filter(el => el.type !== 'smoothstep').length - 2,
+        connectionCount: elements.value.filter(el => el.type === 'smoothstep').length
+      };
+      console.log('MSA5: 로그 데이터 준비됨:', logData);
+      
+      try {
+        // 액션 로깅 - 워크플로우 저장 시도
+        console.log('MSA5: LogService.logAction 호출 시작 - save_workflow');
+        const logResult = await LogService.logAction('save_workflow', logData);
+        console.log('MSA5: LogService.logAction 호출 완료:', logResult);
+      } catch (err) {
+        console.error('MSA5: 로그 저장 실패:', err);
       }
       
       // 저장 다이얼로그 표시
@@ -1743,16 +1853,7 @@ export default {
       document.addEventListener('msa1-to-msa5-image', handleImageUpdate)
       
       // 워크플로우 이벤트 리스너 등록 - MSA4에서 워크플로우 불러오기 선택 시 호출
-      document.addEventListener('msa4-to-msa5-workflow', (event) => {
-        const data = event.detail
-        if (data && data.imageUrl && data.workflowData) {
-          // 이미지 설정
-          setImage(data.imageUrl, data.imageTitle)
-          
-          // 워크플로우 로드
-          loadWorkflow(data.workflowData)
-        }
-      })
+      document.addEventListener('msa4-to-msa5-workflow', handleWorkflowFromMSA4)
       
       // 노드 목록 로드
       loadAvailableNodes()
@@ -1762,7 +1863,7 @@ export default {
       // 이벤트 리스너 제거
       document.removeEventListener('msa4-to-msa5-image', handleImageUpdate)
       document.removeEventListener('msa1-to-msa5-image', handleImageUpdate)
-      document.removeEventListener('msa4-to-msa5-workflow', () => {})
+      document.removeEventListener('msa4-to-msa5-workflow', handleWorkflowFromMSA4)
     })
     
     // 워크플로우 데이터 로드 및 적용
@@ -1908,7 +2009,7 @@ export default {
         formData.append('file', blob, filename)
         
         // 결과 이미지 업로드 및 유사 이미지 검색 API 호출
-        const response = await fetch('http://localhost:8000/api/upload-and-find-similar', {
+        const response = await fetch('http://localhost:8000/api/msa5/upload-and-find-similar', {
           method: 'POST',
           body: formData
         })
@@ -1927,7 +2028,11 @@ export default {
                 url: processedImages['end'],
                 filename: filename
               },
-              similarImages: result.similar_images
+              similarImages: result.similar_images.map(img => ({
+                ...img,
+                url: img.url || img.image_url,  // URL 필드 확인
+                image_url: img.image_url || img.url  // image_url 필드 확인
+              }))
             }
           })
           
@@ -2284,6 +2389,117 @@ export default {
       workflowErrorMessage.value = ''
       workflowErrorDetails.value = ''
     }
+
+    // Add handler function in the component setup
+    const handleWorkflowFromMSA4 = async (event) => {
+      try {
+        const data = event.detail;
+        
+        // Handle different formats of workflow data from MSA4
+        let workflowName, workflowData;
+        
+        if (data.workflow_name && data.workflow_data) {
+          // New format from updated MSA4
+          workflowName = data.workflow_name;
+          workflowData = data.workflow_data;
+        } else if (data.workflowData) {
+          // Old format that might come from older MSA4 implementations
+          workflowName = data.workflowData.workflow_name;
+          workflowData = data.workflowData;
+        } else {
+          showStatusMessage('워크플로우 데이터가 유효하지 않습니다.', 'error');
+          return;
+        }
+        
+        // Show loading message
+        showStatusMessage(`워크플로우 '${workflowName}' 불러오는 중...`, 'info');
+        
+        // 이미지 설정 (이미지 URL이 있는 경우)
+        if (data.imageUrl) {
+          setImage(data.imageUrl, data.imageTitle);
+        }
+        
+        // 워크플로우 직접 사용 (API 호출 없이)
+        if (workflowData.nodes || workflowData.elements) {
+          try {
+            // Keep current input image if needed
+            const currentInputImage = inputImage.value;
+            
+            // Import workflow elements
+            if (workflowData.elements) {
+              elements.value = JSON.parse(JSON.stringify(workflowData.elements));
+            } else if (workflowData.nodes && workflowData.edges) {
+              // Convert nodes and edges to elements format if needed
+              const convertedElements = [
+                ...workflowData.nodes.map(node => ({...node, type: node.type || 'default'})),
+                ...workflowData.edges.map(edge => ({...edge, type: 'smoothstep'}))
+              ];
+              elements.value = convertedElements;
+            }
+            
+            // Restore current input image if no new image was provided
+            if (!data.imageUrl) {
+              inputImage.value = currentInputImage;
+            }
+            
+            // Update the vue flow instance
+            if (flowInstance.value) {
+              flowInstance.value.fitView();
+            }
+            
+            showStatusMessage(`워크플로우 '${workflowName}'를 성공적으로 불러왔습니다.`, 'success');
+            return;
+          } catch (error) {
+            console.error('Error directly loading workflow data:', error);
+            // Fall back to API method below
+          }
+        }
+        
+        // Traditional API-based loading if direct loading fails
+        try {
+          // Fetch workflow data from API if we only have the name
+          const response = await fetch(`http://localhost:8000/api/workflow/${encodeURIComponent(workflowName)}`);
+          const apiData = await response.json();
+          
+          if (apiData.status !== 'success') {
+            showStatusMessage(`워크플로우를 불러올 수 없습니다: ${apiData.message}`, 'error');
+            return;
+          }
+          
+          // Import workflow
+          const workflow = apiData.workflow;
+          
+          // Load workflow elements
+          if (workflow.elements) {
+            // Keep current input image if needed
+            const currentInputImage = inputImage.value;
+            
+            // Import workflow elements
+            elements.value = JSON.parse(JSON.stringify(workflow.elements));
+            
+            // Restore current input image if no new image was provided
+            if (!data.imageUrl) {
+              inputImage.value = currentInputImage;
+            }
+            
+            // Update the vue flow instance
+            if (flowInstance.value) {
+              flowInstance.value.fitView();
+            }
+            
+            showStatusMessage(`워크플로우 '${workflowName}'를 성공적으로 불러왔습니다.`, 'success');
+          } else {
+            showStatusMessage('워크플로우 요소를 불러올 수 없습니다.', 'error');
+          }
+        } catch (error) {
+          console.error('Error loading workflow via API:', error);
+          showStatusMessage('워크플로우 가져오기 중 오류가 발생했습니다.', 'error');
+        }
+      } catch (error) {
+        console.error('Error importing workflow from MSA4:', error);
+        showStatusMessage('워크플로우 가져오기 중 오류가 발생했습니다.', 'error');
+      }
+    };
 
     return {
       isMaximized,

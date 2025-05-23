@@ -41,6 +41,8 @@
 </template>
 
 <script>
+import LogService from '../utils/logService'
+
 export default {
   name: 'MSA1ImageInput',
   data() {
@@ -88,6 +90,13 @@ export default {
           this.statusText = '이미지 준비됨'
           this.isActive = true
           
+          // 로그 저장 - 이미지 업로드
+          LogService.logAction('upload_image', {
+            filename: file.name,
+            filesize: file.size,
+            filetype: file.type
+          })
+          
           // MSA4로 이미지 전송
           const msa4Event = new CustomEvent('msa1-to-msa4-image', { 
             detail: { 
@@ -98,6 +107,11 @@ export default {
           document.dispatchEvent(msa4Event)
           console.log('[MSA1] 이미지가 MSA4로 전송됨:', file.name)
           
+          // 로그 저장 - MSA4 전송
+          LogService.logAction('send_to_msa4', {
+            filename: file.name
+          })
+          
           // MSA5로 이미지 전송
           const msa5Event = new CustomEvent('msa1-to-msa5-image', { 
             detail: { 
@@ -107,6 +121,11 @@ export default {
           })
           document.dispatchEvent(msa5Event)
           console.log('[MSA1] 이미지가 MSA5로 전송됨:', file.name)
+          
+          // 로그 저장 - MSA5 전송
+          LogService.logAction('send_to_msa5', {
+            filename: file.name
+          })
         }
         reader.readAsDataURL(file)
       }

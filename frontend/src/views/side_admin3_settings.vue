@@ -16,7 +16,7 @@
               <input 
                 type="text" 
                 v-model="imageDirectory" 
-                placeholder="예: D:\홈피\image_lcnc_msa2\frontend\public\test_image"
+                placeholder="예: D:\image_set_url\images"
               />
             </div>
             <div class="actions">
@@ -27,6 +27,14 @@
               >
                 <i class="fas fa-sync" :class="{ 'fa-spin': isProcessing }"></i>
                 {{ isProcessing ? '처리 중...' : '이미지 로드 및 벡터 변환' }}
+              </button>
+              <button 
+                @click="resetVectorData" 
+                class="reset-button"
+                :disabled="isProcessing"
+              >
+                <i class="fas fa-trash"></i>
+                벡터 데이터 초기화
               </button>
             </div>
           </div>
@@ -117,7 +125,7 @@ export default {
   data() {
     return {
       isProcessing: false,
-      imageDirectory: 'D:\\홈피\\image_lcnc_msa2\\frontend\\public\\test_image',
+      imageDirectory: 'D:\\image_set_url\\images',
       processingStatus: null,
       vectorResults: [],
       showAllResults: false
@@ -143,38 +151,58 @@ export default {
       };
       
       try {
-        // 이미지 로드 API 호출
-        const response = await fetch('http://localhost:8000/api/msa4/load-local-images', {
+        // 이미지 로드 API 호출 - 경로는 정확함 (/api/load-local-images)
+        const response = await fetch('http://localhost:8000/api/load-local-images', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ directory_path: this.imageDirectory })
+          body: JSON.stringify({ 
+            directory_path: this.imageDirectory,
+            includeBeforeImagesOnly: true // '_before' 접미사 파일만 포함
+          })
         });
         
         const data = await response.json();
         
         if (data.status === 'success' || data.status === 'partial_success') {
-          // 벡터 데이터 조회 및 처리
-          const processedResponse = await this.processVectorData();
+          // 필터링된 이미지 목록 저장 (로드된 이미지 이름만 추출)
+          const loadedImages = data.processed?.map(img => img.stored_filename) || [];
+          console.log('로드된 이미지:', loadedImages);
+          
+          // 벡터 변환 API 호출 (백엔드로 직접 요청)
+          const transformResponse = await fetch('http://localhost:8000/api/settings/vectors/transform', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+              images: loadedImages,
+              includeBeforeImagesOnly: true
+            })
+          });
+          
+          if (!transformResponse.ok) {
+            throw new Error(`벡터 변환 API 오류: ${transformResponse.status}`);
+          }
+          
+          const transformData = await transformResponse.json();
           
           this.processingStatus = {
-            type: data.status === 'success' ? 'success' : 'warning',
-            message: data.status === 'success' 
+            type: transformData.status === 'success' ? 'success' : 'warning',
+            message: transformData.status === 'success' 
               ? '이미지 로드 및 벡터 변환 완료!' 
               : '일부 이미지만 처리되었습니다.',
             details: {
               processed: data.processed?.length || 0,
-              vectors: processedResponse?.processed || data.vector_extraction?.count || 0,
-              errors: data.errors?.length || 0
+              vectors: transformData.count || 0,
+              errors: (data.errors?.length || 0) + (transformData.errors?.length || 0)
             }
           };
           
-          // 벡터 추출 API에서 3D 좌표 결과 데이터 사용 (없으면 계산된 결과 사용)
-          if (data.vector_extraction && data.vector_extraction.results) {
-            this.vectorResults = data.vector_extraction.results;
-          } else if (processedResponse && processedResponse.results) {
-            this.vectorResults = processedResponse.results;
+          // 벡터 결과 저장
+          if (transformData.results && transformData.results.length > 0) {
+            this.vectorResults = transformData.results;
           }
         } else {
           this.processingStatus = {
@@ -198,8 +226,8 @@ export default {
     
     async processVectorData() {
       try {
-        // 먼저 벡터 데이터를 가져옵니다
-        const response = await fetch('http://localhost:8000/api/msa4/vectors', {
+        // 벡터 데이터를 가져오는 API 호출 - settings 경로로 변경
+        const response = await fetch('http://localhost:8080/api/settings/processed-vectors', {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -221,77 +249,25 @@ export default {
           };
         }
         
-        // 각 이미지당 하나의 벡터만 남기도록 처리
-        // 파일명으로 그룹화하여 이미지당 하나의 대표 벡터만 저장
-        const uniqueFilenames = new Set();
-        const uniqueLabels = [];
-        const uniqueVectors = [];
-        const imageToVectors = {};
-        
-        // 동일한 이미지에서 온 벡터들을 그룹화
-        data.metadata.forEach((filename, index) => {
-          if (!uniqueFilenames.has(filename)) {
-            uniqueFilenames.add(filename);
-            uniqueLabels.push(filename);
-            uniqueVectors.push(data.vectors[index]);
+        // 응답 데이터 확인 및 필드 처리
+        if (!data.metadata) {
+          console.warn('API response missing metadata field:', data);
+          // metadata 필드가 없는 경우, labels가 있는지 확인
+          if (data.labels) {
+            data.metadata = data.labels; // labels 필드를 metadata로 사용
+            console.log('Using labels field as metadata');
           } else {
-            // 이미 있는 이미지의 경우 벡터 목록에 추가 (나중에 평균 계산용)
-            if (!imageToVectors[filename]) {
-              // 첫 번째 벡터 추가
-              const firstIndex = uniqueLabels.indexOf(filename);
-              imageToVectors[filename] = [data.vectors[firstIndex]];
-            }
-            imageToVectors[filename].push(data.vectors[index]);
+            // 둘 다 없는 경우 빈 배열이나 인덱스 기반 이름 생성
+            data.metadata = Array(data.vectors.length).fill().map((_, i) => `image_${i+1}`);
+            console.log('Generated fallback metadata');
           }
-        });
-        
-        // 이미 저장된 대표 벡터를 평균 벡터로 업데이트
-        uniqueLabels.forEach((filename, index) => {
-          if (imageToVectors[filename] && imageToVectors[filename].length > 1) {
-            // 벡터 평균 계산
-            const vectors = imageToVectors[filename];
-            const avgVector = [];
-            
-            // 벡터의 각 차원에 대해 평균 계산
-            for (let i = 0; i < vectors[0].length; i++) {
-              let sum = 0;
-              for (let j = 0; j < vectors.length; j++) {
-                sum += vectors[j][i];
-              }
-              avgVector.push(sum / vectors.length);
-            }
-            
-            // 평균 벡터로 대체
-            uniqueVectors[index] = avgVector;
-          }
-        });
-        
-        // 이미지당 하나의 벡터만 포함하는 새 데이터 생성
-        const processedData = {
-          vectors: uniqueVectors,
-          metadata: uniqueLabels
-        };
-        
-        // 처리된 데이터 저장
-        const saveResponse = await fetch('http://localhost:8000/api/msa4/save-processed-vectors', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(processedData)
-        });
-        
-        if (!saveResponse.ok) {
-          throw new Error(`Failed to save processed vectors: ${saveResponse.status}`);
         }
         
-        console.log(`Processed ${uniqueVectors.length} unique vectors for ${uniqueLabels.length} images`);
-        
         // 3D 좌표 계산
-        const projectedVectors = this.computeProjectedVectors(uniqueVectors);
+        const projectedVectors = this.computeProjectedVectors(data.vectors);
         
         // 결과 데이터 생성 (파일명과 3D 좌표)
-        const results = uniqueLabels.map((filename, index) => ({
+        const results = data.metadata.map((filename, index) => ({
           filename,
           coordinates: projectedVectors[index] || [0, 0, 0]
         }));
@@ -301,8 +277,8 @@ export default {
         
         return {
           status: 'success',
-          message: `각 이미지당 하나의 벡터로 처리 완료: 총 ${uniqueVectors.length}개`,
-          processed: uniqueVectors.length,
+          message: `벡터 데이터 처리 완료: 총 ${data.vectors.length}개`,
+          processed: data.vectors.length,
           results: results
         };
       } catch (error) {
@@ -358,6 +334,62 @@ export default {
           return max > min ? (val - min) / (max - min) : 0.5;
         })
       );
+    },
+    
+    // 벡터 데이터 초기화 함수 수정
+    async resetVectorData() {
+      if (this.isProcessing) return;
+      
+      if (!confirm('모든 벡터 데이터를 초기화하시겠습니까? 이 작업은 취소할 수 없습니다.')) {
+        return;
+      }
+      
+      this.isProcessing = true;
+      this.processingStatus = {
+        type: 'info',
+        message: '벡터 데이터 초기화 중...'
+      };
+      
+      try {
+        // 벡터 데이터 초기화 API 호출 - settings 경로 사용
+        const emptyData = {
+          vectors: [],
+          metadata: []
+        };
+        
+        const response = await fetch('http://localhost:8000/api/settings/save-processed-vectors', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(emptyData)
+        });
+        
+        if (!response.ok) {
+          throw new Error(`API returned status: ${response.status}`);
+        }
+        
+        // 벡터 결과 초기화
+        this.vectorResults = [];
+        
+        this.processingStatus = {
+          type: 'success',
+          message: '벡터 데이터가 초기화되었습니다.',
+          details: {
+            processed: 0,
+            vectors: 0,
+            errors: 0
+          }
+        };
+      } catch (error) {
+        console.error('Error resetting vector data:', error);
+        this.processingStatus = {
+          type: 'error',
+          message: '벡터 데이터 초기화 중 오류가 발생했습니다: ' + (error.message || '알 수 없는 오류')
+        };
+      } finally {
+        this.isProcessing = false;
+      }
     }
   }
 }
@@ -444,6 +476,7 @@ h1 {
 
 .actions {
   display: flex;
+  gap: 10px;
   margin-bottom: 1rem;
 }
 
@@ -467,6 +500,29 @@ h1 {
 
 .primary-button:disabled {
   background-color: #c4b5fd;
+  cursor: not-allowed;
+}
+
+.reset-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  border-radius: 0.25rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reset-button:hover:not(:disabled) {
+  background-color: #dc2626;
+}
+
+.reset-button:disabled {
+  background-color: #fca5a5;
   cursor: not-allowed;
 }
 

@@ -23,6 +23,15 @@ AUTH_SETTINGS = {
     'ALGORITHM': 'HS256',
 }
 
+# 관리자 권한이 부여될 이메일 도메인 리스트
+# 이 도메인의 이메일로 SSO 로그인 시 자동으로 admin 권한 부여
+ADMIN_DOMAINS = [
+    "admin.com",
+    "admin.org",
+    # "gmail.com",  # 테스트를 위해 gmail.com 추가 (실제 운영 환경에서는 제거 필요)
+    "example.com"
+]
+
 # MongoDB settings
 MONGODB_SETTINGS = {
     'HOST': 'localhost',

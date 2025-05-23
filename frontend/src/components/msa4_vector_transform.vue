@@ -33,7 +33,7 @@
             <h3>선택된 이미지</h3>
             <div class="selected-image-wrapper">
               <img 
-                :src="getImageUrl(selectedFilename)" 
+                :src="selectedImage && selectedImage.url ? selectedImage.url : getImageUrl(selectedFilename)" 
                 :alt="selectedFilename"
                 @error="handleImageError"
                 @click="showImageDetailsPopup(selectedFilename)"
@@ -50,11 +50,11 @@
                 v-for="(image, idx) in similarImages.slice(0, 4)" 
                 :key="idx" 
                 class="similar-image-item"
-                @click="handleSimilarImageClick(image.filename)"
+                @click="showImageDetailsPopup(image.filename)"
               >
                 <img 
-                  :src="getImageUrl(image.filename)" 
-                  :alt="image.filename"
+                :src="`http://localhost:8091/images/${image.filename}`"
+                :alt="image.filename"
                   @error="handleImageError"
                   class="similar-image"
                 />
@@ -78,36 +78,50 @@
         <div class="image-detail-popup" @click.stop>
           <div class="popup-header">
             <h3>이미지 상세 정보</h3>
-            <button class="close-btn" @click="closeImagePopup">
+            <button class="close-popup-btn" @click="closeImagePopup">
               <i class="fas fa-times"></i>
             </button>
           </div>
           
           <div class="popup-content">
-            <div class="image-preview">
-              <img 
-                :src="popupImageUrl" 
-                :alt="popupImageFilename" 
-                class="popup-image"
-              />
-              <div class="image-title">{{ popupImageFilename }}</div>
+            <div class="popup-image-container">
+              <img :src="popupImageUrl" alt="Selected image" class="popup-image">
             </div>
             
-            <div class="popup-actions">
-              <button class="action-btn import-btn" @click="sendImageToLCNC">
-                <i class="fas fa-file-import"></i>
-                MSA5로 보내기
-              </button>
+            <div class="popup-details">
+              <div class="detail-row">
+                <strong>파일명:</strong> {{ selectedImage?.filename || 'Unknown' }}
+              </div>
+              <div class="detail-row" v-if="selectedImage?.similarity">
+                <strong>유사도:</strong> {{ formatSimilarity(selectedImage.similarity) }}%
+              </div>
               
-              <div v-if="popupWorkflowData" class="workflow-info">
-                <div class="workflow-badge">
-                  <i class="fas fa-save"></i> 
-                  저장된 워크플로우 있음
+              <!-- 워크플로우 정보 표시 -->
+              <div class="workflow-details" v-if="selectedImage?.workflow">
+                <h4>워크플로우 정보</h4>
+                <div class="detail-row">
+                  <strong>워크플로우 이름:</strong> {{ selectedImage.workflow.workflow_name }}
                 </div>
-                <button class="action-btn view-btn" @click="loadWorkflowToLCNC">
+                <div class="detail-row" v-if="selectedImage.workflow.description">
+                  <strong>설명:</strong> {{ selectedImage.workflow.description }}
+                </div>
+                <div class="detail-row">
+                  <strong>생성일:</strong> {{ new Date(selectedImage.workflow.created_at).toLocaleString() }}
+                </div>
+                
+                <!-- 워크플로우 불러오기 버튼 -->
+                <button class="load-workflow-btn" @click="loadWorkflowToMSA5(selectedImage.workflow)">
                   <i class="fas fa-file-import"></i>
-                  워크플로우 불러오기
+                  워크플로우만 불러오기
                 </button>
+              </div>
+              
+              <!-- 워크플로우 정보 로딩 중 표시 -->
+              <div class="workflow-loading" v-else-if="selectedImage && !selectedImage.workflow">
+                <p>워크플로우 정보 확인 중...</p>
+                <div class="loading-spinner">
+                  <i class="fas fa-spinner fa-spin"></i>
+                </div>
               </div>
             </div>
           </div>
@@ -455,8 +469,8 @@ export default {
       this.isLoading = true;
       
       try {
-        // 8000 포트 API에서 벡터 데이터 가져오기
-        const response = await fetch('http://localhost:8000/api/vectors', {
+        // 벡터 데이터는 settings API에서 가져오기
+        const response = await fetch('http://localhost:8000/api/settings/processed-vectors', {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -477,7 +491,7 @@ export default {
 
         // 벡터 데이터와 라벨 처리
         const vectors = data.vectors;
-        const labels = data.labels || Array(vectors.length).fill().map((_, i) => `이미지${i+1}`);
+        const labels = data.metadata || data.labels || Array(vectors.length).fill().map((_, i) => `이미지${i+1}`);
 
         // 벡터 데이터 처리 및 시각화
         this.processVectorData(vectors, labels);
@@ -499,7 +513,8 @@ export default {
       logDebug('Falling back to regular vectors API');
       
       try {
-        const response = await fetch(this.getApiEndpoint('/api/msa4/vectors'), {
+        // 기본 벡터 데이터는 settings API에서 가져오기
+        const response = await fetch('http://localhost:8000/api/settings/vectors', {
           method: 'GET',
           headers: {
             'Accept': 'application/json'
@@ -512,14 +527,15 @@ export default {
         
         const data = await response.json();
         
-        if (data.vectors && data.vectors.length > 0 && data.metadata) {
+        if (data.vectors && data.vectors.length > 0 && (data.metadata || data.labels)) {
           logDebug(`Loaded ${data.vectors.length} vectors from fallback API`);
           
           // 중복 제거를 위한 맵 생성
           const uniqueVectors = new Map();
+          const labelsArray = data.metadata || data.labels;
           
           // 동일한 이미지명을 가진 첫 번째 벡터만 유지
-          data.metadata.forEach((label, index) => {
+          labelsArray.forEach((label, index) => {
             const cleanLabel = this.removeTimestamp(label);
             if (!uniqueVectors.has(cleanLabel)) {
               uniqueVectors.set(cleanLabel, data.vectors[index]);
@@ -685,7 +701,7 @@ export default {
       this.isProcessing = true;
       this.loadingMessage = '유사 이미지 검색 중...';
       
-      // API 엔드포인트를 8000 포트 /api/similar-images로 변경
+      // API 엔드포인트 경로 수정 (/api/msa4/ -> /api/)
       const apiUrl = `http://localhost:8000/api/similar-images/${encodeURIComponent(filename)}`;
       
       fetch(apiUrl, {
@@ -710,6 +726,9 @@ export default {
             similarity: item.similarity,
             url: this.getImageUrl(item.filename)
           }));
+          
+          // 유사도(similarity)를 기준으로 내림차순 정렬
+          topSimilarImages.sort((a, b) => b.similarity - a.similarity);
           
           this.similarImages = topSimilarImages;
           logDebug(`Processed ${topSimilarImages.length} similar images`);
@@ -748,6 +767,10 @@ export default {
 
     // 유사도 값 포맷팅 (필터 대신 메소드 사용)
     formatSimilarity(similarity) {
+      // Prevent double multiplication of percentage values
+      if (similarity > 1) {
+        return Math.round(parseFloat(similarity)); // Already a percentage
+      }
       return Math.round(parseFloat(similarity) * 100);
     },
 
@@ -1009,7 +1032,7 @@ export default {
       this.loadingMessage = '유사 이미지 검색 중...';
       
       // API 엔드포인트로 요청
-      const apiUrl = `http://localhost:8000/api/similar-images/${encodeURIComponent(filename)}`;
+      const apiUrl = `http://localhost:8000/api/msa4/similar-images/${encodeURIComponent(filename)}`;
       
       // 로컬 변수로 현재 요청 추적
       const requestId = Date.now();
@@ -1039,13 +1062,17 @@ export default {
         }
         
         if (data.status === 'success' && data.similar_images && data.similar_images.length > 0) {
-          const topSimilarImages = data.similar_images.slice(0, 4).map(item => ({
-            filename: item.filename,
-            similarity: item.similarity,
-            url: this.getImageUrl(item.filename)
+          const processedSimilarImages = data.similar_images.slice(0, 4).map(img => ({
+            filename: img.filename,
+            similarity: img.similarity > 1 ? img.similarity : img.similarity * 100, // Only multiply if not already percentage
+            url: img.image_url || img.url || this.getImageUrl(img.filename),
+            workflow_name: null // Will be populated from MongoDB
           }));
           
-          this.similarImages = topSimilarImages;
+          // 유사도(similarity)를 기준으로 내림차순 정렬
+          processedSimilarImages.sort((a, b) => b.similarity - a.similarity);
+          
+          this.similarImages = processedSimilarImages;
         } else {
           this.similarImages = [];
           if (data.status === 'error') {
@@ -1159,13 +1186,12 @@ export default {
             this.selectImage(imageName);
           } else {
             logDebug(`Image not found in dataset: ${imageName}`);
-            this.showMessage(`데이터셋에서 이미지를 찾을 수 없습니다: ${imageName}`, 'warning');
+            // 오류 메시지 표시하지 않음 (사용자 요청에 따라 제거)
             this.isProcessing = false;
           }
         })
         .catch(error => {
           console.error('Error during image processing:', error);
-          this.displayErrorMessage('이미지 처리 중 오류가 발생했습니다');
           this.isProcessing = false;
         });
     },
@@ -1437,37 +1463,40 @@ export default {
     async showImageDetailsPopup(filename) {
       this.popupImageUrl = this.getImageUrl(filename);
       this.popupImageFilename = filename;
+      this.showImagePopup = true;
       
-      // 워크플로우 데이터 확인
+      // 선택된 이미지 정보 설정
+      this.selectedImage = {
+        filename: filename,
+        url: this.popupImageUrl
+      };
+      
+      // 로딩 상태 표시
+      this.selectedImage.isLoading = true;
+      
       try {
-        // 이미지 해시 계산 (해시 계산 함수가 없으면 백엔드에 직접 요청하는 방식으로 대체)
-        const imageHash = await this.calculateImageHash(this.popupImageUrl);
-        
-        // 워크플로우 데이터 조회
-        const response = await fetch(`http://localhost:8000/api/lcnc/get-workflow-by-hash/${imageHash}`);
+        // MongoDB에서 워크플로우 정보 조회
+        const response = await fetch(`http://localhost:8000/api/workflow/get-by-image?filename=${encodeURIComponent(filename)}`);
         
         if (response.ok) {
-          const result = await response.json();
-          if (result.status === 'success' && result.data) {
-            this.popupWorkflowData = result.data;
-            logDebug('워크플로우 데이터 로드 완료:', this.popupWorkflowData);
-          } else {
-            this.popupWorkflowData = null;
+          const data = await response.json();
+          if (data.status === 'success' && data.workflow) {
+            // 워크플로우 정보 설정
+            this.selectedImage.workflow = data.workflow;
+            logDebug('워크플로우 정보 로드 완료:', data.workflow);
           }
-        } else {
-          this.popupWorkflowData = null;
         }
       } catch (error) {
-        console.error('워크플로우 데이터 조회 오류:', error);
-        this.popupWorkflowData = null;
+        console.error('워크플로우 정보 조회 오류:', error);
+      } finally {
+        // 로딩 상태 해제
+        this.selectedImage.isLoading = false;
       }
-      
-      this.showImagePopup = true;
     },
 
     closeImagePopup() {
       this.showImagePopup = false;
-      this.popupWorkflowData = null;
+      this.selectedImage = null;
     },
 
     // 이미지 해시 계산 (대략적인 구현)
@@ -1551,26 +1580,92 @@ export default {
       logDebug('Received similar images from MSA5:', event.detail);
       
       const data = event.detail;
-      if (!data || !data.originalImage || !data.similarImages) {
+      if (!data || !data.originalImage || !data.similarImages || data.similarImages.length === 0) {
         logDebug('Invalid similar images data received from MSA5');
         return;
       }
       
-      // 원본 이미지 정보 저장
-      this.selectedFilename = data.originalImage.filename;
-      
       // 유사 이미지 처리
       const processedSimilarImages = data.similarImages.map(img => ({
         filename: img.filename,
-        similarity: img.similarity * 100, // 0~1 값을 퍼센트로 변환
-        url: img.url || this.getImageUrl(img.filename)
+        similarity: img.similarity > 1 ? img.similarity : img.similarity * 100, // Only multiply if not already percentage
+        url: img.image_url || img.url || this.getImageUrl(img.filename),
+        workflow_name: null // Will be populated from MongoDB
       }));
+      
+      // 유사도(similarity)를 기준으로 내림차순 정렬
+      processedSimilarImages.sort((a, b) => b.similarity - a.similarity);
       
       // 유사 이미지 업데이트
       this.similarImages = processedSimilarImages;
       
-      // 메시지 표시
-      this.showMessage('MSA5에서 유사 이미지 결과를 수신했습니다', 'success');
+      // 가장 유사한 첫 번째 이미지를 선택된 이미지로 설정
+      if (processedSimilarImages.length > 0) {
+        const mostSimilarImage = processedSimilarImages[0];
+        this.selectedFilename = mostSimilarImage.filename;
+        this.selectedImage = {
+          filename: mostSimilarImage.filename,
+          url: mostSimilarImage.url
+        };
+      }
+    },
+
+    // Add function to fetch workflow information from MongoDB
+    async fetchWorkflowInfo(filename) {
+      try {
+        const endpoint = this.getApiEndpoint(`/api/workflow/get-by-image?filename=${encodeURIComponent(filename)}`);
+        const response = await fetch(endpoint);
+        const data = await response.json();
+        
+        if (data.status === 'success' && data.workflow) {
+          return data.workflow;
+        }
+        return null;
+      } catch (error) {
+        console.error('Error fetching workflow info:', error);
+        return null;
+      }
+    },
+
+    // Add function to load workflow to MSA5
+    loadWorkflowToMSA5(workflow) {
+      if (!workflow) {
+        this.showMessage('전송할 워크플로우가 없습니다', 'error');
+        return;
+      }
+      
+      // 워크플로우 데이터 이벤트 생성
+      const event = new CustomEvent('msa4-to-msa5-workflow', {
+        detail: {
+          workflow_name: workflow.workflow_name,
+          workflow_data: workflow,
+          nodes: workflow.nodes,
+          edges: workflow.edges
+        }
+      });
+      
+      // 이벤트 발송
+      document.dispatchEvent(event);
+      
+      // 성공 메시지 표시
+      this.showMessage(`워크플로우 '${workflow.workflow_name}'을(를) MSA5로 전송했습니다`, 'success');
+      
+      // 팝업 닫기
+      this.closeImagePopup();
+    },
+
+    // Update the handleImageClick function to fetch workflow info
+    async handleImageClick(image) {
+      this.selectedImage = image;
+      this.popupImageUrl = image.url;
+      
+      // Fetch workflow info for this image
+      const workflow = await this.fetchWorkflowInfo(image.filename);
+      if (workflow) {
+        this.selectedImage.workflow = workflow;
+      }
+      
+      this.showImagePopup();
     }
   }
 }
@@ -1754,7 +1849,7 @@ export default {
   color: #333;
 }
 
-.close-btn {
+.close-popup-btn {
   background: none;
   border: none;
   font-size: 20px;
@@ -1763,7 +1858,7 @@ export default {
   transition: color 0.2s;
 }
 
-.close-btn:hover {
+.close-popup-btn:hover {
   color: #333;
 }
 
@@ -1775,11 +1870,11 @@ export default {
   gap: 20px;
 }
 
-.image-preview {
+.popup-image-container {
   display: flex;
-  flex-direction: column;
+  justify-content: center;
   align-items: center;
-  gap: 10px;
+  margin-bottom: 20px;
 }
 
 .popup-image {
@@ -1790,69 +1885,71 @@ export default {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
 }
 
-.image-title {
-  font-size: 14px;
-  color: #666;
-  text-align: center;
-  word-break: break-all;
-}
-
-.popup-actions {
+.popup-details {
   display: flex;
   flex-direction: column;
   gap: 15px;
 }
 
-.action-btn {
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.detail-row strong {
+  font-weight: 500;
+}
+
+.workflow-details {
+  margin-top: 15px;
+  padding: 15px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.workflow-details h4 {
+  font-size: 16px;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.load-workflow-btn {
+  margin-top: 15px;
+  padding: 8px 16px;
+  background-color: #6d28d9;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.load-workflow-btn:hover {
+  background-color: #5b21b6;
+}
+
+.workflow-loading {
+  margin-top: 15px;
+  padding: 15px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 10px 15px;
-  border-radius: 4px;
-  border: none;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.import-btn {
-  background-color: #8b5cf6;
-  color: white;
-}
-
-.import-btn:hover {
-  background-color: #7c3aed;
-}
-
-.view-btn {
-  background-color: #10b981;
-  color: white;
-}
-
-.view-btn:hover {
-  background-color: #059669;
-}
-
-.workflow-info {
-  display: flex;
   flex-direction: column;
   gap: 10px;
-  border-top: 1px solid #eee;
-  padding-top: 15px;
-  margin-top: 5px;
 }
 
-.workflow-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  background-color: #f3f4f6;
-  padding: 5px 10px;
-  border-radius: 4px;
-  font-size: 13px;
-  color: #374151;
-  width: fit-content;
+.loading-spinner {
+  font-size: 20px;
+  color: #6d28d9;
 }
 
 /* 로딩 및 에러 메시지 스타일 */

@@ -1,0 +1,132 @@
+import axios from 'axios';
+
+/**
+ * 사용자 액션 로깅 서비스
+ * 
+ * 애플리케이션 내 다양한 액션을 로깅하는 기능 제공
+ * - 페이지 방문
+ * - 버튼 클릭
+ * - 기능 사용
+ * - 등등
+ */
+class LogService {
+  /**
+   * 사용자 액션을 로깅합니다
+   * @param {string} action - 수행한 액션 (예: "page_visit", "button_click", "process_start")
+   * @param {object} details - 액션에 대한 추가 정보 (선택 사항)
+   */
+  static async logAction(action, details = {}) {
+    try {
+      console.log(`[LogService] 액션 로깅 시작: ${action}`, details);
+      
+      // 로컬 스토리지에서 사용자 정보 가져오기
+      const userStr = localStorage.getItem('user');
+      let username = 'anonymous';
+      let department = null;
+      
+      if (userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          username = user.username || 'anonymous';
+          department = user.department || null;
+          console.log(`[LogService] 사용자 정보 로드됨: ${username}, ${department}`);
+        } catch (e) {
+          console.error('[LogService] 사용자 정보 파싱 오류:', e);
+        }
+      } else {
+        console.log('[LogService] 사용자 정보 없음, 익명으로 처리');
+      }
+      
+      // 액션 문자열 형식화
+      let actionStr = action;
+      if (details && Object.keys(details).length > 0) {
+        actionStr += `: ${JSON.stringify(details)}`;
+      }
+      
+      // API 요청 데이터 준비
+      const requestData = {
+        username,
+        department,
+        useraction: actionStr
+      };
+      
+      console.log('[LogService] API 요청 데이터:', requestData);
+      console.log('[LogService] API 엔드포인트: http://localhost:8000/api/users/log-action-noauth');
+      
+      // 로그 저장 API 호출 (인증 필요 없는 엔드포인트 사용)
+      const response = await axios.post('http://localhost:8000/api/users/log-action-noauth', requestData);
+      
+      console.log('[LogService] API 응답:', response.data);
+      
+      // 개발 환경에서는 콘솔에도 로깅
+      if (process.env.NODE_ENV !== 'production') {
+        console.log(`[LOG] ${username} - ${actionStr}`);
+      }
+      
+      return true;
+    } catch (error) {
+      // 로깅 실패해도 앱 동작에 영향 주지 않도록 조용히 에러 핸들링
+      console.error('[LogService] 액션 로깅 실패:', error);
+      if (error.response) {
+        console.error('[LogService] 서버 응답:', error.response.status, error.response.data);
+      } else if (error.request) {
+        console.error('[LogService] 서버 응답 없음:', error.request);
+      } else {
+        console.error('[LogService] 요청 설정 오류:', error.message);
+      }
+      return false;
+    }
+  }
+  
+  /**
+   * 페이지 방문 로깅
+   * @param {string} pageName - 방문한 페이지 이름
+   */
+  static async logPageVisit(pageName) {
+    return this.logAction('page_visit', { page: pageName });
+  }
+  
+  /**
+   * 버튼 클릭 로깅
+   * @param {string} buttonName - 클릭한 버튼 이름
+   * @param {string} pageName - 버튼이 있는 페이지 (선택 사항)
+   */
+  static async logButtonClick(buttonName, pageName = null) {
+    const details = { button: buttonName };
+    if (pageName) details.page = pageName;
+    return this.logAction('button_click', details);
+  }
+  
+  /**
+   * 이미지 선택 로깅
+   * @param {string} imageId - 선택한 이미지 ID
+   * @param {string} pageName - 이미지가 있는 페이지
+   */
+  static async logImageSelect(imageId, pageName) {
+    return this.logAction('image_select', { image: imageId, page: pageName });
+  }
+  
+  /**
+   * 프로세스 시작 로깅
+   * @param {string} processName - 시작한 프로세스 이름
+   * @param {object} params - 프로세스 파라미터 (선택 사항)
+   */
+  static async logProcessStart(processName, params = null) {
+    const details = { process: processName };
+    if (params) details.params = params;
+    return this.logAction('process_start', details);
+  }
+  
+  /**
+   * 데이터 저장 로깅
+   * @param {string} dataType - 저장한 데이터 유형
+   * @param {string} dataId - 데이터 식별자 (선택 사항)
+   */
+  static async logDataSave(dataType, dataId = null) {
+    const details = { type: dataType };
+    if (dataId) details.id = dataId;
+    return this.logAction('data_save', details);
+  }
+}
+
+export default LogService; 

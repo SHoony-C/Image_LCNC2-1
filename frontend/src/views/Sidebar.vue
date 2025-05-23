@@ -62,7 +62,8 @@ export default {
     // 현재 사용자가 관리자인지 확인
     const isAdmin = computed(() => {
       const user = store.state.auth.user;
-      return user && (user.permission === 'admin' || (user.roles && user.roles.includes('admin')));
+      // permission이 'admin'인 경우에만 true를 반환
+      return user && user.permission === 'admin';
     });
     
     return {

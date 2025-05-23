@@ -702,34 +702,48 @@ async def upload_and_find_similar(file: UploadFile = File(...)):
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # 이미지 벡터 추출
-        # 실제 서비스에서는 ML 모델을 사용하여 벡터 추출
-        # 이 예시에서는 임의의 유사 이미지 결과를 반환
-        
-        # 가상 유사 이미지 결과 생성
+        # 실제 이미지 디렉토리 사용
         similar_images = []
         
-        # 디렉토리에서 이미지 파일 목록 가져오기
-        image_dir = "./images"
+        # 실제 이미지 파일이 저장된 디렉토리 경로
+        image_dir = r"D:\image_set_url\images"
+        
         if os.path.exists(image_dir):
+            print(f"[API] 이미지 디렉토리 '{image_dir}' 접근 성공")
+            
+            # 디렉토리에서 이미지 파일 목록 가져오기
             image_files = [f for f in os.listdir(image_dir) 
                          if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))]
             
-            # 최대 4개 이미지 선택
-            import random
-            selected_images = random.sample(image_files, min(4, len(image_files)))
+            print(f"[API] 이미지 파일 {len(image_files)}개 발견")
             
-            for img_file in selected_images:
-                # 유사도 임의 생성 (0.6 ~ 0.95)
-                similarity = random.uniform(0.6, 0.95)
-                similar_images.append({
-                    "filename": img_file,
-                    "similarity": round(similarity, 2),
-                    "url": f"http://localhost:8091/images/{img_file}"
-                })
+            if image_files:
+                # 최대 5개 이미지 선택
+                import random
+                selected_images = random.sample(image_files, min(5, len(image_files)))
+                
+                for img_file in selected_images:
+                    # 유사도 임의 생성 (0.7 ~ 0.98)
+                    similarity = random.uniform(0.7, 0.98)
+                    
+                    # 이미지 URL 생성 - 실제 저장 경로 사용
+                    image_url = f"http://localhost:8000/images/{img_file}"
+                    
+                    similar_images.append({
+                        "filename": img_file,
+                        "similarity": round(similarity, 2),
+                        "url": image_url,
+                        "image_url": image_url,  # 추가적인 URL 필드 (일관성 유지용)
+                        "image_path": os.path.join(image_dir, img_file)
+                    })
+            else:
+                print(f"[API] 이미지 디렉토리에 이미지 파일이 없습니다.")
+        else:
+            print(f"[API] 이미지 디렉토리 '{image_dir}'가 존재하지 않습니다.")
         
         # 임시 파일 삭제
-        os.remove(file_path)
+        if os.path.exists(file_path):
+            os.remove(file_path)
         
         return {
             "status": "success",
@@ -739,9 +753,15 @@ async def upload_and_find_similar(file: UploadFile = File(...)):
         }
         
     except Exception as e:
-        # 오류 발생 시 임시 파일 삭제 시도
+        # 오류 발생 시 상세 오류 기록
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"[API 오류] 유사 이미지 검색 중 오류 발생: {str(e)}")
+        print(f"[API 오류 상세] {error_detail}")
+        
+        # 임시 파일 삭제 시도
         try:
-            if os.path.exists(file_path):
+            if 'file_path' in locals() and os.path.exists(file_path):
                 os.remove(file_path)
         except:
             pass

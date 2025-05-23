@@ -23,6 +23,7 @@ class User(UserBase):
     id: int
     is_active: bool = True
     roles: List[str] = ["user"]  # 호환성을 위해 유지, permission 필드값이 여기에 저장됨
+    permission: Optional[str] = "user"  # 권한 필드 추가 (기본값: user)
 
 
 class SSOModel(BaseModel):

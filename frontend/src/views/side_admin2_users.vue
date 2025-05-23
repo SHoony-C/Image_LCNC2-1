@@ -13,6 +13,10 @@
 
       <div v-else class="user-management-content">
         <div class="header-actions">
+          <button class="refresh-btn" @click="fetchUsers" :disabled="loading">
+            <i class="fas fa-sync" :class="{ 'fa-spin': loading }"></i> 
+            {{ loading ? '로딩 중...' : '사용자 목록 Refresh' }}
+          </button>
           <button class="add-user-btn" @click="showAddUserModal = true">
             <i class="fas fa-user-plus"></i> 사용자 추가
           </button>
@@ -61,6 +65,14 @@
                 <td colspan="6" class="loading-row">
                   <div class="loading-spinner">
                     <i class="fas fa-spinner fa-spin"></i> 사용자 목록 로딩 중...
+                  </div>
+                </td>
+              </tr>
+              <tr v-else-if="users.length === 0 && !error">
+                <td colspan="6" class="empty-row">
+                  <div class="info-message">
+                    <i class="fas fa-info-circle"></i>
+                    사용자 목록을 불러오려면 상단의 '사용자 목록 불러오기' 버튼을 클릭하세요.
                   </div>
                 </td>
               </tr>
@@ -367,7 +379,8 @@ export default {
   created() {
     // 기본 로그만 남기기
     console.log("UserManagement component created - SQL debugging enabled");
-    this.fetchUsers();
+    // 초기 API 호출 제거 (접속 시 자동 호출하지 않음)
+    // this.fetchUsers();
   },
   methods: {
     async fetchUsers() {
@@ -375,24 +388,13 @@ export default {
       this.error = false;
       
       try {
-        console.log("SQL DEBUG: Fetching users from /api/users/users");
+        console.log("SQL DEBUG: Fetching users from /api/users/users-noauth (인증 없는 엔드포인트)");
         
-        const token = localStorage.getItem('token');
-        if (!token) {
-          console.error("No token found");
-          this.error = true;
-          this.errorMessage = '인증 토큰이 없습니다. 로그인이 필요합니다.';
-          this.$router.push('/main');
-          return;
-        }
-        
-        // Use axios with explicit configuration object instead of shorthand method
-        const response = await axios({
-          method: 'get',
-          url: '/api/users/users',
+        // 인증이 필요 없는 엔드포인트 사용
+        const response = await axios.get('/api/users/users-noauth', {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
         
@@ -488,7 +490,7 @@ export default {
       this.loading = true;
       
       try {
-        const token = localStorage.getItem('token');
+        console.log("함수 호출: updateUser() - 인증 없는 엔드포인트 사용");
         
         // 사용자 정보 업데이트
         const userData = {
@@ -503,18 +505,16 @@ export default {
         }
         
         console.log("API Request - Update User:", {
-          url: `/api/users/user/${this.editingUser.id}`,
+          url: `/api/users/user-noauth/${this.editingUser.id}`,
           method: 'put',
           userId: this.editingUser.id
         });
         
-        const response = await axios({
-          method: 'put',
-          url: `/api/users/user/${this.editingUser.id}`,
-          data: userData,
+        // 인증 없는 엔드포인트 사용
+        const response = await axios.put(`/api/users/user-noauth/${this.editingUser.id}`, userData, {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
         
@@ -544,22 +544,21 @@ export default {
       
       try {
         console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
-        console.log("함수 호출: addUser()");
+        console.log("함수 호출: addUser() - 인증 없는 엔드포인트 사용");
         
-        const token = localStorage.getItem('token');
-        
-        // 폼 데이터로 전송
-        const formData = new FormData();
-        formData.append('username', this.newUser.username);
-        formData.append('email', this.newUser.email);
-        formData.append('password', this.newUser.password);
-        formData.append('full_name', this.newUser.fullName);
-        formData.append('department', this.newUser.department);
-        formData.append('permission', this.newUser.permission);
+        // JSON 형식으로 데이터 준비
+        const userData = {
+          username: this.newUser.username,
+          email: this.newUser.email,
+          password: this.newUser.password,
+          full_name: this.newUser.fullName,
+          department: this.newUser.department,
+          permission: this.newUser.permission
+        };
         
         // 사용자 추가 정보 로깅
         console.log("API 요청 정보:");
-        console.log("- 엔드포인트: /api/users/user");
+        console.log("- 엔드포인트: /api/users/user-noauth (인증 없음)");
         console.log("- 메서드: POST");
         console.log("- 요청 데이터:");
         console.log("  username:", this.newUser.username);
@@ -569,17 +568,13 @@ export default {
         console.log("  permission:", this.newUser.permission);
         console.log("  password: [보안 정보 - 표시하지 않음]");
         console.log("- 예상 SQL 쿼리: INSERT INTO users (username, email, full_name, department, permission, hashed_password) VALUES (?, ?, ?, ?, ?, ?)");
-        console.log("- 쿼리 파라미터:", [this.newUser.username, this.newUser.email, this.newUser.fullName, this.newUser.department, this.newUser.permission, "[해시된 암호]"]);
         console.log("요청 시작 시간:", new Date().toISOString());
         
-        // API 호출
-        const response = await axios({
-          method: 'post',
-          url: '/api/users/user',
-          data: formData,
+        // API 호출 - 인증 필요 없는 엔드포인트 사용
+        const response = await axios.post('/api/users/user-noauth', userData, {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
         
@@ -597,15 +592,12 @@ export default {
         console.error('Failed to add user:', error);
         console.error('Error details:', error.response?.data || error.message);
         console.error('Error status:', error.response?.status);
-        if (error.response?.config) {
-          console.error('API 요청 정보:', {
-            url: error.response.config.url,
-            method: error.response.config.method
-          });
-        }
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
         
-        alert('사용자 추가에 실패했습니다: ' + (error.response?.data?.detail || error.message));
+        let errorMsg = '사용자 추가에 실패했습니다.';
+        if (error.response && error.response.data && error.response.data.detail) {
+          errorMsg += ` (${error.response.data.detail})`;
+        }
+        alert(errorMsg);
       } finally {
         this.loading = false;
       }
@@ -664,20 +656,19 @@ export default {
       this.loading = true;
       
       try {
-        const token = localStorage.getItem('token');
+        console.log("함수 호출: deleteUser() - 인증 없는 엔드포인트 사용");
         
         console.log("API Request - Delete User:", {
-          url: `/api/users/user/${this.userToDelete.id}`,
+          url: `/api/users/user-noauth/${this.userToDelete.id}`,
           method: 'delete',
           userId: this.userToDelete.id
         });
         
-        const response = await axios({
-          method: 'delete',
-          url: `/api/users/user/${this.userToDelete.id}`,
+        // 인증 없는 엔드포인트 사용
+        const response = await axios.delete(`/api/users/user-noauth/${this.userToDelete.id}`, {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
           }
         });
         
@@ -761,6 +752,22 @@ export default {
   font-size: 1.2rem;
 }
 
+.info-message {
+  background-color: #ebf8ff;
+  border-left: 4px solid #4299e1;
+  padding: 1rem;
+  border-radius: 4px;
+  margin: 1rem;
+  display: flex;
+  align-items: center;
+  color: #2b6cb0;
+}
+
+.info-message i {
+  margin-right: 0.5rem;
+  font-size: 1.2rem;
+}
+
 .content-wrapper {
   background-color: white;
   border-radius: 12px;
@@ -777,6 +784,25 @@ export default {
   display: flex;
   justify-content: flex-end;
   margin-bottom: 1.5rem;
+}
+
+.refresh-btn {
+  background-color: #7950f2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: background-color 0.2s;
+}
+
+.refresh-btn:hover {
+  background-color: #6741d9;
 }
 
 .add-user-btn {

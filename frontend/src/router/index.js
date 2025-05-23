@@ -8,6 +8,7 @@ import SettingsView from '@/views/side_admin3_settings.vue'
 import UserCountView from '@/views/side_admin4_user-count.vue'
 import UserManagementView from '@/views/side_4_management.vue'
 import store from '@/store'
+import LogService from '../utils/logService'
 
 const routes = [
   {
@@ -68,16 +69,29 @@ const router = createRouter({
 
 // Navigation guard for authentication
 router.beforeEach(async (to, from, next) => {
+  // 페이지 타이틀 설정
+  document.title = to.meta.title || 'LCNC MSA Application'
+  
+  // 페이지 접근 로깅 (비동기 실행, 페이지 로딩 속도에 영향 없도록)
+  setTimeout(() => {
+    try {
+      LogService.logPageVisit(to.name || to.path);
+    } catch (error) {
+      console.error('페이지 방문 로깅 실패:', error);
+    }
+  }, 0);
+  
+  // 원래 인증 체크 로직
+  // Ensure auth state is checked
+  if (!store.getters['auth/isAuthChecked']) {
+    await store.dispatch('auth/checkAuth')
+  }
+  
+  const isAuthenticated = store.getters['auth/isAuthenticated']
+  const user = store.state.auth.user
+  
   // Check if route requires authentication
   if (to.matched.some(record => record.meta.requiresAuth)) {
-    // Ensure auth state is checked
-    if (!store.getters['auth/isAuthChecked']) {
-      await store.dispatch('auth/checkAuth')
-    }
-    
-    const isAuthenticated = store.getters['auth/isAuthenticated']
-    const user = store.state.auth.user
-    
     if (!isAuthenticated) {
       // Store intended destination for after login
       sessionStorage.setItem('redirectAfterLogin', to.fullPath)
@@ -86,17 +100,17 @@ router.beforeEach(async (to, from, next) => {
       next({ path: '/' })
       return
     }
+  }
+  
+  // Check if route requires admin role
+  if (to.matched.some(record => record.meta.requiresAdmin)) {
+    // Check if user has admin permission
+    const hasAdminRole = user && user.permission === 'admin'
     
-    // Check if route requires admin role
-    if (to.matched.some(record => record.meta.requiresAdmin)) {
-      // Check if user has admin role
-      const hasAdminRole = user && 
-        (user.roles?.includes('admin') || user.permission === 'admin')
-      
-      if (!hasAdminRole) {
-        next({ path: '/' })
-        return
-      }
+    if (!hasAdminRole) {
+      console.log('Admin 권한이 필요한 페이지 접근 차단:', to.path)
+      next({ path: '/' })
+      return
     }
   }
   

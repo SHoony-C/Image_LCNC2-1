@@ -219,6 +219,8 @@
 </template>
 
 <script>
+import LogService from '../utils/logService'
+
 export default {
   name: 'MSA6ImagePopup',
   props: {
@@ -335,6 +337,11 @@ export default {
           resolve();
         };
       });
+      
+      // 로그 저장 - 측정 팝업 열기
+      LogService.logAction('open_measurement_popup', {
+        imageLoaded: true
+      })
     },
     async handleImageLoad() {
       const img = this.$refs.sourceImage;
@@ -828,6 +835,13 @@ export default {
       this.isSettingReference = !this.isSettingReference;
     },
     closePopup() {
+      // 로그 저장 - 측정 팝업 닫기
+      LogService.logAction('close_measurement_popup', {
+        measurementsCount: this.measurementMode === 'defect' 
+          ? this.defectMeasurements.length 
+          : this.filteredMeasurements.length
+      })
+      
       this.$emit('close');
     },
     applySelectedIds() {
@@ -1070,7 +1084,18 @@ export default {
       if (!this.selectedAreaRect || this.isApiSending) return;
       
       try {
-        this.isApiSending = true;
+        this.isApiSending = true
+        
+        // 로그 저장 - 불량 감지 요청
+        LogService.logAction('defect_detection_request', {
+          area: {
+            x: this.selectedAreaRect.start.x,
+            y: this.selectedAreaRect.start.y,
+            width: this.selectedAreaRect.width,
+            height: this.selectedAreaRect.height
+          }
+        })
+        
         const imageData = this.extractSelectedAreaImage();
         
         if (!imageData) {
@@ -1151,7 +1176,15 @@ export default {
     saveMeasurementsToMongoDB() {
       if (this.isSaving || (this.measurementMode === 'defect' ? this.defectMeasurements.length === 0 : this.filteredMeasurements.length === 0)) return;
       
-      this.isSaving = true;
+      this.isSaving = true
+      
+      // 로그 저장 - 측정 결과 저장
+      LogService.logAction('save_measurements', {
+        mode: this.measurementMode,
+        count: this.measurementMode === 'defect' 
+          ? this.defectMeasurements.length 
+          : this.filteredMeasurements.length
+      })
       
       // 세션 ID 가져오기 (localStorage에서)
       const sessionId = localStorage.getItem('current_workflow_session_id');

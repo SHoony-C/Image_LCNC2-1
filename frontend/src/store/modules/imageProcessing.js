@@ -1,5 +1,6 @@
 import axios from 'axios'
 import io from 'socket.io-client'
+import LogService from '../../utils/logService'
 
 let socket = null
 
@@ -75,6 +76,13 @@ const actions = {
     try {
       commit('SET_UPLOAD_STATUS', 'uploading')
       
+      // 로그 저장 - 이미지 업로드 시작
+      LogService.logAction('start_image_upload', {
+        filename: imageFile.name,
+        filesize: imageFile.size,
+        filetype: imageFile.type
+      })
+      
       const formData = new FormData()
       formData.append('image', imageFile)
       
@@ -97,8 +105,20 @@ const actions = {
       commit('SET_UPLOADED_IMAGE', response.data.imageUrl)
       commit('SET_UPLOAD_STATUS', 'completed')
       
+      // 로그 저장 - 이미지 업로드 완료
+      LogService.logAction('complete_image_upload', {
+        filename: imageFile.name,
+        imageUrl: response.data.imageUrl
+      })
+      
       return response.data
     } catch (error) {
+      // 로그 저장 - 이미지 업로드 실패
+      LogService.logAction('failed_image_upload', {
+        filename: imageFile ? imageFile.name : 'unknown',
+        error: error.message
+      })
+      
       commit('SET_UPLOAD_STATUS', 'error')
       console.error('Upload error:', error)
       throw error
@@ -108,6 +128,12 @@ const actions = {
   // Request preprocessing from MSA1
   async requestPreprocessing({ commit }, { imageId, options }) {
     try {
+      // 로그 저장 - 전처리 시작
+      LogService.logAction('start_preprocessing', {
+        imageId,
+        options
+      })
+      
       commit('UPDATE_PROCESSING_STATUS', {
         service: 'msa1',
         status: 'processing',
@@ -119,9 +145,20 @@ const actions = {
         options
       })
       
+      // 로그 저장 - 전처리 요청 완료
+      LogService.logAction('preprocessing_requested', {
+        imageId
+      })
+      
       // The actual progress updates will come through the socket connection
       return response.data
     } catch (error) {
+      // 로그 저장 - 전처리 실패
+      LogService.logAction('failed_preprocessing', {
+        imageId,
+        error: error.message
+      })
+      
       commit('UPDATE_PROCESSING_STATUS', {
         service: 'msa1',
         status: 'error',
@@ -135,14 +172,33 @@ const actions = {
   // Start a workflow in MSA5
   async startWorkflow({ commit }, { name, steps }) {
     try {
+      // 로그 저장 - 워크플로우 시작
+      LogService.logAction('start_workflow', {
+        name,
+        stepsCount: steps.length
+      })
+      
       const response = await axios.post('/api/msa5/workflow', {
         name,
         steps
       })
       
       commit('SET_ACTIVE_WORKFLOW', response.data)
+      
+      // 로그 저장 - 워크플로우 생성됨
+      LogService.logAction('workflow_created', {
+        name,
+        workflowId: response.data.id
+      })
+      
       return response.data
     } catch (error) {
+      // 로그 저장 - 워크플로우 시작 실패
+      LogService.logAction('failed_workflow_start', {
+        name,
+        error: error.message
+      })
+      
       console.error('Workflow start error:', error)
       throw error
     }

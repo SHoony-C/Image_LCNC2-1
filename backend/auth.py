@@ -277,14 +277,27 @@ async def acs(request: Request, form_data: SSOModel = None):
             if not db_user:
                 # 새 사용자 생성
                 hashed_password = get_password_hash(str(uuid.uuid4()))
+                
+                # 이메일 도메인을 기반으로 permission 설정
+                permission = "user"  # 기본값
+                if mail and '@' in mail:
+                    domain = mail.split('@')[1].lower()
+                    # 관리자로 지정할 도메인 목록
+                    admin_domains = config.ADMIN_DOMAINS if hasattr(config, 'ADMIN_DOMAINS') else ["admin.com", "admin.org"]
+                    if domain in admin_domains:
+                        permission = "admin"
+                        print(f"관리자 권한 부여: {mail} (도메인: {domain})")
+                
                 db_user = User(
                     username=username,
                     email=mail,
-                    hashed_password=hashed_password
+                    hashed_password=hashed_password,
+                    permission=permission
                 )
                 db.add(db_user)
                 db.commit()
                 db.refresh(db_user)
+                print(f"사용자 등록 완료: ID={db_user.id}, 권한={permission}")
             else:
                 # 기존 사용자 로그인 시 정보 업데이트
                 if mail and db_user.email != mail:
@@ -295,7 +308,7 @@ async def acs(request: Request, form_data: SSOModel = None):
             # JWT 토큰 생성
             access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
             access_token = create_access_token(
-                data={"sub": db_user.username}, 
+                data={"sub": str(db_user.id)}, 
                 expires_delta=access_token_expires
             )
             
@@ -341,20 +354,27 @@ async def acs(request: Request, form_data: SSOModel = None):
         if not db_user:
             # 새 사용자 생성
             hashed_password = get_password_hash(str(uuid.uuid4()))
+            
+            # 이메일 도메인을 기반으로 permission 설정
+            permission = "user"  # 기본값
+            if mail and '@' in mail:
+                domain = mail.split('@')[1].lower()
+                # 관리자로 지정할 도메인 목록
+                admin_domains = config.ADMIN_DOMAINS if hasattr(config, 'ADMIN_DOMAINS') else ["admin.com", "admin.org"]
+                if domain in admin_domains:
+                    permission = "admin"
+                    print(f"관리자 권한 부여: {mail} (도메인: {domain})")
+            
             db_user = User(
-                username=name or email.split('@')[0],
-                email=email,
-                hashed_password=hashed_password
+                username=username,
+                email=mail,
+                hashed_password=hashed_password,
+                permission=permission
             )
             db.add(db_user)
             db.commit()
             db.refresh(db_user)
-            print(f"새 사용자 등록: {email}, {name}")
-            # 임의 비밀번호 생성
-            # 필요한 경우 다른 필드 업데이트
-            if name and db_user.username != name:
-                db_user.username = name
-                db.commit()
+            print(f"사용자 등록 완료: ID={db_user.id}, 권한={permission}")
         else:
             # 기존 사용자 로그인 시 정보 업데이트
             if mail and db_user.email != mail:
@@ -365,14 +385,14 @@ async def acs(request: Request, form_data: SSOModel = None):
             print(f"기존 사용자 확인: ID={db_user.id}")
             # 기존 사용자 정보 업데이트 (loginid 제거)
             # 필요한 경우 다른 필드 업데이트
-            if name and db_user.username != name:
-                db_user.username = name
+            if username and db_user.username != username:
+                db_user.username = username
                 db.commit()
         
         # JWT 토큰 생성
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": db_user.username}, 
+            data={"sub": str(db_user.id)}, 
             expires_delta=access_token_expires
         )
         
@@ -452,15 +472,27 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                     print(f"새 사용자 등록: {email}, {name}")
                     # 임의 비밀번호 생성
                     hashed_password = get_password_hash(str(uuid.uuid4()))
+                    
+                    # 이메일 도메인을 기반으로 permission 설정
+                    permission = "user"  # 기본값
+                    if email and '@' in email:
+                        domain = email.split('@')[1].lower()
+                        # 관리자로 지정할 도메인 목록
+                        admin_domains = config.ADMIN_DOMAINS if hasattr(config, 'ADMIN_DOMAINS') else ["admin.com", "admin.org"]
+                        if domain in admin_domains:
+                            permission = "admin"
+                            print(f"관리자 권한 부여: {email} (도메인: {domain})")
+                    
                     user = User(
                         username=name or email.split('@')[0],
                         email=email,
-                        hashed_password=hashed_password
+                        hashed_password=hashed_password,
+                        permission=permission
                     )
                     db.add(user)
                     db.commit()
                     db.refresh(user)
-                    print(f"사용자 등록 완료: ID={user.id}")
+                    print(f"사용자 등록 완료: ID={user.id}, 권한={permission}")
                 else:
                     print(f"기존 사용자 확인: ID={user.id}")
                     # 기존 사용자 정보 업데이트 (loginid 제거)
@@ -470,6 +502,7 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                         db.commit()
                 
                 # 사용자 정보 반환
+                print(f"ID 토큰 인증 성공, 반환할 사용자 정보: ID={user.id}, 사용자명={user.username}, 권한={user.permission}")
                 return {
                     "authenticated": True,
                     "user": {
@@ -478,7 +511,7 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                         "email": user.email,
                         "full_name": user.username,
                         "department": None,
-                        "permission": user.permission if hasattr(user, 'permission') else "user",
+                        "permission": user.permission,
                         "is_active": True
                     }
                 }
@@ -526,15 +559,27 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                             print(f"새 사용자 등록: {email}, {name}")
                             # 임의 비밀번호 생성
                             hashed_password = get_password_hash(str(uuid.uuid4()))
+                            
+                            # 이메일 도메인을 기반으로 permission 설정
+                            permission = "user"  # 기본값
+                            if email and '@' in email:
+                                domain = email.split('@')[1].lower()
+                                # 관리자로 지정할 도메인 목록
+                                admin_domains = config.ADMIN_DOMAINS if hasattr(config, 'ADMIN_DOMAINS') else ["admin.com", "admin.org"]
+                                if domain in admin_domains:
+                                    permission = "admin"
+                                    print(f"관리자 권한 부여: {email} (도메인: {domain})")
+                            
                             user = User(
                                 username=name or email.split('@')[0],
                                 email=email,
-                                hashed_password=hashed_password
+                                hashed_password=hashed_password,
+                                permission=permission
                             )
                             db.add(user)
                             db.commit()
                             db.refresh(user)
-                            print(f"사용자 등록 완료: ID={user.id}")
+                            print(f"사용자 등록 완료: ID={user.id}, 권한={permission}")
                         else:
                             print(f"기존 사용자 확인: ID={user.id}")
                             # 기존 사용자 정보 업데이트 (loginid 제거)
@@ -544,6 +589,7 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                                 db.commit()
                         
                         # 사용자 정보 반환
+                        print(f"액세스 토큰 인증 성공, 반환할 사용자 정보: ID={user.id}, 사용자명={user.username}, 권한={user.permission}")
                         return {
                             "authenticated": True,
                             "user": {
@@ -552,7 +598,7 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                                 "email": user.email,
                                 "full_name": user.username,
                                 "department": None,
-                                "permission": user.permission if hasattr(user, 'permission') else "user",
+                                "permission": user.permission,
                                 "is_active": True
                             }
                         }
@@ -610,15 +656,27 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                         print(f"새 사용자 등록: {email}, {name}")
                         # 임의 비밀번호 생성
                         hashed_password = get_password_hash(str(uuid.uuid4()))
+                        
+                        # 이메일 도메인을 기반으로 permission 설정
+                        permission = "user"  # 기본값
+                        if email and '@' in email:
+                            domain = email.split('@')[1].lower()
+                            # 관리자로 지정할 도메인 목록
+                            admin_domains = config.ADMIN_DOMAINS if hasattr(config, 'ADMIN_DOMAINS') else ["admin.com", "admin.org"]
+                            if domain in admin_domains:
+                                permission = "admin"
+                                print(f"관리자 권한 부여: {email} (도메인: {domain})")
+                        
                         user = User(
                             username=name or email.split('@')[0],
                             email=email,
-                            hashed_password=hashed_password
+                            hashed_password=hashed_password,
+                            permission=permission
                         )
                         db.add(user)
                         db.commit()
                         db.refresh(user)
-                        print(f"사용자 등록 완료: ID={user.id}")
+                        print(f"사용자 등록 완료: ID={user.id}, 권한={permission}")
                     else:
                         print(f"기존 사용자 확인: ID={user.id}")
                         # 기존 사용자 정보 업데이트 (loginid 제거)
@@ -628,6 +686,7 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                             db.commit()
                     
                     # 사용자 정보 반환
+                    print(f"Google RS256 토큰 인증 성공, 반환할 사용자 정보: ID={user.id}, 사용자명={user.username}, 권한={user.permission}")
                     return {
                         "authenticated": True,
                         "user": {
@@ -636,7 +695,7 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                             "email": user.email,
                             "full_name": user.username,
                             "department": None,
-                            "permission": user.permission if hasattr(user, 'permission') else "user",
+                            "permission": user.permission,
                             "is_active": True
                         }
                     }
@@ -664,6 +723,7 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                     return {"authenticated": False}
                 
                 # 사용자 정보 반환
+                print(f"JWT 토큰 인증 성공, 반환할 사용자 정보: ID={user.id}, 사용자명={user.username}, 권한={user.permission}")
                 return {
                     "authenticated": True,
                     "user": {
@@ -672,7 +732,7 @@ async def check_auth(id_token: str = None, access_token: str = None, token: str 
                         "email": user.email,
                         "full_name": user.username,
                         "department": None,
-                        "permission": user.permission if hasattr(user, 'permission') else "user",
+                        "permission": user.permission,
                         "is_active": True
                     }
                 }
