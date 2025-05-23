@@ -6,6 +6,10 @@
         <span>이미지 전처리 LCNC</span>
       </div>
       <div class="header-right">
+        <button @click="saveWorkflow" class="save-btn" :disabled="!canSaveWorkflow" title="현재 워크플로우 저장">
+          <i class="fas fa-save"></i>
+          저장
+        </button>
         <button @click="processStart" class="process-btn" :disabled="!inputImage">
           <i class="fas fa-play-circle"></i>
           Process Start
@@ -17,8 +21,8 @@
     </div>
 
     <!-- 상태 메시지 알림 -->
-    <div class="status-message" v-if="showStatusMessage">
-      <i class="fas fa-info-circle"></i>
+    <div class="status-message" :class="{ 'error': processingStatus === 'error' }" v-if="showStatusMessage">
+      <i :class="processingStatus === 'error' ? 'fas fa-exclamation-circle' : 'fas fa-info-circle'"></i>
       <span>{{ statusMessage }}</span>
     </div>
 
@@ -69,11 +73,13 @@
       </div>
 
       <div class="workflow-area" @dragover="onDragOver" @drop="onDrop" ref="workflowArea">
+        <!-- 워크플로우 오류 하이라이트 표시 -->
+        <div class="workflow-error-highlight" v-if="processingStatus === 'error'"></div>
 
         <VueFlow v-model="elements" 
           :default-viewport="{ x: 0, y: 0, zoom: 0.7 }"
           :style="{ width: '100%', height: '100%' }"
-          @connect="onConnect" @node-drag-stop="onNodeDragStop" @node-click="onNodeClick"
+          @connect="onConnect" @node-drag-stop="onNodeDragStop" @node-click="onNodeClick" @edge-click="onEdgeClick"
           :min-zoom="0.2" :max-zoom="2" :snap-to-grid="true" :snap-grid="[15, 15]"
           :fit-view-on-init="true"
           :auto-connect="false"
@@ -189,6 +195,182 @@
           </div>
           <div class="preview-content">
             <img :src="previewImageUrl" alt="Preview" class="preview-image">
+            <div class="preview-actions" v-if="previewImageUrl === processedImages['end']">
+              <button class="action-btn similar-btn" @click="findSimilarForEndImage">
+                <i class="fas fa-search"></i>
+                유사 이미지 검색
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 워크플로우 이름 입력 팝업 추가 -->
+    <Teleport to="body">
+      <div class="save-workflow-overlay" v-if="showSaveWorkflowDialog" @click="cancelSaveWorkflow">
+        <div class="save-workflow-dialog" @click.stop>
+          <div class="dialog-header">
+            <h3>워크플로우 저장</h3>
+            <button class="close-btn" @click="cancelSaveWorkflow">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="dialog-content">
+            <div class="form-group">
+              <label for="workflow-name">워크플로우 이름</label>
+              <input 
+                type="text" 
+                id="workflow-name" 
+                v-model="workflowName" 
+                placeholder="저장할 워크플로우 이름을 입력하세요"
+                class="workflow-name-input"
+                ref="workflowNameInput"
+                @keyup.enter="confirmSaveWorkflow"
+              >
+              <small class="input-help-text">공백은 자동으로 언더스코어(_)로 변환됩니다.</small>
+            </div>
+            <div class="form-group">
+              <label for="workflow-desc">설명 (선택사항)</label>
+              <textarea 
+                id="workflow-desc" 
+                v-model="workflowDescription" 
+                placeholder="워크플로우에 대한 설명을 입력하세요"
+                class="workflow-desc-input"
+              ></textarea>
+            </div>
+            <div class="preview-info">
+              <div class="preview-item">
+                <label>시작 이미지:</label>
+                <div class="preview-image-container" v-if="inputImage">
+                  <img :src="inputImage" alt="시작 이미지" class="mini-preview">
+                </div>
+                <div class="no-image" v-else>이미지 없음</div>
+              </div>
+              <div class="preview-item">
+                <label>결과 이미지:</label>
+                <div class="preview-image-container" v-if="processedImages['end']">
+                  <img :src="processedImages['end']" alt="결과 이미지" class="mini-preview">
+                </div>
+                <div class="no-image" v-else>이미지 없음</div>
+              </div>
+            </div>
+            
+            <!-- 워크플로우 요약 정보 추가 -->
+            <div class="workflow-summary">
+              <label>워크플로우 요약:</label>
+              <div class="workflow-nodes-container">
+                <div class="workflow-node-list">
+                  <div class="workflow-node start-node-mini">
+                    <i class="fas fa-play"></i>
+                    <span>시작</span>
+                  </div>
+                  
+                  <div v-for="node in getNodeSummary()" :key="node.id" class="workflow-node">
+                    <i :class="node.icon"></i>
+                    <span>{{ node.label }}</span>
+                  </div>
+                  
+                  <div class="workflow-node end-node-mini">
+                    <i class="fas fa-stop"></i>
+                    <span>종료</span>
+                  </div>
+                </div>
+                
+                <div class="workflow-stats">
+                  <div class="stat-item">
+                    <span class="stat-label">총 노드:</span>
+                    <span class="stat-value">{{ getNodeCount() }}</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="stat-label">총 연결:</span>
+                    <span class="stat-value">{{ getConnectionCount() }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="dialog-footer">
+            <button class="cancel-btn" @click="cancelSaveWorkflow">취소</button>
+            <button class="save-btn" @click="confirmSaveWorkflow" :disabled="!workflowName">저장</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+    
+    <!-- 중복 이름 확인 팝업 -->
+    <Teleport to="body">
+      <div class="duplicate-name-overlay" v-if="showDuplicateNameDialog" @click="closeDuplicateNameDialog">
+        <div class="duplicate-name-dialog" @click.stop>
+          <div class="dialog-header">
+            <h3>중복된 이름</h3>
+            <button class="close-btn" @click="closeDuplicateNameDialog">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="dialog-content">
+            <div class="warning-icon">
+              <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <p>입력하신 이름 "<strong>{{ workflowName }}</strong>"는 이미 사용 중입니다.</p>
+            <p><strong>다른 이름을 사용하세요.</strong></p>
+            <div class="form-group mt-3">
+              <label for="new-workflow-name">새 이름:</label>
+              <input 
+                type="text" 
+                id="new-workflow-name" 
+                v-model="newWorkflowName" 
+                placeholder="새로운 워크플로우 이름을 입력하세요"
+                class="workflow-name-input"
+                ref="newWorkflowNameInput"
+                @keyup.enter="applyNewName"
+              >
+              <!-- 중복 이름 오류 메시지 추가 -->
+              <div class="input-error-message" v-if="showDuplicateNameError">
+                <i class="fas fa-exclamation-circle"></i>
+                해당 이름도 중복됩니다. 다른 이름을 입력하세요.
+              </div>
+            </div>
+          </div>
+          <div class="dialog-footer">
+            <button class="cancel-btn" @click="closeDuplicateNameDialog">취소</button>
+            <button class="save-btn" @click="applyNewName" :disabled="!newWorkflowName">적용</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+    
+    <!-- 워크플로우 오류 팝업 -->
+    <Teleport to="body">
+      <div class="workflow-error-overlay" v-if="showWorkflowErrorDialog" @click="closeWorkflowErrorDialog">
+        <div class="workflow-error-dialog" @click.stop>
+          <div class="dialog-header">
+            <h3>{{ workflowErrorTitle }}</h3>
+            <button class="close-btn" @click="closeWorkflowErrorDialog">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="dialog-content">
+            <div class="error-icon">
+              <i class="fas fa-exclamation-circle"></i>
+            </div>
+            <div class="error-message">
+              <p class="error-main-message">{{ workflowErrorMessage }}</p>
+              <div class="error-details">
+                {{ workflowErrorDetails }}
+              </div>
+            </div>
+            <div class="error-tips">
+              <h4>해결 방법</h4>
+              <ul>
+                <li>시작 노드와 종료 노드가 올바르게 연결되어 있는지 확인하세요.</li>
+                <li>워크플로우 내 모든 노드가 적절히 연결되어 있는지 확인하세요.</li>
+                <li>끊어진 연결이 없는지 확인하세요.</li>
+              </ul>
+            </div>
+          </div>
+          <div class="dialog-footer">
+            <button class="ok-btn" @click="closeWorkflowErrorDialog">확인</button>
           </div>
         </div>
       </div>
@@ -197,7 +379,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed, nextTick } from 'vue'
 import { VueFlow, Handle } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -219,6 +401,7 @@ export default {
     const hasOutput = ref(false)
     const elements = ref([])
     const selectedNode = ref(null)
+    const selectedEdge = ref(null) // 선택된 엣지(연결선) 저장용
     const inputImage = ref('')
     const processedImages = reactive({})
     const processingStatus = ref('idle')
@@ -231,21 +414,43 @@ export default {
     const defaultOptions = ref({})
     const processingQueue = ref([])
     const containerRef = ref(null)
+    const currentImageTitle = ref('')
+    const canSaveWorkflow = ref(false)
+    const savedWorkflows = ref({})
+    const showSaveWorkflowDialog = ref(false)
+    const workflowName = ref('')
+    const workflowDescription = ref('')
+    const workflowNameInput = ref(null)
+    const showDuplicateNameDialog = ref(false)
+    const newWorkflowName = ref('')
+    const newWorkflowNameInput = ref(null)
+    const showDuplicateNameError = ref(false)
+    const workflowErrorTitle = ref('')
+    const workflowErrorMessage = ref('')
+    const workflowErrorDetails = ref('')
+    const showWorkflowErrorDialog = ref(false)
     
     // 이미지 해시 계산 함수
-    const calculateImageHash = async (base64Image) => {
-      // base64 데이터 추출
-      const base64Data = base64Image.split(',')[1];
-      // ArrayBuffer로 변환
-      const binaryData = atob(base64Data);
-      const bytes = new Uint8Array(binaryData.length);
-      for (let i = 0; i < binaryData.length; i++) {
-        bytes[i] = binaryData.charCodeAt(i);
+    const calculateImageHash = async (imageUrl) => {
+      try {
+        // Base64 대신 URL 자체를 사용
+        if (!imageUrl) {
+          console.error('이미지 URL이 없습니다.');
+          return 'no-image-hash';
+        }
+        
+        // URL에서 파일명만 추출하여 사용
+        const filename = imageUrl.split('/').pop();
+        if (!filename) {
+          return `url-hash-${Date.now()}`;
+        }
+        
+        // 파일명 자체를 해시로 사용하거나 간단한 해시 생성
+        return `image-${filename}`;
+      } catch (error) {
+        console.error('해시 계산 중 오류 발생:', error);
+        return `error-hash-${Date.now()}`;
       }
-      // 해시 계산
-      const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     }
     
     // 노드 필터링을 위한 computed 속성
@@ -334,6 +539,30 @@ export default {
       // 입력/출력 연결 상태 업데이트
       updateConnections()
     }
+    
+    // 선택한 엣지(연결선) 삭제
+    const deleteSelectedEdge = () => {
+      if (!selectedEdge.value) return
+      
+      // 해당 엣지의 ID
+      const edgeId = selectedEdge.value.id
+      
+      console.log('엣지 삭제 시작:', edgeId)
+      
+      // 변경 전 상태 저장
+      saveToHistory()
+      
+      // 엣지 삭제
+      elements.value = elements.value.filter(el => el.id !== edgeId)
+      
+      // 선택 해제
+      selectedEdge.value = null
+      
+      // 입력/출력 연결 상태 업데이트
+      updateConnections()
+      
+      console.log('엣지 삭제 완료')
+    }
 
     // 키보드 이벤트 핸들러
     const handleKeyDown = (event) => {
@@ -359,6 +588,14 @@ export default {
       if (event.key === 'Delete' && selectedNode.value) {
         console.log('Delete 키 감지 - 노드 삭제 실행');
         deleteSelectedNode();
+        event.preventDefault();
+        return;
+      }
+      
+      // Delete 키로 선택된 엣지 삭제
+      if (event.key === 'Delete' && selectedEdge.value) {
+        console.log('Delete 키 감지 - 엣지 삭제 실행');
+        deleteSelectedEdge();
         event.preventDefault();
         return;
       }
@@ -447,6 +684,9 @@ export default {
         screenY: event.event?.screenY 
       });
       
+      // 엣지 선택 해제
+      selectedEdge.value = null;
+      
       if (node && node.type && node.type !== 'smoothstep' && node.data && node.id !== 'start' && node.id !== 'end') {
         if (!node.data.params) {
           console.warn(`Node ${node.id} data is missing params object. Initializing.`)
@@ -486,10 +726,50 @@ export default {
         console.log('Node deselected or invalid node clicked.')
       }
     }
+    
+    // 엣지(연결선) 클릭 이벤트 핸들러
+    const onEdgeClick = (event) => {
+      const { edge } = event;
+      console.log('엣지 클릭:', edge.id, '마우스 위치:', {
+        clientX: event.event?.clientX,
+        clientY: event.event?.clientY
+      });
+      
+      // 노드 선택 해제
+      selectedNode.value = null;
+      
+      // 엣지 선택
+      selectedEdge.value = edge;
+      console.log('Edge selected:', selectedEdge.value);
+      
+      // 선택된 엣지에 시각적 표시를 위해 클래스 적용
+      // Vue Flow에서는 이벤트를 통해 자동으로 처리되므로 추가 작업 필요 없음
+    }
 
     // 워크플로우 처리 시작
     const processStart = async () => {
-      if (!inputImage.value) return
+      if (!inputImage.value) {
+        showStatusMessage.value = true
+        statusMessage.value = '이미지가 없습니다. 먼저 이미지를 로드해주세요.'
+        setTimeout(() => { showStatusMessage.value = false }, 5000)
+        return
+      }
+      
+      // 시작 전에 워크플로우 검증 수행
+      const validationResult = validateWorkflow()
+      if (!validationResult.valid) {
+        showStatusMessage.value = true
+        statusMessage.value = validationResult.message
+        processingStatus.value = 'error'
+        setTimeout(() => { showStatusMessage.value = false }, 5000)
+        
+        // 오류 상세 정보를 Vue 팝업으로 표시
+        workflowErrorTitle.value = '워크플로우 검증 실패'
+        workflowErrorMessage.value = validationResult.message
+        workflowErrorDetails.value = validationResult.details || ''
+        showWorkflowErrorDialog.value = true
+        return
+      }
       
       showStatusMessage.value = true
       statusMessage.value = '워크플로우 처리 시작...'
@@ -516,6 +796,9 @@ export default {
       try {
         // 워크플로우 처리
         await processWorkflow()
+        
+        // 처리 완료 후 저장 버튼 활성화
+        canSaveWorkflow.value = true
         
         // MongoDB에 워크플로우 저장
         if (processedImages['end']) {
@@ -573,6 +856,90 @@ export default {
         statusMessage.value = `처리 오류: ${error.message || '알 수 없는 오류'}`
         showStatusMessage.value = true
         setTimeout(() => { showStatusMessage.value = false }, 5000)
+      }
+    }
+    
+    // 워크플로우 유효성 검증 함수
+    const validateWorkflow = () => {
+      // 1. 입력 이미지 확인
+      if (!inputImage.value) {
+        return {
+          valid: false,
+          message: '입력 이미지가 없습니다.',
+          details: '워크플로우를 실행하기 전에 이미지를 로드해주세요.'
+        }
+      }
+      
+      // 2. 노드와 엣지 확인
+      const connections = elements.value.filter(el => el.type === 'smoothstep')
+      if (connections.length === 0) {
+        return {
+          valid: false,
+          message: '워크플로우에 연결선이 없습니다.',
+          details: '시작 노드에서 종료 노드까지 연결을 만들어주세요.'
+        }
+      }
+      
+      // 3. 시작 노드에서 나가는 연결 확인
+      const startConnections = connections.filter(conn => conn.source === 'start')
+      if (startConnections.length === 0) {
+        return {
+          valid: false,
+          message: '시작 노드에서 나가는 연결이 없습니다.',
+          details: '시작 노드에서 다른 노드로 연결선을 추가해주세요.'
+        }
+      }
+      
+      // 4. 종료 노드로 들어오는 연결 확인
+      const endConnections = connections.filter(conn => conn.target === 'end')
+      if (endConnections.length === 0) {
+        return {
+          valid: false,
+          message: '종료 노드로 들어오는 연결이 없습니다.',
+          details: '종료 노드로 연결되는 연결선을 추가해주세요.'
+        }
+      }
+      
+      // 5. 연결 경로 확인 (시작 -> 종료)
+      const graph = {}
+      elements.value.filter(el => el.type !== 'smoothstep').forEach(node => {
+        graph[node.id] = []
+      })
+      
+      connections.forEach(conn => {
+        if (!graph[conn.source]) graph[conn.source] = []
+        graph[conn.source].push(conn.target)
+      })
+      
+      // BFS로 시작 노드에서 종료 노드까지 경로 확인
+      const queue = ['start']
+      const visited = new Set(['start'])
+      
+      while (queue.length > 0) {
+        const current = queue.shift()
+        
+        if (current === 'end') {
+          // 종료 노드에 도달 가능
+          return {
+            valid: true,
+            message: '워크플로우가 유효합니다.'
+          }
+        }
+        
+        const neighbors = graph[current] || []
+        for (const neighbor of neighbors) {
+          if (!visited.has(neighbor)) {
+            visited.add(neighbor)
+            queue.push(neighbor)
+          }
+        }
+      }
+      
+      // 종료 노드에 도달하지 못함
+      return {
+        valid: false,
+        message: '시작부터 종료까지의 경로가 없습니다.',
+        details: '시작 노드에서 종료 노드까지 연결된 경로를 만들어주세요. 모든 노드가 올바르게 연결되어 있는지 확인하세요.'
       }
     }
     
@@ -1087,65 +1454,917 @@ export default {
       return !existingConnection
     }
 
-    // 컴포넌트 마운트/언마운트 시 이벤트 처리 변경
-    onMounted(() => {
-      // 노드 로드
-      loadAvailableNodes();
+    // 워크플로우 저장 함수
+    const saveWorkflow = async () => {
+      if (!inputImage.value || elements.value.length < 3) {
+        showStatusMessage.value = true
+        statusMessage.value = '워크플로우를 저장하려면 입력 이미지와 최소 하나의 노드가 필요합니다.'
+        setTimeout(() => {
+          showStatusMessage.value = false
+        }, 3000)
+        return
+      }
       
-      // MSA1에서 이미지 업데이트 이벤트 리스너 등록
-      document.addEventListener('msa1-to-msa5-image', handleImageUpdate);
+      // 저장 다이얼로그 표시
+      showSaveWorkflowDialog.value = true
+      workflowName.value = currentImageTitle.value || ''
+      // 공백을 언더스코어로 변환
+      workflowName.value = workflowName.value.replace(/ /g, '_')
+      workflowDescription.value = ''
       
-      // 컴포넌트에 포커스 - 키보드 이벤트를 받을 수 있게 함
-      setTimeout(() => {
-        const componentEl = document.querySelector('.msa-component');
-        if (componentEl) {
-          componentEl.focus();
+      // 다음 tick에 input에 포커스
+      nextTick(() => {
+        if (workflowNameInput.value) {
+          workflowNameInput.value.focus()
         }
-      }, 100);
-    });
+      })
+    }
+    
+    // 저장 취소
+    const cancelSaveWorkflow = () => {
+      showSaveWorkflowDialog.value = false
+      workflowName.value = ''
+      workflowDescription.value = ''
+    }
+    
+    // 저장 확인 및 실제 저장 처리
+    const confirmSaveWorkflow = async () => {
+      if (!workflowName.value) {
+        return;
+      }
+      
+      // 이름에 공백이 있는지 확인
+      if (workflowName.value.includes(' ')) {
+        const originalName = workflowName.value;
+        workflowName.value = workflowName.value.replace(/ /g, '_');
+        
+        // 사용자에게 경고 메시지 표시
+        showStatusMessage.value = true;
+        statusMessage.value = `제목에 공백이 포함되어 있어 '${originalName}'에서 '${workflowName.value}'로 자동 변환되었습니다.`;
+        setTimeout(() => { showStatusMessage.value = false }, 3000);
+      }
+      
+      // 중복 이름 확인을 위해 API 호출
+      try {
+        // 중복 확인 API 호출
+        const checkResponse = await fetch('http://localhost:8000/api/external_storage/check-title', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ title: workflowName.value })
+        });
+        
+        const checkResult = await checkResponse.json();
+        
+        // 중복된 이름이 있는 경우
+        if (checkResult.status === 'duplicate_name') {
+          // 중복 경고 팝업 표시
+          showDuplicateNameWarning();
+          return;
+        }
+        
+        // 중복이 아닌 경우 계속 진행
+        showSaveWorkflowDialog.value = false;
+        
+        try {
+          console.log('워크플로우 저장 시작...');
+          
+          // 입력 이미지 확인
+          if (!inputImage.value) {
+            showStatusMessage.value = true;
+            statusMessage.value = '저장 실패: 입력 이미지가 없습니다.';
+            setTimeout(() => { showStatusMessage.value = false }, 3000);
+            console.error('워크플로우 저장 실패: 입력 이미지 없음');
+            return;
+          }
+          
+          // 이미지 URL에서 파일명 추출
+          const getFilenameFromUrl = (url) => {
+            return url.split('/').pop() || `image_${Date.now()}.png`;
+          };
+          
+          const inputFilename = getFilenameFromUrl(inputImage.value);
+          let outputFilename = processedImages['end'] ? getFilenameFromUrl(processedImages['end']) : '';
+          
+          // 세션 ID 생성
+          const sessionId = `workflow_${Date.now()}`;
+          
+          // 저장할 워크플로우 데이터 구성 - 이미지 데이터는 포함하지 않음
+          const workflowData = {
+            session_id: sessionId,
+            input_image_filename: inputFilename,
+            output_image_filename: outputFilename,
+            elements: elements.value,
+            workflow_name: workflowName.value,
+            workflow_description: workflowDescription.value,
+            image_title: currentImageTitle.value || '', // 빈 값으로 설정하여 서버에서 자동 생성되도록 함
+            timestamp: new Date().toISOString()
+          }
+          
+          console.log('워크플로우 데이터 구성 완료. API 요청 시작...');
+          
+          // 1. 원본 이미지를 external storage API로 저장
+          if (inputImage.value && processedImages['end']) {
+            try {
+              showStatusMessage.value = true;
+              statusMessage.value = '이미지 저장 중...';
+              
+              // API 요청 데이터 구성
+              const requestData = {
+                title: workflowName.value.replace(/ /g, '_'),  // 공백을 언더스코어(_)로 변경
+                description: workflowDescription.value || '',
+                before_image: inputImage.value,
+                after_image: processedImages['end'],
+                workflow_id: sessionId,
+                tags: ['lcnc', '이미지 처리']
+              };
+              
+              // 외부 이미지 저장 API 호출
+              const extResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+              });
+              
+              if (extResponse.ok) {
+                const extResult = await extResponse.json();
+                console.log('이미지 저장 결과:', extResult);
+                
+                // 경고 메시지가 있는 경우 표시
+                if (extResult.warning) {
+                  showStatusMessage.value = true;
+                  statusMessage.value = extResult.warning;
+                  setTimeout(() => { showStatusMessage.value = false }, 4000);
+                }
+                
+                // 실제 저장된 이미지 URL 또는 파일명을 워크플로우 데이터에 추가
+                if (extResult.image_data) {
+                  workflowData.before_image_url = extResult.image_data.before_url;
+                  workflowData.after_image_url = extResult.image_data.after_url;
+                  
+                  // 파일명을 업데이트
+                  const beforeFilename = extResult.image_data.before_url.split('/').pop();
+                  const afterFilename = extResult.image_data.after_url.split('/').pop();
+                  
+                  if (beforeFilename) workflowData.input_image_filename = beforeFilename;
+                  if (afterFilename) workflowData.output_image_filename = afterFilename;
+                }
+              }
+            } catch (extError) {
+              console.error('이미지 저장 중 오류 발생:', extError);
+              // 이미지 저장 실패를 알리지만 워크플로우 저장은 계속 진행
+              showStatusMessage.value = true;
+              statusMessage.value = '이미지 저장 중 오류가 발생했지만 워크플로우 저장을 진행합니다.';
+            }
+          }
+          
+          // 2. 워크플로우 데이터를 MongoDB에 저장
+          const response = await fetch('http://localhost:8000/api/msa5/save-workflow', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(workflowData)
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`워크플로우 저장 실패: ${response.status} ${response.statusText} - ${errorText}`);
+          }
+          
+          const result = await response.json();
+          console.log('API 응답 받음:', result);
+          
+          if (result.status === 'success') {
+            // 경고 메시지가 있는 경우 표시
+            if (result.warning) {
+              showStatusMessage.value = true;
+              statusMessage.value = result.warning;
+              setTimeout(() => { showStatusMessage.value = false }, 4000);
+            } else {
+              // 성공 메시지 표시
+              showStatusMessage.value = true;
+              statusMessage.value = '워크플로우가 성공적으로 저장되었습니다!';
+              setTimeout(() => {
+                showStatusMessage.value = false;
+              }, 3000);
+            }
+            
+            // 세션 ID를 localStorage에 저장 (측정 결과 저장 시 사용)
+            localStorage.setItem('current_workflow_session_id', workflowData.session_id);
+            
+            // 저장된 워크플로우 목록 업데이트
+            const imageHash = await calculateImageHash(inputImage.value);
+            savedWorkflows.value[imageHash] = {
+              session_id: workflowData.session_id,
+              workflow_name: workflowData.workflow_name,
+              image_title: currentImageTitle.value,
+              timestamp: workflowData.timestamp
+            }
+          } else {
+            throw new Error(result.message || '서버에서 저장 실패 응답을 반환했습니다.');
+          }
+          
+        } catch (error) {
+          console.error('워크플로우 저장 중 오류 발생:', error);
+          showStatusMessage.value = true;
+          statusMessage.value = `워크플로우 저장 실패: ${error.message}`;
+          setTimeout(() => {
+            showStatusMessage.value = false;
+          }, 5000);
+        }
+      } catch (error) {
+        console.error('중복 이름 확인 중 오류:', error);
+        showStatusMessage.value = true;
+        statusMessage.value = `중복 이름 확인 실패: ${error.message}`;
+        setTimeout(() => {
+          showStatusMessage.value = false;
+        }, 5000);
+      }
+    }
+
+    // 이미지 설정 함수 (MSA4에서 이미지를 받아올 때 호출)
+    const setImage = async (imageUrl, imageTitle) => {
+      inputImage.value = imageUrl
+      // 이미지 제목이 없으면 기본값 사용, 있으면 공백을 언더스코어로 변환
+      currentImageTitle.value = imageTitle ? imageTitle.replace(/ /g, '_') : ''
+      
+      // 이미지 해시 계산하여 저장된 워크플로우 확인
+      if (imageUrl) {
+        try {
+          const imageHash = await calculateImageHash(imageUrl)
+          canSaveWorkflow.value = true
+          
+          // 해당 이미지에 대해 저장된 워크플로우가 이미 저장되어 있는지 확인
+          checkSavedWorkflow(imageHash)
+        } catch (error) {
+          console.error('이미지 해시 계산 중 오류:', error)
+        }
+      }
+    }
+    
+    // 저장된 워크플로우 확인
+    const checkSavedWorkflow = async (imageHash) => {
+      try {
+        // 백엔드 API를 통해 해당 이미지 해시로 저장된 워크플로우 조회
+        const response = await fetch(`http://localhost:8000/api/lcnc/get-workflow-by-hash/${imageHash}`)
+        
+        if (response.ok) {
+          const data = await response.json()
+          if (data.status === 'success' && data.data) {
+            // 저장된 워크플로우가 있음
+            savedWorkflows.value[imageHash] = {
+              session_id: data.data.session_id,
+              image_title: data.data.image_title || currentImageTitle.value,
+              timestamp: data.data.timestamp
+            }
+            
+            showStatusMessage.value = true
+            statusMessage.value = '이 이미지에 대해 저장된 워크플로우가 있습니다.'
+            setTimeout(() => {
+              showStatusMessage.value = false
+            }, 3000)
+          }
+        }
+      } catch (error) {
+        console.error('워크플로우 조회 중 오류:', error)
+      }
+    }
+    
+    // MSA4에서 이미지 데이터 받기 - 이벤트 리스너
+    onMounted(() => {
+      // 이벤트 리스너 등록 - MSA4에서 이미지 선택 시 호출
+      document.addEventListener('msa4-to-msa5-image', handleImageUpdate)
+      
+      // MSA1에서 이미지 선택 시 호출되는 이벤트 리스너 추가
+      document.addEventListener('msa1-to-msa5-image', handleImageUpdate)
+      
+      // 워크플로우 이벤트 리스너 등록 - MSA4에서 워크플로우 불러오기 선택 시 호출
+      document.addEventListener('msa4-to-msa5-workflow', (event) => {
+        const data = event.detail
+        if (data && data.imageUrl && data.workflowData) {
+          // 이미지 설정
+          setImage(data.imageUrl, data.imageTitle)
+          
+          // 워크플로우 로드
+          loadWorkflow(data.workflowData)
+        }
+      })
+      
+      // 노드 목록 로드
+      loadAvailableNodes()
+    })
 
     onUnmounted(() => {
-      // 이벤트 리스너 해제
-      document.removeEventListener('msa1-to-msa5-image', handleImageUpdate);
-    });
+      // 이벤트 리스너 제거
+      document.removeEventListener('msa4-to-msa5-image', handleImageUpdate)
+      document.removeEventListener('msa1-to-msa5-image', handleImageUpdate)
+      document.removeEventListener('msa4-to-msa5-workflow', () => {})
+    })
+    
+    // 워크플로우 데이터 로드 및 적용
+    const loadWorkflow = (workflowData) => {
+      if (!workflowData || !workflowData.nodes) {
+        console.error('유효하지 않은 워크플로우 데이터:', workflowData)
+        showStatusMessage.value = true
+        statusMessage.value = '워크플로우 데이터가 유효하지 않습니다.'
+        setTimeout(() => {
+          showStatusMessage.value = false
+        }, 3000)
+        return
+      }
+      
+      try {
+        // 기존 요소 초기화
+        elements.value = []
+        
+        // 시작 노드 추가
+        elements.value.push({
+          id: 'start',
+          type: 'start',
+          position: { x: 50, y: 100 }
+        })
+        
+        // 종료 노드 추가
+        elements.value.push({
+          id: 'end',
+          type: 'end',
+          position: { x: 400, y: 100 }
+        })
+        
+        // 워크플로우 노드 추가
+        let x = 150
+        let y = 100
+        
+        // 노드 데이터 로드
+        const loadedNodes = []
+        
+        workflowData.nodes.forEach((node, index) => {
+          // 노드 위치 계산
+          const nodePosition = node.position || { x: x + index * 100, y }
+          
+          // 노드 생성
+          const newNode = {
+            id: node.id || `node_${index}`,
+            type: node.type || 'custom',
+            label: node.label || '처리 노드',
+            position: nodePosition,
+            data: {
+              label: node.label || '처리 노드',
+              icon: node.icon || 'fas fa-cog',
+              params: {},  // 파라미터는 별도로 처리
+            }
+          }
+          
+          // 노드 파라미터 복원
+          const params = {}
+          Object.keys(node).forEach(key => {
+            // id, label, position 등 기본 속성은 제외
+            if (!['id', 'label', 'position', 'type', 'icon'].includes(key)) {
+              params[key] = node[key]
+            }
+          })
+          
+          newNode.data.params = params
+          loadedNodes.push(newNode)
+        })
+        
+        // 로드된 노드를 elements에 추가
+        elements.value = [...elements.value, ...loadedNodes]
+        
+        // 성공 메시지 표시
+        showStatusMessage.value = true
+        statusMessage.value = '워크플로우를 성공적으로 불러왔습니다!'
+        setTimeout(() => {
+          showStatusMessage.value = false
+        }, 3000)
+        
+      } catch (error) {
+        console.error('워크플로우 로드 중 오류:', error)
+        showStatusMessage.value = true
+        statusMessage.value = `워크플로우 로드 실패: ${error.message}`
+        setTimeout(() => {
+          showStatusMessage.value = false
+        }, 3000)
+      }
+    }
+
+    // 워크플로우 노드 요약 정보 반환
+    const getNodeSummary = () => {
+      // elements에서 노드만 필터링 (start, end 제외)
+      const nodes = elements.value.filter(el => 
+        el.type !== 'smoothstep' && el.id !== 'start' && el.id !== 'end'
+      );
+      
+      // 처음 5개 노드만 사용 (너무 길면 UI가 복잡해짐)
+      const limitedNodes = nodes.slice(0, 5);
+      
+      // 표시할 노드 정보 반환
+      return limitedNodes.map(node => ({
+        id: node.id,
+        label: node.data?.label || '노드',
+        icon: node.data?.icon || 'fas fa-cog'
+      }));
+    }
+    
+    // 총 노드 수 계산
+    const getNodeCount = () => {
+      // smoothstep(엣지)이 아닌 모든 요소 수 - 2 (시작/종료 노드 제외)
+      return elements.value.filter(el => el.type !== 'smoothstep').length - 2;
+    }
+    
+    // 총 연결 수 계산
+    const getConnectionCount = () => {
+      // smoothstep 타입인 요소의 수 (엣지/연결선)
+      return elements.value.filter(el => el.type === 'smoothstep').length;
+    }
+
+    // 결과 이미지의 유사 이미지 검색
+    const findSimilarForEndImage = async () => {
+      if (!processedImages['end']) {
+        showStatusMessage.value = true
+        statusMessage.value = '결과 이미지가 없습니다. 먼저 워크플로우를 실행해주세요.'
+        setTimeout(() => {
+          showStatusMessage.value = false
+        }, 3000)
+        return
+      }
+      
+      try {
+        // 임시 파일로 결과 이미지 저장하여 백엔드에 전송
+        const formData = new FormData()
+        
+        // Base64 이미지를 Blob으로 변환
+        const base64Response = await fetch(processedImages['end'])
+        const blob = await base64Response.blob()
+        
+        // 파일명 생성 (현재 시간 기준)
+        const filename = `result_${Date.now()}.png`
+        
+        // FormData에 파일 추가
+        formData.append('file', blob, filename)
+        
+        // 결과 이미지 업로드 및 유사 이미지 검색 API 호출
+        const response = await fetch('http://localhost:8000/api/upload-and-find-similar', {
+          method: 'POST',
+          body: formData
+        })
+        
+        if (!response.ok) {
+          throw new Error(`API 요청 실패: ${response.status}`)
+        }
+        
+        const result = await response.json()
+        
+        if (result.status === 'success') {
+          // 유사 이미지 결과를 MSA4로 전달하는 이벤트 발생
+          const event = new CustomEvent('msa5-to-msa4-similar-images', {
+            detail: {
+              originalImage: {
+                url: processedImages['end'],
+                filename: filename
+              },
+              similarImages: result.similar_images
+            }
+          })
+          
+          document.dispatchEvent(event)
+          
+          // 성공 메시지 표시
+          showStatusMessage.value = true
+          statusMessage.value = '유사 이미지 검색 결과가 MSA4로 전송되었습니다.'
+          setTimeout(() => {
+            showStatusMessage.value = false
+          }, 3000)
+          
+          // 프리뷰 닫기
+          closeImagePreview()
+        } else {
+          throw new Error(result.message || '유사 이미지를 찾을 수 없습니다.')
+        }
+      } catch (error) {
+        console.error('유사 이미지 검색 중 오류 발생:', error)
+        showStatusMessage.value = true
+        statusMessage.value = `유사 이미지 검색 실패: ${error.message}`
+        setTimeout(() => {
+          showStatusMessage.value = false
+        }, 3000)
+      }
+    }
+
+    // 이미지를 외부 저장소에 저장하는 함수
+    const exportImagesToExternal = async () => {
+      if (!inputImage.value || !processedImages['end'] || !workflowName.value) {
+        showStatusMessage.value = true;
+        statusMessage.value = '외부 저장을 위해서는 시작 이미지, 결과 이미지, 제목이 필요합니다.';
+        setTimeout(() => { showStatusMessage.value = false }, 3000);
+        return;
+      }
+      
+      try {
+        showStatusMessage.value = true;
+        statusMessage.value = '외부 저장소에 이미지 저장 중...';
+        
+        // API 요청 데이터 구성
+        const requestData = {
+          title: workflowName.value,
+          description: workflowDescription.value || '',
+          before_image: inputImage.value,
+          after_image: processedImages['end'],
+          workflow_id: localStorage.getItem('current_workflow_session_id') || '',
+          tags: ['lcnc', '이미지 처리']
+        };
+        
+        // 외부 이미지 저장 API 호출
+        const response = await fetch('http://localhost:8000/api/external_storage/save-images', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestData)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`외부 저장 실패: ${response.status} ${response.statusText} - ${errorText}`);
+        }
+        
+        const result = await response.json();
+        
+        // 성공 메시지 표시
+        showStatusMessage.value = true;
+        if (result.status === 'created') {
+          statusMessage.value = '이미지가 외부 저장소에 성공적으로 저장되었습니다!';
+        } else {
+          statusMessage.value = '이미지가 외부 저장소에 업데이트되었습니다!';
+        }
+        
+        console.log('외부 저장 결과:', result);
+        
+        // 이미지 URL 로깅
+        if (result.image_data) {
+          console.log('저장된 이미지 URL:');
+          console.log('- 시작 이미지:', result.image_data.before_url);
+          console.log('- 결과 이미지:', result.image_data.after_url);
+        }
+        
+        // 대화상자 닫기
+        setTimeout(() => {
+          showSaveWorkflowDialog.value = false;
+          showStatusMessage.value = false;
+        }, 2000);
+        
+      } catch (error) {
+        console.error('외부 저장 중 오류 발생:', error);
+        showStatusMessage.value = true;
+        statusMessage.value = `외부 저장소 저장 실패: ${error.message}`;
+        setTimeout(() => {
+          showStatusMessage.value = false;
+        }, 5000);
+      }
+    }
+
+    // 중복 이름 확인 팝업 닫기
+    const closeDuplicateNameDialog = () => {
+      showDuplicateNameDialog.value = false
+      newWorkflowName.value = ''
+      showDuplicateNameError.value = false
+    }
+
+    // 중복 이름이 있는 경우 팝업 표시
+    const showDuplicateNameWarning = () => {
+      // 팝업 표시
+      showDuplicateNameDialog.value = true
+      // 오류 상태 초기화
+      showDuplicateNameError.value = false
+      // 초기 새 이름 값 설정
+      newWorkflowName.value = `${workflowName.value}_new`
+      
+      // 다음 tick에 새 이름 입력 필드에 포커스
+      nextTick(() => {
+        if (newWorkflowNameInput.value) {
+          newWorkflowNameInput.value.focus()
+          // 텍스트 전체 선택
+          newWorkflowNameInput.value.select()
+        }
+      })
+    }
+
+    // 새 이름 적용
+    const applyNewName = async () => {
+      if (!newWorkflowName.value) {
+        showStatusMessage.value = true;
+        statusMessage.value = '새 이름을 입력해주세요.';
+        setTimeout(() => { showStatusMessage.value = false }, 3000);
+        return;
+      }
+      
+      // 중복 이름 확인을 위해 API 호출
+      try {
+        // 중복 확인 API 호출
+        const checkResponse = await fetch('http://localhost:8000/api/external_storage/check-title', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ title: newWorkflowName.value })
+        });
+        
+        const checkResult = await checkResponse.json();
+        
+        // 중복된 이름이 있는 경우
+        if (checkResult.status === 'duplicate_name') {
+          // 중복 오류 상태 설정
+          showDuplicateNameError.value = true;
+          
+          // 중복 경고 메시지 표시 (기존 input에 error 클래스 추가)
+          if (newWorkflowNameInput.value) {
+            newWorkflowNameInput.value.classList.add('input-error');
+            
+            // 애니메이션 효과를 위해 timeout 후 클래스 제거
+            setTimeout(() => {
+              if (newWorkflowNameInput.value) {
+                newWorkflowNameInput.value.classList.remove('input-error');
+              }
+            }, 2000);
+          }
+          
+          // 입력 필드에 다시 포커스
+          nextTick(() => {
+            if (newWorkflowNameInput.value) {
+              newWorkflowNameInput.value.focus();
+              newWorkflowNameInput.value.select();
+            }
+          });
+          
+          // 중복 경고 메시지를 대화 상자 내에 표시
+          statusMessage.value = '해당 이름도 중복됩니다. 다른 이름을 입력하세요.';
+          showStatusMessage.value = true;
+          
+          // 약간의 지연 후 메시지 숨김
+          setTimeout(() => { 
+            showStatusMessage.value = false;
+          }, 3000);
+          
+          return;
+        }
+        
+        // 중복이 아닌 경우 오류 상태 초기화
+        showDuplicateNameError.value = false;
+        
+        // 중복이 아닌 경우 계속 진행
+        showDuplicateNameDialog.value = false;
+        
+        try {
+          console.log('새 워크플로우 저장 시작...');
+          
+          // 입력 이미지 확인
+          if (!inputImage.value) {
+            showStatusMessage.value = true;
+            statusMessage.value = '저장 실패: 입력 이미지가 없습니다.';
+            setTimeout(() => { showStatusMessage.value = false }, 3000);
+            console.error('워크플로우 저장 실패: 입력 이미지 없음');
+            return;
+          }
+          
+          // 이미지 URL에서 파일명 추출
+          const getFilenameFromUrl = (url) => {
+            return url.split('/').pop() || `image_${Date.now()}.png`;
+          };
+          
+          const inputFilename = getFilenameFromUrl(inputImage.value);
+          let outputFilename = processedImages['end'] ? getFilenameFromUrl(processedImages['end']) : '';
+          
+          // 세션 ID 생성
+          const sessionId = `workflow_${Date.now()}`;
+          
+          // 저장할 워크플로우 데이터 구성 - 이미지 데이터는 포함하지 않음
+          const workflowData = {
+            session_id: sessionId,
+            input_image_filename: inputFilename,
+            output_image_filename: outputFilename,
+            elements: elements.value,
+            workflow_name: newWorkflowName.value,
+            workflow_description: workflowDescription.value,
+            image_title: currentImageTitle.value || '', // 빈 값으로 설정하여 서버에서 자동 생성되도록 함
+            timestamp: new Date().toISOString()
+          }
+          
+          console.log('워크플로우 데이터 구성 완료. API 요청 시작...');
+          
+          // 1. 원본 이미지를 external storage API로 저장
+          if (inputImage.value && processedImages['end']) {
+            try {
+              showStatusMessage.value = true;
+              statusMessage.value = '이미지 저장 중...';
+              
+              // API 요청 데이터 구성
+              const requestData = {
+                title: newWorkflowName.value.replace(/ /g, '_'),  // 공백을 언더스코어(_)로 변경
+                description: workflowDescription.value || '',
+                before_image: inputImage.value,
+                after_image: processedImages['end'],
+                workflow_id: sessionId,
+                tags: ['lcnc', '이미지 처리']
+              };
+              
+              // 외부 이미지 저장 API 호출
+              const extResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+              });
+              
+              if (extResponse.ok) {
+                const extResult = await extResponse.json();
+                console.log('이미지 저장 결과:', extResult);
+                
+                // 경고 메시지가 있는 경우 표시
+                if (extResult.warning) {
+                  showStatusMessage.value = true;
+                  statusMessage.value = extResult.warning;
+                  setTimeout(() => { showStatusMessage.value = false }, 4000);
+                }
+                
+                // 실제 저장된 이미지 URL 또는 파일명을 워크플로우 데이터에 추가
+                if (extResult.image_data) {
+                  workflowData.before_image_url = extResult.image_data.before_url;
+                  workflowData.after_image_url = extResult.image_data.after_url;
+                  
+                  // 파일명을 업데이트
+                  const beforeFilename = extResult.image_data.before_url.split('/').pop();
+                  const afterFilename = extResult.image_data.after_url.split('/').pop();
+                  
+                  if (beforeFilename) workflowData.input_image_filename = beforeFilename;
+                  if (afterFilename) workflowData.output_image_filename = afterFilename;
+                }
+              }
+            } catch (extError) {
+              console.error('이미지 저장 중 오류 발생:', extError);
+              // 이미지 저장 실패를 알리지만 워크플로우 저장은 계속 진행
+              showStatusMessage.value = true;
+              statusMessage.value = '이미지 저장 중 오류가 발생했지만 워크플로우 저장을 진행합니다.';
+            }
+          }
+          
+          // 2. 워크플로우 데이터를 MongoDB에 저장
+          const response = await fetch('http://localhost:8000/api/msa5/save-workflow', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(workflowData)
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`워크플로우 저장 실패: ${response.status} ${response.statusText} - ${errorText}`);
+          }
+          
+          const result = await response.json();
+          console.log('API 응답 받음:', result);
+          
+          if (result.status === 'success') {
+            // 경고 메시지가 있는 경우 표시
+            if (result.warning) {
+              showStatusMessage.value = true;
+              statusMessage.value = result.warning;
+              setTimeout(() => { showStatusMessage.value = false }, 4000);
+            } else {
+              // 성공 메시지 표시
+              showStatusMessage.value = true;
+              statusMessage.value = '워크플로우가 성공적으로 저장되었습니다!';
+              setTimeout(() => {
+                showStatusMessage.value = false;
+              }, 3000);
+            }
+            
+            // 세션 ID를 localStorage에 저장 (측정 결과 저장 시 사용)
+            localStorage.setItem('current_workflow_session_id', workflowData.session_id);
+            
+            // 저장된 워크플로우 목록 업데이트
+            const imageHash = await calculateImageHash(inputImage.value);
+            savedWorkflows.value[imageHash] = {
+              session_id: workflowData.session_id,
+              workflow_name: workflowData.workflow_name,
+              image_title: currentImageTitle.value,
+              timestamp: workflowData.timestamp
+            }
+          } else {
+            throw new Error(result.message || '서버에서 저장 실패 응답을 반환했습니다.');
+          }
+          
+        } catch (error) {
+          console.error('워크플로우 저장 중 오류 발생:', error);
+          showStatusMessage.value = true;
+          statusMessage.value = `워크플로우 저장 실패: ${error.message}`;
+          setTimeout(() => {
+            showStatusMessage.value = false;
+          }, 5000);
+        }
+      } catch (error) {
+        console.error('중복 이름 확인 중 오류:', error);
+        showStatusMessage.value = true;
+        statusMessage.value = `중복 이름 확인 실패: ${error.message}`;
+        setTimeout(() => {
+          showStatusMessage.value = false;
+        }, 5000);
+      }
+    }
+
+    // 워크플로우 오류 팝업 닫기
+    const closeWorkflowErrorDialog = () => {
+      showWorkflowErrorDialog.value = false
+      workflowErrorTitle.value = ''
+      workflowErrorMessage.value = ''
+      workflowErrorDetails.value = ''
+    }
 
     return {
-      // 상태 변수
       isMaximized,
+      toggleMaximize,
       hasInput,
       hasOutput,
       elements,
       selectedNode,
+      selectedEdge,
       inputImage,
       processedImages,
+      processingStatus,
       previewImageUrl,
-      statusMessage,
-      showStatusMessage,
-      containerRef,
+      openImagePreview,
+      closeImagePreview,
+      processStart,
+      onDragStart,
+      onDragOver,
+      onDrop,
+      onInit,
+      onConnect,
+      onNodeClick,
+      onEdgeClick,
+      onNodeDragStop,
+      onPaneReady,
       availableNodes,
       isNodesLoading,
       filteredNodes,
       mergeNode,
-      
-      // 이벤트 핸들러
-      onDragStart,
-      onDragOver,
-      onDrop,
-      onConnect,
-      onNodeDragStop,
-      onNodeClick,
-      toggleMaximize,
-      onInit,
-      onPaneReady,
-      processStart,
-      openImagePreview,
-      closeImagePreview,
-      handleKeyDown,
+      containerRef,
       
       // 실행 취소/다시 실행 함수
       undo,
       redo,
       deleteSelectedNode,
+      deleteSelectedEdge,
+      handleKeyDown,
+      
+      // 워크플로우 저장 관련 함수
+      saveWorkflow,
+      canSaveWorkflow,
+      savedWorkflows,
+      loadWorkflow,
+      
+      // 워크플로우 저장 다이얼로그 관련
+      showSaveWorkflowDialog,
+      workflowName,
+      workflowDescription,
+      workflowNameInput,
+      cancelSaveWorkflow,
+      confirmSaveWorkflow,
+      
+      // 워크플로우 요약 함수
+      getNodeSummary,
+      getNodeCount,
+      getConnectionCount,
+      
+      // 외부 저장 기능
+      exportImagesToExternal,
+      
+      // 결과 이미지 유사 이미지 검색
+      findSimilarForEndImage,
+      
+      // 중복 이름 확인 팝업
+      showDuplicateNameDialog,
+      closeDuplicateNameDialog,
+      newWorkflowName,
+      newWorkflowNameInput,
+      applyNewName,
+      showDuplicateNameWarning,
+      showDuplicateNameError,
+      
+      // 워크플로우 검증
+      validateWorkflow,
+      
+      // 워크플로우 오류 팝업
+      showWorkflowErrorDialog,
+      workflowErrorTitle,
+      workflowErrorMessage,
+      workflowErrorDetails,
+      closeWorkflowErrorDialog,
     }
   }
 }
@@ -1202,6 +2421,21 @@ export default {
 .header-right {
   display: flex;
   gap: 0.5rem;
+}
+
+.save-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-right: 0.5rem;
 }
 
 .process-btn {
@@ -1770,6 +3004,7 @@ select.param-input {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  animation: popup-fade-in 0.3s ease-out;
 }
 
 .preview-header {
@@ -1791,8 +3026,9 @@ select.param-input {
 .preview-content {
   padding: 1.5rem;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 20px;
   overflow: auto;
   max-height: calc(95vh - 70px);
 }
@@ -1803,6 +3039,42 @@ select.param-input {
   object-fit: contain;
   min-width: 500px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.preview-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 15px;
+  width: 100%;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover {
+  background: #7c3aed;
+  transform: translateY(-1px);
+}
+
+.similar-btn {
+  background: #0ea5e9;
+}
+
+.similar-btn:hover {
+  background: #0284c7;
 }
 
 .close-preview-btn {
@@ -1826,6 +3098,201 @@ select.param-input {
   transform: scale(1.05);
 }
 
+/* 워크플로우 저장 다이얼로그 스타일 */
+.save-workflow-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100000;
+  backdrop-filter: blur(5px);
+}
+
+.save-workflow-dialog {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popup-fade-in 0.3s ease-out;
+}
+
+@keyframes popup-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dialog-header {
+  padding: 15px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog-header h3 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.dialog-content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.dialog-footer {
+  padding: 15px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.workflow-name-input {
+  padding: 10px 15px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.workflow-name-input:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+.workflow-desc-input {
+  padding: 10px 15px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+  min-height: 80px;
+  resize: vertical;
+  transition: all 0.2s;
+}
+
+.workflow-desc-input:focus {
+  outline: none;
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+}
+
+.preview-info {
+  display: flex;
+  gap: 20px;
+  margin-top: 10px;
+}
+
+.preview-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-item label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.preview-image-container {
+  height: 120px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.mini-preview {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.no-image {
+  height: 120px;
+  border: 1px dashed #d1d5db;
+  border-radius: 6px;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.cancel-btn {
+  padding: 8px 15px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: white;
+  color: #4b5563;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-btn:hover {
+  background: #f3f4f6;
+}
+
+.save-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: none;
+  background: #8b5cf6;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.save-btn:hover {
+  background: #7c3aed;
+}
+
+.save-btn:disabled {
+  background: #c4b5fd;
+  cursor: not-allowed;
+}
+
 /* 상태 메시지 스타일 */
 .status-message {
   position: absolute;
@@ -1845,6 +3312,10 @@ select.param-input {
   max-width: 90%;
 }
 
+.status-message.error {
+  background: #ef4444;
+}
+
 .status-message i {
   font-size: 1.25rem;
 }
@@ -1854,5 +3325,403 @@ select.param-input {
   10% { opacity: 1; transform: translate(-50%, 0); }
   80% { opacity: 1; transform: translate(-50%, 0); }
   100% { opacity: 0; transform: translate(-50%, -10px); }
+}
+
+/* 워크플로우 오류 표시 스타일 */
+.workflow-error-highlight {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(239, 68, 68, 0.1);
+  border: 2px dashed #ef4444;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 5;
+  animation: pulse-error 2s infinite;
+}
+
+@keyframes pulse-error {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+/* 워크플로우 요약 스타일 */
+.workflow-summary {
+  margin-top: 20px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 15px;
+}
+
+.workflow-summary label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #4b5563;
+  margin-bottom: 10px;
+}
+
+.workflow-nodes-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workflow-node-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 0;
+  max-width: 100%;
+}
+
+.workflow-node {
+  min-width: 80px;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  position: relative;
+}
+
+.workflow-node:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -12px;
+  top: 50%;
+  width: 16px;
+  height: 2px;
+  background: #d1d5db;
+  transform: translateY(-50%);
+}
+
+.workflow-node i {
+  font-size: 16px;
+  color: #6b7280;
+}
+
+.workflow-node span {
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.start-node-mini {
+  background: #0ea5e9;
+  border: none;
+  color: white;
+}
+
+.start-node-mini i, .start-node-mini span {
+  color: white;
+}
+
+.end-node-mini {
+  background: #ef4444;
+  border: none;
+  color: white;
+}
+
+.end-node-mini i, .end-node-mini span {
+  color: white;
+}
+
+.workflow-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-radius: 6px;
+}
+
+.stat-item {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.stat-value {
+  font-weight: 600;
+  color: #111827;
+}
+
+.cancel-btn {
+  padding: 8px 15px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: white;
+  color: #4b5563;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.export-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: none;
+  background: #3b82f6;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.export-btn i {
+  font-size: 0.9rem;
+}
+
+.export-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.export-btn:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.input-help-text {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 4px;
+  display: block;
+  line-height: 1.4;
+}
+
+/* 중복 이름 확인 팝업 스타일 */
+.duplicate-name-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100000;
+  backdrop-filter: blur(5px);
+}
+
+.duplicate-name-dialog {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popup-fade-in 0.3s ease-out;
+}
+
+@keyframes popup-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dialog-header {
+  padding: 15px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog-header h3 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.dialog-content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.dialog-footer {
+  padding: 15px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.warning-icon {
+  font-size: 2rem;
+  color: #ef4444;
+}
+
+.ok-btn {
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: none;
+  background: #3b82f6;
+  color: white;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ok-btn:hover {
+  background: #2563eb;
+}
+
+/* 입력 필드 오류 스타일 */
+.input-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
+  animation: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+/* 중복 이름 오류 메시지 스타일 */
+.input-error-message {
+  color: #ef4444;
+  font-size: 14px;
+  margin-top: 5px;
+}
+
+.input-error-message i {
+  margin-right: 5px;
+}
+
+/* 선택된 엣지 스타일 */
+:deep(.vue-flow__edge.selected) {
+  z-index: 1000 !important;
+}
+
+:deep(.vue-flow__edge.selected .vue-flow__edge-path) {
+  stroke: #8b5cf6 !important;
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.7)) !important;
+}
+
+:deep(.vue-flow__edge.selected .vue-flow__edge-text) {
+  font-weight: bold !important;
+}
+
+:deep(.vue-flow__edge:hover .vue-flow__edge-path) {
+  stroke: #8b5cf6 !important;
+  stroke-width: 2px !important;
+  cursor: pointer !important;
+}
+
+/* 워크플로우 오류 팝업 스타일 */
+.workflow-error-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100000;
+  backdrop-filter: blur(5px);
+}
+
+.workflow-error-dialog {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popup-fade-in 0.3s ease-out;
+}
+
+.error-icon {
+  font-size: 2.5rem;
+  color: #ef4444;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.error-message {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.error-main-message {
+  font-size: 18px;
+  font-weight: 500;
+  color: #ef4444;
+  margin: 0 0 5px 0;
+}
+
+.error-details {
+  background: #fef2f2;
+  border-radius: 6px;
+  padding: 15px;
+  color: #991b1b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.error-tips {
+  margin-top: 15px;
+  background: #f0f9ff;
+  border-radius: 6px;
+  padding: 15px;
+}
+
+.error-tips h4 {
+  margin: 0 0 10px 0;
+  color: #0284c7;
+  font-size: 16px;
+}
+
+.error-tips ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.error-tips li {
+  margin-bottom: 8px;
+  color: #0369a1;
+  font-size: 14px;
 }
 </style> 

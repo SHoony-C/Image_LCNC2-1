@@ -100,8 +100,19 @@ const actions = {
       hash: window.location.hash
     });
     
+    // 먼저 URL에 인증 관련 파라미터가 있는지 빠르게 확인
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasSearch = window.location.search.length > 0;
+    const hasHash = window.location.hash.length > 0;
+    
+    // 쿼리 파라미터나 해시가 없으면 즉시 종료
+    if (!hasSearch && !hasHash) {
+      console.log('인증 관련 URL 파라미터 없음, 리다이렉트 처리 건너뜀');
+      return Promise.resolve(false);
+    }
+    
     // URL 해시에서 토큰 추출 시도 (Google Implicit Flow)
-    if (window.location.hash) {
+    if (hasHash) {
       console.log('URL 해시에서 토큰 추출 시도:', window.location.hash);
       
       // 해시(#) 이후의 문자열 파싱
@@ -155,120 +166,120 @@ const actions = {
     }
     
     // URL 쿼리 파라미터 확인 (기존 로직)
-    const urlParams = new URLSearchParams(window.location.search);
-    
-    // 모든 URL 파라미터 로깅
-    console.log('모든 URL 파라미터:');
-    for (const [key, value] of urlParams.entries()) {
-      console.log(`${key}: ${value}`);
-    }
-    
-    const id_token = urlParams.get('id_token');
-    const access_token = urlParams.get('access_token');
-    const user = urlParams.get('user');
-    const token = urlParams.get('token');
-    const error = urlParams.get('error');
-    const errorMessage = urlParams.get('message');
-    
-    // 추출된 URL 파라미터 로깅
-    console.log('URL 파라미터 확인:', {
-      token: token || '없음',
-      id_token: id_token || '없음',
-      access_token: access_token || '없음',
-      user: user || '없음',
-      error: error || '없음',
-      message: errorMessage || '없음'
-    });
-    
-    // 오류 파라미터가 있는지 확인
-    if (error) {
-      console.error('로그인 오류 발생:', error);
-      console.error('오류 상세:', errorMessage);
-      return Promise.resolve(false);
-    }
-    
-    // 사용자 이름과 토큰이 있는 경우 (성공적인 로그인 - 새로운 로직)
-    if (token && user) {
-      console.log('JWT 토큰과 사용자 이름 발견, 인증 진행');
-      commit('SET_TOKEN', token);
-      
-      // 사용자 정보 구성
-      const userInfo = {
-        id: user,
-        username: user,
-        email: `${user}@example.com`,  // 이메일 정보가 없으면 임시 생성
-        full_name: user,
-        permission: 'user',
-        is_active: true
+    if (hasSearch) {
+      // 모든 URL 파라미터 로깅
+      console.log('모든 URL 파라미터:');
+      for (const [key, value] of urlParams.entries()) {
+        console.log(`${key}: ${value}`);
       }
       
-      console.log('설정할 사용자 정보:', userInfo);
-      commit('SET_USER', userInfo);
-      return Promise.resolve(true);
-    }
-    
-    // ID 토큰이나 액세스 토큰이 있는 경우 (암시적 흐름에서 반환됨)
-    if (id_token || access_token) {
-      console.log('URL 파라미터에서 OAuth 토큰 발견, 인증 진행');
+      const id_token = urlParams.get('id_token');
+      const access_token = urlParams.get('access_token');
+      const user = urlParams.get('user');
+      const token = urlParams.get('token');
+      const error = urlParams.get('error');
+      const errorMessage = urlParams.get('message');
       
-      // ID 토큰 또는 액세스 토큰을 저장 (ID 토큰 우선)
-      const tokenValue = id_token || access_token;
-      commit('SET_TOKEN', tokenValue);
-      
-      // 토큰 검증 API 호출
-      console.log('토큰 검증 API 호출');
-      const params = {};
-      if (id_token) params.id_token = id_token;
-      if (access_token) params.access_token = access_token;
-      
-      return axios.get('/api/auth/check-auth', { params })
-      .then(response => {
-        console.log('토큰 검증 응답:', response.data);
-        if (response.data.authenticated) {
-          console.log('토큰 검증 성공, 사용자 정보 저장:', response.data.user);
-          commit('SET_USER', response.data.user);
-          return true;
-        }
-        console.error('토큰 검증 실패');
-        commit('CLEAR_AUTH');  // 인증 실패 시 토큰 제거
-        return false;
-      })
-      .catch(error => {
-        console.error('토큰 검증 요청 오류:', error);
-        commit('CLEAR_AUTH');  // 오류 시 토큰 제거
-        return false;
+      // 추출된 URL 파라미터 로깅
+      console.log('URL 파라미터 확인:', {
+        token: token || '없음',
+        id_token: id_token || '없음',
+        access_token: access_token || '없음',
+        user: user || '없음',
+        error: error || '없음',
+        message: errorMessage || '없음'
       });
-    }
+      
+      // 오류 파라미터가 있는지 확인
+      if (error) {
+        console.error('로그인 오류 발생:', error);
+        console.error('오류 상세:', errorMessage);
+        return Promise.resolve(false);
+      }
+      
+      // 사용자 이름과 토큰이 있는 경우 (성공적인 로그인 - 새로운 로직)
+      if (token && user) {
+        console.log('JWT 토큰과 사용자 이름 발견, 인증 진행');
+        commit('SET_TOKEN', token);
+        
+        // 사용자 정보 구성
+        const userInfo = {
+          id: user,
+          username: user,
+          email: `${user}@example.com`,  // 이메일 정보가 없으면 임시 생성
+          full_name: user,
+          permission: 'user',
+          is_active: true
+        }
+        
+        console.log('설정할 사용자 정보:', userInfo);
+        commit('SET_USER', userInfo);
+        return Promise.resolve(true);
+      }
+      
+      // ID 토큰이나 액세스 토큰이 있는 경우 (암시적 흐름에서 반환됨)
+      if (id_token || access_token) {
+        console.log('URL 파라미터에서 OAuth 토큰 발견, 인증 진행');
+        
+        // ID 토큰 또는 액세스 토큰을 저장 (ID 토큰 우선)
+        const tokenValue = id_token || access_token;
+        commit('SET_TOKEN', tokenValue);
+        
+        // 토큰 검증 API 호출
+        console.log('토큰 검증 API 호출');
+        const params = {};
+        if (id_token) params.id_token = id_token;
+        if (access_token) params.access_token = access_token;
+        
+        return axios.get('/api/auth/check-auth', { params })
+        .then(response => {
+          console.log('토큰 검증 응답:', response.data);
+          if (response.data.authenticated) {
+            console.log('토큰 검증 성공, 사용자 정보 저장:', response.data.user);
+            commit('SET_USER', response.data.user);
+            return true;
+          }
+          console.error('토큰 검증 실패');
+          commit('CLEAR_AUTH');  // 인증 실패 시 토큰 제거
+          return false;
+        })
+        .catch(error => {
+          console.error('토큰 검증 요청 오류:', error);
+          commit('CLEAR_AUTH');  // 오류 시 토큰 제거
+          return false;
+        });
+      }
 
-    // 일반 JWT 토큰 처리 (기존 로직)
-    if (token) {
-      console.log('JWT 토큰 발견, 인증 진행');
-      commit('SET_TOKEN', token);
-      
-      // 토큰 검증 API 호출
-      console.log('토큰 검증 API 호출');
-      return axios.get('/api/auth/check-auth', {
-        params: { token }
-      })
-      .then(response => {
-        console.log('토큰 검증 응답:', response.data);
-        if (response.data.authenticated) {
-          console.log('토큰 검증 성공, 사용자 정보 저장:', response.data.user);
-          commit('SET_USER', response.data.user);
-          return true;
-        }
-        console.error('토큰 검증 실패');
-        commit('CLEAR_AUTH');  // 인증 실패 시 토큰 제거
-        return false;
-      })
-      .catch(error => {
-        console.error('토큰 검증 요청 오류:', error);
-        commit('CLEAR_AUTH');  // 오류 시 토큰 제거
-        return false;
-      });
+      // 일반 JWT 토큰 처리 (기존 로직)
+      if (token) {
+        console.log('JWT 토큰 발견, 인증 진행');
+        commit('SET_TOKEN', token);
+        
+        // 토큰 검증 API 호출
+        console.log('토큰 검증 API 호출');
+        return axios.get('/api/auth/check-auth', {
+          params: { token }
+        })
+        .then(response => {
+          console.log('토큰 검증 응답:', response.data);
+          if (response.data.authenticated) {
+            console.log('토큰 검증 성공, 사용자 정보 저장:', response.data.user);
+            commit('SET_USER', response.data.user);
+            return true;
+          }
+          console.error('토큰 검증 실패');
+          commit('CLEAR_AUTH');  // 인증 실패 시 토큰 제거
+          return false;
+        })
+        .catch(error => {
+          console.error('토큰 검증 요청 오류:', error);
+          commit('CLEAR_AUTH');  // 오류 시 토큰 제거
+          return false;
+        });
+      }
     }
     
-    console.error('토큰이 없음, 리다이렉트 처리 실패');
+    console.log('인증 관련 파라미터가 없음, 리다이렉트 처리 실패');
     return Promise.resolve(false);
   }
 }

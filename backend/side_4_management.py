@@ -21,8 +21,10 @@ mysql_engine = create_engine(DATABASE_URL)
 # MongoDB connection
 client = MongoClient(f"mongodb://{MONGODB_SETTINGS['HOST']}:{MONGODB_SETTINGS['PORT']}")
 db = client[MONGODB_SETTINGS['DATABASE']]
-users_collection = db[MONGODB_SETTINGS['AUTH_COLLECTION']]
-roles_collection = db[MONGODB_SETTINGS['ROLES_COLLECTION']]
+
+# 사용자 및 권한 관리에 MongoDB를 사용하지 않으므로 컬렉션 접근 제거
+# users_collection = db[MONGODB_SETTINGS['AUTH_COLLECTION']]
+# roles_collection = db[MONGODB_SETTINGS['ROLES_COLLECTION']]
 
 # OAuth2 password bearer for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/management/login")
@@ -83,19 +85,19 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise credentials_exception
     
-    user = users_collection.find_one({"id": user_id})
-    if user is None:
-        raise credentials_exception
+    # MongoDB 컬렉션 사용하지 않음
+    # user = db.users.find_one({"id": user_id})
+    # if user is None:
+    #     raise credentials_exception
     
-    # Convert MongoDB document to User model
-    user_roles = get_user_roles(user_id)
+    # 임시 사용자 반환
     return User(
-        id=user["id"],
-        username=user["username"],
-        email=user.get("email"),
-        full_name=user.get("full_name"),
-        is_active=user.get("is_active", True),
-        roles=user_roles
+        id=user_id,
+        username="temporary_user",
+        email="temp@example.com",
+        full_name="Temporary User",
+        is_active=True,
+        roles=["user"]
     )
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)):
@@ -105,8 +107,10 @@ async def get_current_active_user(current_user: User = Depends(get_current_user)
 
 def get_user_roles(user_id: str) -> List[str]:
     """Get roles for a specific user"""
-    role_docs = roles_collection.find({"user_id": user_id})
-    return [doc["role"] for doc in role_docs]
+    # MongoDB 컬렉션 사용하지 않음
+    # role_docs = db.roles.find({"user_id": user_id})
+    # return [doc["role"] for doc in role_docs]
+    return ["user"]  # 기본 역할만 반환
 
 def check_admin_role(user: User):
     """Check if user has admin role"""
@@ -118,30 +122,35 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     username = form_data.username
     password = form_data.password
     
-    user = users_collection.find_one({"username": username})
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+    # MongoDB 사용하지 않음 - 테스트용 사용자 허용
+    # user = db.users.find_one({"username": username})
+    # if not user:
+    #     raise HTTPException(status_code=401, detail="Invalid username or password")
     
-    if not verify_password(password, user["hashed_password"]):
-        raise HTTPException(status_code=401, detail="Invalid username or password")
+    # if not verify_password(password, user["hashed_password"]):
+    #     raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    # 간단한 테스트를 위해 모든 로그인 요청 허용
+    user_id = "temp-user-id"
     
     # Create access token
     access_token_expires = timedelta(minutes=AUTH_SETTINGS['TOKEN_EXPIRE_MINUTES'])
     access_token = create_access_token(
-        data={"sub": user["id"]}, expires_delta=access_token_expires
+        data={"sub": user_id}, expires_delta=access_token_expires
     )
     
-    user_roles = get_user_roles(user["id"])
+    # 테스트용 역할 할당
+    user_roles = ["user"]
     
     return {
         "access_token": access_token,
         "token_type": "bearer",
         "expires_in": AUTH_SETTINGS['TOKEN_EXPIRE_MINUTES'] * 60,
         "user": {
-            "id": user["id"],
-            "username": user["username"],
-            "email": user.get("email"),
-            "full_name": user.get("full_name"),
+            "id": user_id,
+            "username": username,
+            "email": f"{username}@example.com",
+            "full_name": f"Test User {username}",
             "roles": user_roles
         }
     }
@@ -153,208 +162,44 @@ async def register_user(
     password: str = Body(...),
     full_name: str = Body(None)
 ):
-    # Check if username already exists
-    existing_user = users_collection.find_one({"username": username})
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
-    # Create new user
-    user_id = str(uuid.uuid4())
-    hashed_password = get_password_hash(password)
-    
-    new_user = {
-        "id": user_id,
-        "username": username,
-        "email": email,
-        "full_name": full_name,
-        "hashed_password": hashed_password,
-        "is_active": True,
-        "created_at": datetime.utcnow()
-    }
-    
-    users_collection.insert_one(new_user)
-    
-    # Assign default role
-    roles_collection.insert_one({
-        "user_id": user_id,
-        "role": "user"
-    })
-    
-    return {"status": "success", "user_id": user_id}
+    # MongoDB를 사용하지 않으므로 임시 구현
+    return {"status": "success", "user_id": "temp-user-id", "message": "사용자 등록 기능이 일시적으로 비활성화되었습니다."}
 
 # User management endpoints
 @router.get("/users")
 async def get_users(current_user: User = Depends(get_current_active_user)):
-    # Check if user has admin role
-    if not check_admin_role(current_user):
-        raise HTTPException(status_code=403, detail="Not authorized to access user list")
-    
-    # Get all users with their roles
-    user_list = []
-    for user in users_collection.find():
-        roles = get_user_roles(user["id"])
-        user_data = {
-            "id": user["id"],
-            "username": user["username"],
-            "email": user.get("email"),
-            "full_name": user.get("full_name"),
-            "is_active": user.get("is_active", True),
-            "roles": roles,
-            "created_at": user.get("created_at")
-        }
-        user_list.append(user_data)
-    
-    return {"status": "success", "users": user_list}
+    # MongoDB를 사용하지 않으므로 임시 구현
+    return {"status": "success", "users": [], "message": "사용자 목록 기능이 일시적으로 비활성화되었습니다."}
 
 @router.post("/user")
 async def create_user(user_data: UserCreate, current_user: User = Depends(get_current_active_user)):
-    # Check if user has admin role
-    if not check_admin_role(current_user):
-        raise HTTPException(status_code=403, detail="Not authorized to create users")
-    
-    # Check if username already exists
-    existing_user = users_collection.find_one({"username": user_data.username})
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    
-    # Create new user
-    user_id = str(uuid.uuid4())
-    hashed_password = get_password_hash(user_data.password)
-    
-    new_user = {
-        "id": user_id,
-        "username": user_data.username,
-        "email": user_data.email,
-        "full_name": user_data.full_name,
-        "hashed_password": hashed_password,
-        "is_active": True,
-        "created_at": datetime.utcnow()
-    }
-    
-    users_collection.insert_one(new_user)
-    
-    # Assign default role
-    roles_collection.insert_one({
-        "user_id": user_id,
-        "role": "user"
-    })
-    
-    return {"status": "success", "user_id": user_id}
+    # MongoDB를 사용하지 않으므로 임시 구현
+    return {"status": "success", "user_id": "temp-user-id", "message": "사용자 생성 기능이 일시적으로 비활성화되었습니다."}
 
 @router.put("/user/{user_id}")
 async def update_user(user_id: str, user_data: Dict[str, Any], current_user: User = Depends(get_current_active_user)):
-    # Check if user has admin role or is the user being updated
-    if not check_admin_role(current_user) and current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to update this user")
-    
-    # Prepare update fields
-    update_data = {}
-    
-    if "email" in user_data:
-        update_data["email"] = user_data["email"]
-    
-    if "full_name" in user_data:
-        update_data["full_name"] = user_data["full_name"]
-    
-    if "is_active" in user_data and check_admin_role(current_user):
-        update_data["is_active"] = user_data["is_active"]
-    
-    if "password" in user_data:
-        update_data["hashed_password"] = get_password_hash(user_data["password"])
-    
-    if update_data:
-        result = users_collection.update_one(
-            {"id": user_id},
-            {"$set": update_data}
-        )
-        
-        if result.matched_count == 0:
-            raise HTTPException(status_code=404, detail="User not found")
-    
-    return {"status": "success"}
+    # MongoDB를 사용하지 않으므로 임시 구현
+    return {"status": "success", "message": "사용자 업데이트 기능이 일시적으로 비활성화되었습니다."}
 
 @router.delete("/user/{user_id}")
 async def delete_user(user_id: str, current_user: User = Depends(get_current_active_user)):
-    # Check if user has admin role
-    if not check_admin_role(current_user):
-        raise HTTPException(status_code=403, detail="Not authorized to delete users")
-    
-    # Don't allow admin to delete themselves
-    if current_user.id == user_id:
-        raise HTTPException(status_code=400, detail="Cannot delete your own account")
-    
-    # Delete user
-    result = users_collection.delete_one({"id": user_id})
-    
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Also delete roles
-    roles_collection.delete_many({"user_id": user_id})
-    
-    return {"status": "success"}
+    # MongoDB를 사용하지 않으므로 임시 구현
+    return {"status": "success", "message": "사용자 삭제 기능이 일시적으로 비활성화되었습니다."}
 
 @router.get("/user/{user_id}/roles")
 async def get_user_role_list(user_id: str, current_user: User = Depends(get_current_active_user)):
-    # Check if user has admin role or is getting their own roles
-    if not check_admin_role(current_user) and current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="Not authorized to view roles")
-    
-    roles = get_user_roles(user_id)
-    return {"status": "success", "roles": roles}
+    # MongoDB를 사용하지 않으므로 임시 구현
+    return {"status": "success", "roles": ["user"], "message": "역할 조회 기능이 일시적으로 비활성화되었습니다."}
 
 @router.post("/user/{user_id}/roles")
 async def assign_role(user_id: str, role: str, current_user: User = Depends(get_current_active_user)):
-    # Check if user has admin role
-    if not check_admin_role(current_user):
-        raise HTTPException(status_code=403, detail="Not authorized to assign roles")
-    
-    # Validate role
-    if role not in USER_ROLES:
-        raise HTTPException(status_code=400, detail=f"Invalid role. Available roles: {', '.join(USER_ROLES)}")
-    
-    # Check if user exists
-    user = users_collection.find_one({"id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Check if role already assigned
-    existing_role = roles_collection.find_one({"user_id": user_id, "role": role})
-    if existing_role:
-        return {"status": "success", "message": "Role already assigned"}
-    
-    # Assign role
-    roles_collection.insert_one({
-        "user_id": user_id,
-        "role": role,
-        "assigned_at": datetime.utcnow(),
-        "assigned_by": current_user.id
-    })
-    
-    return {"status": "success"}
+    # MongoDB를 사용하지 않으므로 임시 구현
+    return {"status": "success", "message": "역할 할당 기능이 일시적으로 비활성화되었습니다."}
 
 @router.delete("/user/{user_id}/roles/{role}")
 async def remove_role(user_id: str, role: str, current_user: User = Depends(get_current_active_user)):
-    # Check if user has admin role
-    if not check_admin_role(current_user):
-        raise HTTPException(status_code=403, detail="Not authorized to remove roles")
-    
-    # Validate role
-    if role not in USER_ROLES:
-        raise HTTPException(status_code=400, detail=f"Invalid role. Available roles: {', '.join(USER_ROLES)}")
-    
-    # Check if user exists
-    user = users_collection.find_one({"id": user_id})
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    
-    # Remove role
-    result = roles_collection.delete_one({"user_id": user_id, "role": role})
-    
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Role not found for this user")
-    
-    return {"status": "success"}
+    # MongoDB를 사용하지 않으므로 임시 구현
+    return {"status": "success", "message": "역할 제거 기능이 일시적으로 비활성화되었습니다."}
 
 @router.get("/sql-users")
 async def get_sql_users():

@@ -125,15 +125,24 @@ export default {
     
     // Check authentication status
     const checkAuth = async () => {
-      // First check if we have OAuth redirect parameters
-      const redirectSuccess = await checkForAuthRedirect()
+      // 먼저 로컬 스토리지에 저장된 토큰이 있는지 확인
+      const token = localStorage.getItem('token');
       
-      if (!redirectSuccess) {
-        // If no redirect parameters or redirect failed, check existing auth
-        const isLoggedIn = await store.dispatch('auth/checkAuth')
+      if (token) {
+        // 이미 토큰이 있으면 직접 인증 상태만 확인
+        const isLoggedIn = await store.dispatch('auth/checkAuth');
         
         if (!isLoggedIn) {
-          showLoginModal.value = true
+          // 토큰이 있지만 유효하지 않은 경우에만 로그인 모달 표시
+          showLoginModal.value = true;
+        }
+      } else {
+        // 토큰이 없는 경우에만 OAuth 리다이렉트 확인
+        const redirectSuccess = await checkForAuthRedirect();
+        
+        if (!redirectSuccess) {
+          // 리다이렉트 파라미터도 없고 토큰도 없으면 로그인 모달 표시
+          showLoginModal.value = true;
         }
       }
     }

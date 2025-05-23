@@ -200,6 +200,8 @@ export default {
         if (response.data.authenticated) {
           this.isAuthenticated = true;
           this.currentUser = response.data.user;
+          // 로그인 상태가 확인되면 로그인 모달이 표시되지 않도록 설정
+          this.showLoginModal = false;
         } else {
           this.isAuthenticated = false;
           this.currentUser = null;

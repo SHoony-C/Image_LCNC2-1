@@ -36,7 +36,8 @@
                 :src="getImageUrl(selectedFilename)" 
                 :alt="selectedFilename"
                 @error="handleImageError"
-                class="main-image"
+                @click="showImageDetailsPopup(selectedFilename)"
+                class="main-image clickable"
               />
             </div>
           </div>
@@ -70,6 +71,49 @@
         </div>
       </div>
     </div>
+    
+    <!-- 이미지 상세 팝업 -->
+    <Teleport to="body">
+      <div v-if="showImagePopup" class="image-detail-popup-overlay" @click="closeImagePopup">
+        <div class="image-detail-popup" @click.stop>
+          <div class="popup-header">
+            <h3>이미지 상세 정보</h3>
+            <button class="close-btn" @click="closeImagePopup">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          
+          <div class="popup-content">
+            <div class="image-preview">
+              <img 
+                :src="popupImageUrl" 
+                :alt="popupImageFilename" 
+                class="popup-image"
+              />
+              <div class="image-title">{{ popupImageFilename }}</div>
+            </div>
+            
+            <div class="popup-actions">
+              <button class="action-btn import-btn" @click="sendImageToLCNC">
+                <i class="fas fa-file-import"></i>
+                MSA5로 보내기
+              </button>
+              
+              <div v-if="popupWorkflowData" class="workflow-info">
+                <div class="workflow-badge">
+                  <i class="fas fa-save"></i> 
+                  저장된 워크플로우 있음
+                </div>
+                <button class="action-btn view-btn" @click="loadWorkflowToLCNC">
+                  <i class="fas fa-file-import"></i>
+                  워크플로우 불러오기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -163,7 +207,11 @@ export default {
         responsive: true,
         displayModeBar: true,
         scrollZoom: true
-      }
+      },
+      showImagePopup: false,
+      popupImageUrl: '',
+      popupImageFilename: '',
+      popupWorkflowData: null
     }
   },
   computed: {
@@ -211,6 +259,9 @@ export default {
     // MSA1에서 이미지 업데이트 이벤트 리스너 등록
     document.addEventListener('msa1-to-msa4-image', this.handleImageUpdate);
     
+    // MSA5에서 유사 이미지 결과 수신하는 이벤트 리스너 등록
+    document.addEventListener('msa5-to-msa4-similar-images', this.handleSimilarImagesFromMSA5);
+    
     // 컴포넌트 크기 변경 감지를 위한 ResizeObserver 설정
     this.setupResizeObserver();
     
@@ -229,6 +280,7 @@ export default {
     // 이벤트 리스너 정리
     window.removeEventListener('keydown', this.handleKeyDown);
     document.removeEventListener('msa1-to-msa4-image', this.handleImageUpdate);
+    document.removeEventListener('msa5-to-msa4-similar-images', this.handleSimilarImagesFromMSA5);
     
     // ResizeObserver 정리
     if (this.containerObserver) {
@@ -1381,6 +1433,145 @@ export default {
         }
       }, 100); // 플롯 렌더링 후 실행
     },
+
+    async showImageDetailsPopup(filename) {
+      this.popupImageUrl = this.getImageUrl(filename);
+      this.popupImageFilename = filename;
+      
+      // 워크플로우 데이터 확인
+      try {
+        // 이미지 해시 계산 (해시 계산 함수가 없으면 백엔드에 직접 요청하는 방식으로 대체)
+        const imageHash = await this.calculateImageHash(this.popupImageUrl);
+        
+        // 워크플로우 데이터 조회
+        const response = await fetch(`http://localhost:8000/api/lcnc/get-workflow-by-hash/${imageHash}`);
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.status === 'success' && result.data) {
+            this.popupWorkflowData = result.data;
+            logDebug('워크플로우 데이터 로드 완료:', this.popupWorkflowData);
+          } else {
+            this.popupWorkflowData = null;
+          }
+        } else {
+          this.popupWorkflowData = null;
+        }
+      } catch (error) {
+        console.error('워크플로우 데이터 조회 오류:', error);
+        this.popupWorkflowData = null;
+      }
+      
+      this.showImagePopup = true;
+    },
+
+    closeImagePopup() {
+      this.showImagePopup = false;
+      this.popupWorkflowData = null;
+    },
+
+    // 이미지 해시 계산 (대략적인 구현)
+    async calculateImageHash(imageUrl) {
+      try {
+        // 이미지 바이너리 데이터 가져오기
+        const response = await fetch(imageUrl);
+        const blob = await response.blob();
+        
+        // ArrayBuffer로 변환
+        const arrayBuffer = await blob.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+        
+        // 16진수 문자열로 변환
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        
+        return hashHex;
+      } catch (error) {
+        console.error('이미지 해시 계산 오류:', error);
+        // 오류 발생 시 간단한 해시 대체
+        return `hash_${this.popupImageFilename.replace(/\W+/g, '_')}`;
+      }
+    },
+
+    sendImageToLCNC() {
+      if (!this.popupImageUrl || !this.popupImageFilename) {
+        this.showMessage('전송할 이미지 정보가 없습니다.', 'error');
+        return;
+      }
+      
+      // 커스텀 이벤트 생성하여 MSA5에 이미지 데이터 전송
+      const imageData = {
+        imageUrl: this.popupImageUrl,
+        imageTitle: this.popupImageFilename
+      };
+      
+      // 이벤트 생성 및 발송
+      const event = new CustomEvent('msa4-to-msa5-image', {
+        detail: imageData,
+        bubbles: true
+      });
+      document.dispatchEvent(event);
+      
+      // 메시지 표시
+      this.showMessage('이미지가 MSA5로 전송되었습니다.', 'success');
+      
+      // 팝업 닫기
+      this.closeImagePopup();
+    },
+
+    loadWorkflowToLCNC() {
+      if (!this.popupWorkflowData) {
+        this.showMessage('워크플로우 데이터가 없습니다.', 'error');
+        return;
+      }
+      
+      // 이미지 전송과 함께 워크플로우 데이터도 전송
+      const imageData = {
+        imageUrl: this.popupImageUrl,
+        imageTitle: this.popupImageFilename,
+        workflowData: this.popupWorkflowData
+      };
+      
+      // 이벤트 생성 및 발송
+      const event = new CustomEvent('msa4-to-msa5-workflow', {
+        detail: imageData,
+        bubbles: true
+      });
+      document.dispatchEvent(event);
+      
+      // 메시지 표시
+      this.showMessage('워크플로우가 MSA5로 전송되었습니다.', 'success');
+      
+      // 팝업 닫기
+      this.closeImagePopup();
+    },
+
+    // MSA5에서 유사 이미지 결과 처리
+    handleSimilarImagesFromMSA5(event) {
+      logDebug('Received similar images from MSA5:', event.detail);
+      
+      const data = event.detail;
+      if (!data || !data.originalImage || !data.similarImages) {
+        logDebug('Invalid similar images data received from MSA5');
+        return;
+      }
+      
+      // 원본 이미지 정보 저장
+      this.selectedFilename = data.originalImage.filename;
+      
+      // 유사 이미지 처리
+      const processedSimilarImages = data.similarImages.map(img => ({
+        filename: img.filename,
+        similarity: img.similarity * 100, // 0~1 값을 퍼센트로 변환
+        url: img.url || this.getImageUrl(img.filename)
+      }));
+      
+      // 유사 이미지 업데이트
+      this.similarImages = processedSimilarImages;
+      
+      // 메시지 표시
+      this.showMessage('MSA5에서 유사 이미지 결과를 수신했습니다', 'success');
+    }
   }
 }
 </script>
@@ -1497,71 +1688,171 @@ export default {
   display: flex !important;
   justify-content: center !important;
   margin-bottom: 20px !important;
-  max-height: 200px !important;
-  overflow: hidden !important;
 }
 
-.main-image {
-  max-height: 200px !important;
-  max-width: 100% !important;
-  object-fit: contain !important;
-  border: 2px solid #2196F3 !important;
-  border-radius: 4px !important;
+/* 클릭 가능한 이미지 스타일 */
+.clickable {
+  cursor: pointer;
+  transition: transform 0.2s;
 }
 
-/* 유사 이미지 스타일 */
-.similar-images-section {
-  width: 100% !important;
-  margin-bottom: 20px !important;
+.clickable:hover {
+  transform: scale(1.03);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
-.similar-images-section h3 {
-  font-size: 18px !important;
-  margin-bottom: 15px !important;
-  color: #333 !important;
+/* 이미지 상세 팝업 스타일 */
+.image-detail-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(3px);
 }
 
-.similar-images-grid {
-  display: grid !important;
-  grid-template-columns: 1fr !important;
-  gap: 15px !important;
-  margin-top: 10px !important;
-  width: 100% !important;
+.image-detail-popup {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  width: 90%;
+  max-width: 800px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popup-fade-in 0.3s ease-out;
 }
 
-.similar-image-item {
-  position: relative !important;
-  cursor: pointer !important;
-  transition: transform 0.2s !important;
-  aspect-ratio: 16/9 !important;
-  overflow: hidden !important;
-  max-height: 180px !important;
+@keyframes popup-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.similar-image-item:hover {
-  transform: scale(1.05) !important;
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid #eee;
 }
 
-.similar-image {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-  border-radius: 4px !important;
-  border: 1px solid #ddd !important;
+.popup-header h3 {
+  font-size: 18px;
+  margin: 0;
+  color: #333;
 }
 
-.similarity-score {
-  position: absolute !important;
-  bottom: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  background: rgba(0, 0, 0, 0.7) !important;
-  color: white !important;
-  padding: 4px 8px !important;
-  font-size: 12px !important;
-  text-align: center !important;
-  border-bottom-left-radius: 4px !important;
-  border-bottom-right-radius: 4px !important;
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #777;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: #333;
+}
+
+.popup-content {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.image-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.popup-image {
+  max-width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.image-title {
+  font-size: 14px;
+  color: #666;
+  text-align: center;
+  word-break: break-all;
+}
+
+.popup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 15px;
+  border-radius: 4px;
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.import-btn {
+  background-color: #8b5cf6;
+  color: white;
+}
+
+.import-btn:hover {
+  background-color: #7c3aed;
+}
+
+.view-btn {
+  background-color: #10b981;
+  color: white;
+}
+
+.view-btn:hover {
+  background-color: #059669;
+}
+
+.workflow-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid #eee;
+  padding-top: 15px;
+  margin-top: 5px;
+}
+
+.workflow-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background-color: #f3f4f6;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #374151;
+  width: fit-content;
 }
 
 /* 로딩 및 에러 메시지 스타일 */

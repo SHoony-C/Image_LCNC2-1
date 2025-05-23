@@ -20,6 +20,9 @@ from side_4_management import router as management_router
 from side_5_settings import router as settings_router
 from side_6_help import router as help_router
 
+# 외부 이미지 저장 API 임포트
+from external_py.image_storage_api import router as external_storage_router
+
 # Authentication router import
 from auth import router as auth_router
 # SQLAlchemy based user router
@@ -52,6 +55,9 @@ app.mount("/storage", StaticFiles(directory="./storage"), name="storage")
 # app.mount("/images", StaticFiles(directory="./images"), name="images")
 # 벡터 디렉토리 경로 변경 (더 이상 필요없음, storage 마운트로 접근 가능)
 # app.mount("/vectors", StaticFiles(directory="./vectors"), name="vectors")
+
+# 외부 이미지 디렉토리 마운트 (D:\image_set_url\images)
+app.mount("/images", StaticFiles(directory=r"D:\image_set_url\images"), name="external_images")
 
 # 시작 이벤트: 필요한 디렉토리 생성
 @app.on_event("startup")
@@ -141,6 +147,9 @@ app.include_router(help_router, prefix="/api/help", tags=["help"])
 app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 # SQL 기반 사용자 라우터 등록
 app.include_router(user_router, prefix="/api/users", tags=["users"])
+
+# 외부 이미지 저장 API 등록
+app.include_router(external_storage_router, prefix="/api/external_storage", tags=["external_storage"])
 
 # 서버 시작
 if __name__ == "__main__":

@@ -242,6 +242,13 @@ export default {
           // 로그인 성공 이벤트
           this.$emit('login-success', response.data.user);
           this.closeModal();
+
+          // 페이지 리다이렉트 체크 (필요한 경우)
+          const redirectPath = sessionStorage.getItem('redirectAfterLogin');
+          if (redirectPath) {
+            sessionStorage.removeItem('redirectAfterLogin');
+            this.$router.push(redirectPath);
+          }
         } else {
           this.error = '로그인에 실패했습니다. 다시 시도해주세요.';
         }
