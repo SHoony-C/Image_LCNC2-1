@@ -107,7 +107,7 @@
                     <input type="text" v-model="newSubId" class="form-control" placeholder="Sub ID 입력 (예: s1)">
                   </div>
                 </div>
-                <button class="btn-apply" @click="applySelectedIds" :disabled="selectedRows.length === 0">
+                <button class="btn-apply" @click="applySelectedIds" :disabled="selectedRows.length === 0 || (!newItemId && !newSubId)">
                   선택한 행에 ID 적용
                 </button>
               </div>
@@ -1485,15 +1485,25 @@ export default {
       this.$emit('close');
     },
     applySelectedIds() {
-      if (this.selectedRows.length === 0 || !this.newItemId || !this.newSubId) return;
+      if (this.selectedRows.length === 0 || (!this.newItemId && !this.newSubId)) return;
       
       this.selectedRows.forEach((segment, index) => {
-        segment.itemId = this.newItemId;
-        // subId에 숫자만 추출하여 증가
-        const baseSubId = this.newSubId.replace(/\d+$/, '');
-        const startNum = parseInt(this.newSubId.match(/\d+$/)?.[0] || '1');
-        segment.subItemId = `${baseSubId}${startNum + index}`;
+        // Item ID가 입력된 경우만 Item ID 변경
+        if (this.newItemId) {
+          segment.itemId = this.newItemId;
+        }
+        
+        // Sub ID가 입력된 경우만 Sub ID 변경
+        if (this.newSubId) {
+          // subId에 숫자만 추출하여 증가
+          const baseSubId = this.newSubId.replace(/\d+$/, '');
+          const startNum = parseInt(this.newSubId.match(/\d+$/)?.[0] || '1');
+          segment.subItemId = `${baseSubId}${startNum + index}`;
+        }
       });
+      
+      // 상태 저장 및 로그 기록
+      console.log(`[applySelectedIds] ID 적용 완료 - Item ID: ${this.newItemId || '변경 없음'}, Sub ID: ${this.newSubId || '변경 없음'}`);
       
       this.render();
     },
