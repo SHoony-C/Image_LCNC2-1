@@ -191,21 +191,21 @@ async def extract_vectors():
         vectors_path = os.path.join(VECTORS_DIR, "vectors.json")
         metadata_path = os.path.join(VECTORS_DIR, "metadata.json")
         
-        with open(vectors_path, 'w') as f:
-            json.dump(vectors, f)
+        with open(vectors_path, 'w', encoding='utf-8') as f:
+            json.dump(vectors, f, ensure_ascii=False, indent=2)
         
-        with open(metadata_path, 'w') as f:
-            json.dump(filenames, f)
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(filenames, f, ensure_ascii=False, indent=2)
         
         # 바로 processed-vectors에도 동일하게 저장 (이미지당 하나의 벡터)
         processed_vectors_path = os.path.join(VECTORS_DIR, "processed_vectors.json")
         processed_metadata_path = os.path.join(VECTORS_DIR, "processed_metadata.json")
         
-        with open(processed_vectors_path, 'w') as f:
-            json.dump(vectors, f)
+        with open(processed_vectors_path, 'w', encoding='utf-8') as f:
+            json.dump(vectors, f, ensure_ascii=False, indent=2)
         
-        with open(processed_metadata_path, 'w') as f:
-            json.dump(filenames, f)
+        with open(processed_metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(filenames, f, ensure_ascii=False, indent=2)
         
         # 3D 투영 좌표 계산 (간단한 PCA 유사 방식)
         projected_vectors = []
@@ -526,11 +526,11 @@ async def save_processed_vectors(data: Dict[str, Any]):
         processed_metadata_path = os.path.join(VECTORS_DIR, "processed_metadata.json")
         
         # 데이터 저장
-        with open(processed_vectors_path, 'w') as f:
-            json.dump(data["vectors"], f)
+        with open(processed_vectors_path, 'w', encoding='utf-8') as f:
+            json.dump(data["vectors"], f, ensure_ascii=False, indent=2)
         
-        with open(processed_metadata_path, 'w') as f:
-            json.dump(data["metadata"], f)
+        with open(processed_metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(data["metadata"], f, ensure_ascii=False, indent=2)
         
         # 성공 응답
         return {

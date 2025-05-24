@@ -12,6 +12,9 @@ from torchvision import transforms
 from torchvision.models import resnet50, ResNet50_Weights
 import sys
 
+# Import msa4_imagestorage's load_local_images function
+from msa4_imagestorage import load_local_images as msa4_load_local_images
+
 router = APIRouter()
 
 # 스토리지 경로 설정
@@ -80,9 +83,29 @@ def extract_vector(image_path):
 
 # 타임스탬프 제거 함수
 def remove_timestamp(filename):
-    """파일명에서 타임스탬프(YYYYMMDD_HHMMSS_) 형식을 제거합니다."""
+    """파일명에서 타임스탬프(YYYYMMDD_HHMMSS_) 형식과 _before 접미사를 제거합니다."""
     import re
-    return re.sub(r'^\d{8}_\d{6}_', '', filename)
+    # 타임스탬프 제거
+    filename = re.sub(r'^\d{8}_\d{6}_', '', filename)
+    # _before 접미사 제거 (확장자 직전에 있는 경우)
+    filename = re.sub(r'_before(\.[^.]+)$', r'\1', filename)
+    return filename
+
+# _before 접미사 제거 함수
+def remove_before_suffix(filename):
+    """파일명에서 _before 접미사를 제거합니다."""
+    import re
+    
+    # 파일 확장자와 이름 분리
+    if '.' in filename:
+        base, ext = filename.rsplit('.', 1)
+        # _before 제거 후 확장자 다시 붙이기
+        if base.endswith('_before'):
+            return f"{base[:-7]}.{ext}"  # 7 = len('_before')
+        return filename
+    elif filename.endswith('_before'):
+        return filename[:-7]
+    return filename
 
 @router.get("/settings")
 async def get_settings():
@@ -114,38 +137,71 @@ async def transform_vectors(data: Dict[str, Any]):
     여기서는 이미지가 이미 storage 폴더에 저장되어 있다고 가정합니다.
     """
     try:
+        # 기존 벡터 데이터 모두 초기화
+        vectors_path = os.path.join(VECTORS_DIR, "vectors.json")
+        metadata_path = os.path.join(VECTORS_DIR, "metadata.json")
+        processed_vectors_path = os.path.join(VECTORS_DIR, "processed_vectors.json")
+        processed_metadata_path = os.path.join(VECTORS_DIR, "processed_metadata.json")
+        
+        # 기존 파일 삭제
+        for file_path in [vectors_path, metadata_path, processed_vectors_path, processed_metadata_path]:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+                print(f"Reset: Deleted existing vector file {file_path}")
+        
+        print("모든 기존 벡터 데이터가 초기화되었습니다.")
+        
         # 파일명 목록 확인
         image_files = []
         
         # 전달받은 이미지 파일명 리스트가 있는 경우 사용
         if "images" in data and isinstance(data["images"], list) and data["images"]:
-            image_files = data["images"]
-            print(f"Using provided image list with {len(image_files)} images")
+            # 전달받은 이미지 목록에서 _before만 필터링
+            original_count = len(data["images"])
+            if "includeBeforeImagesOnly" in data and data["includeBeforeImagesOnly"]:
+                image_files = [filename for filename in data["images"] if '_before' in filename]
+                print(f"Filtered {len(image_files)}/{original_count} images with '_before' suffix from provided list")
+            else:
+                image_files = data["images"]
+                print(f"Using all {len(image_files)} images from provided list")
         else:
             # 저장 디렉토리에서 이미지 파일 목록 가져오기
-            for filename in os.listdir(STORAGE_DIR):
-                if filename.endswith(('.jpg', '.jpeg', '.png', '.gif')):
-                    # '_before' 필터링 옵션 체크
-                    if "includeBeforeImagesOnly" in data and data["includeBeforeImagesOnly"]:
-                        if '_before' in filename:
-                            image_files.append(filename)
-                    else:
-                        image_files.append(filename)
+            all_files = [f for f in os.listdir(STORAGE_DIR) 
+                      if f.lower().endswith(('.jpg', '.jpeg', '.png', '.gif'))]
             
-            print(f"Found {len(image_files)} images in storage directory")
+            # '_before' 필터링 옵션 체크
+            if "includeBeforeImagesOnly" in data and data["includeBeforeImagesOnly"]:
+                image_files = [f for f in all_files if '_before' in f]
+                print(f"Filtered {len(image_files)}/{len(all_files)} images with '_before' suffix from storage directory")
+            else:
+                image_files = all_files
+                print(f"Using all {len(image_files)} images from storage directory")
+            
+        print(f"Final image list for processing: {len(image_files)} images")
+        if image_files:
+            print(f"Sample filenames: {image_files[:5]}")
         
         if not image_files:
-            return {"status": "warning", "message": "No images found to process"}
+            return {"status": "warning", "message": "No images found to process (_before filter applied)"}
         
         # 파일명 그룹화 (타임스탬프 제거)
         grouped_images = {}
         for filename in image_files:
+            # 타임스탬프와 _before 접미사 모두 제거
             clean_filename = remove_timestamp(filename)
+            clean_filename = remove_before_suffix(clean_filename)
+            
+            # 디버깅을 위한 로깅
+            print(f"Original filename: {filename} -> Cleaned: {clean_filename}")
+            
             if clean_filename not in grouped_images:
                 grouped_images[clean_filename] = []
             grouped_images[clean_filename].append(filename)
         
         print(f"Grouped into {len(grouped_images)} unique images")
+        # 디버깅: 그룹화 결과 로깅
+        for clean_name, group in grouped_images.items():
+            print(f"Group '{clean_name}': {group}")
         
         # 각 그룹마다 벡터 추출
         vectors = []
@@ -206,18 +262,18 @@ async def transform_vectors(data: Dict[str, Any]):
         processed_metadata_path = os.path.join(VECTORS_DIR, "processed_metadata.json")
         
         # 벡터 데이터 저장
-        with open(vectors_path, 'w') as f:
-            json.dump(vectors, f)
+        with open(vectors_path, 'w', encoding='utf-8') as f:
+            json.dump(vectors, f, ensure_ascii=False, indent=2)
         
-        with open(metadata_path, 'w') as f:
-            json.dump(filenames, f)
+        with open(metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(filenames, f, ensure_ascii=False, indent=2)
         
         # 처리된 벡터도 동일하게 저장 (이미지당 하나의 벡터)
-        with open(processed_vectors_path, 'w') as f:
-            json.dump(vectors, f)
+        with open(processed_vectors_path, 'w', encoding='utf-8') as f:
+            json.dump(vectors, f, ensure_ascii=False, indent=2)
         
-        with open(processed_metadata_path, 'w') as f:
-            json.dump(filenames, f)
+        with open(processed_metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(filenames, f, ensure_ascii=False, indent=2)
         
         # 3D 투영 좌표 계산
         projected_vectors = []
@@ -278,14 +334,27 @@ async def transform_vectors(data: Dict[str, Any]):
                     "coordinates": normalized_vectors[i]
                 })
         
-        # 처리 결과 반환
+        # 성공 응답
+        filtered_message = " (_before 이미지만 처리됨)" if data.get("includeBeforeImagesOnly") else ""
         return {
             "status": "success",
-            "message": f"Transformed {len(vectors)} images into vectors",
+            "message": f"벡터 데이터 초기화 후 {len(vectors)}개 이미지에서 벡터 추출 완료{filtered_message}",
             "count": len(vectors),
-            "processed": len(vectors),
+            "filtering": {
+                "only_before_images": data.get("includeBeforeImagesOnly", False),
+                "original_count": len(image_files),
+                "processed_count": len(vectors)
+            },
+            "debug_info": {
+                "grouped_images_count": len(grouped_images),
+                "raw_image_files": image_files[:20] if len(image_files) > 20 else image_files,  # 처음 20개만
+                "processed_filenames": filenames
+            },
             "errors": errors,
-            "results": results  # 3D 좌표 포함
+            "results": [
+                {"filename": filename, "coordinates": coords}
+                for filename, coords in zip(filenames, normalized_coords)
+            ]
         }
     except Exception as e:
         import traceback
@@ -347,11 +416,11 @@ async def save_processed_vectors(data: Dict[str, Any]):
         processed_metadata_path = os.path.join(VECTORS_DIR, "processed_metadata.json")
         
         # 데이터 저장
-        with open(processed_vectors_path, 'w') as f:
-            json.dump(data["vectors"], f)
+        with open(processed_vectors_path, 'w', encoding='utf-8') as f:
+            json.dump(data["vectors"], f, ensure_ascii=False, indent=2)
         
-        with open(processed_metadata_path, 'w') as f:
-            json.dump(data["metadata"], f)
+        with open(processed_metadata_path, 'w', encoding='utf-8') as f:
+            json.dump(data["metadata"], f, ensure_ascii=False, indent=2)
         
         # 성공 응답
         return {
@@ -394,4 +463,19 @@ async def get_processed_vectors():
         import traceback
         error_detail = traceback.format_exc()
         print(f"Error in get_processed_vectors: {str(e)}\n{error_detail}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/load-local-images")
+async def load_local_images(directory_path: Optional[str] = Query(None), data: Optional[Dict[str, Any]] = Body(None)):
+    """
+    지정된 로컬 디렉토리에서 이미지를 로드하고 벡터를 추출합니다.
+    이 엔드포인트는 MSA4의 동일한 기능을 호출합니다.
+    """
+    try:
+        # MSA4의 동일한 함수 호출
+        return await msa4_load_local_images(directory_path, data)
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"Error in settings/load-local-images: {str(e)}\n{error_detail}")
         raise HTTPException(status_code=500, detail=str(e)) 

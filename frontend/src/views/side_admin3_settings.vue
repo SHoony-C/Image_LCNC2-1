@@ -45,69 +45,33 @@
             </div>
             <div class="status-details" v-if="processingStatus.details">
               <div class="processed-count">처리된 이미지: {{ processingStatus.details.processed }} 개</div>
-              <div class="vector-count" v-if="processingStatus.details.vectors">벡터 변환: {{ processingStatus.details.vectors }} 개</div>
-              <div class="error-count" v-if="processingStatus.details.errors">오류: {{ processingStatus.details.errors }} 개</div>
-            </div>
-            
-            <!-- 벡터 변환 결과 표시 -->
-            <div class="vector-results" v-if="processingStatus.details && processingStatus.details.vectors > 0 && vectorResults.length > 0">
-              <h4>변환 결과 미리보기 (3D 좌표)</h4>
-              <div class="vector-results-explanation">
-                <p>이미지가 3D 공간에 배치된 좌표입니다. 유사한 이미지는 3D 공간에서 서로 가까이 위치합니다.</p>
+              <div class="vector-count" v-if="processingStatus.details.vectors">
+                벡터 변환: {{ processingStatus.details.vectors }} 개 
+                <span v-if="processingStatus.details.filtered" class="filter-info">{{ processingStatus.details.filtered }}</span>
               </div>
-              <div class="vector-table-container">
-                <table class="vector-table">
-                  <thead>
-                    <tr>
-                      <th>이미지</th>
-                      <th>X</th>
-                      <th>Y</th>
-                      <th>Z</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="(item, index) in vectorResults.slice(0, 10)" :key="index">
-                      <td class="image-name">{{ item.filename }}</td>
-                      <td class="coordinate">{{ item.coordinates[0].toFixed(4) }}</td>
-                      <td class="coordinate">{{ item.coordinates[1].toFixed(4) }}</td>
-                      <td class="coordinate">{{ item.coordinates[2].toFixed(4) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <div class="more-results" v-if="vectorResults.length > 10">
-                  <p>... 외 {{ vectorResults.length - 10 }}개 이미지</p>
-                  <button @click="showAllResults = !showAllResults" class="toggle-button">
-                    {{ showAllResults ? '접기' : '모두 보기' }}
-                  </button>
+              <div class="error-count" v-if="processingStatus.details.errors">오류: {{ processingStatus.details.errors }} 개</div>
+              
+              <!-- 벡터 변환 처리 파일 목록 -->
+              <div v-if="processingStatus.details.vectors > 0" class="processed-files-list">
+                <h4>처리된 파일 목록 ({{ vectorResults.length }}개)</h4>
+                <div class="files-container">
+                  <div v-for="(item, index) in loadedOriginalImages" :key="index" class="file-item">
+                    <a href="#" @click.prevent="viewImage(item)">
+                      {{ index + 1 }}. {{ item }}
+                    </a>
+                  </div>
                 </div>
               </div>
               
-              <!-- 모든 결과 표시 다이얼로그 -->
-              <div class="all-results-dialog" v-if="showAllResults">
-                <div class="dialog-content">
-                  <div class="dialog-header">
-                    <h3>전체 변환 결과 ({{ vectorResults.length }}개)</h3>
-                    <button @click="showAllResults = false" class="close-button">&times;</button>
+              <!-- 이미지 뷰어 팝업 -->
+              <div v-if="imageViewerVisible" class="image-viewer-popup">
+                <div class="image-viewer-content">
+                  <div class="image-viewer-header">
+                    <h3>{{ currentImageName }}</h3>
+                    <button @click="closeImageViewer" class="close-button">&times;</button>
                   </div>
-                  <div class="dialog-body">
-                    <table class="vector-table full-table">
-                      <thead>
-                        <tr>
-                          <th>이미지</th>
-                          <th>X</th>
-                          <th>Y</th>
-                          <th>Z</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr v-for="(item, index) in vectorResults" :key="index">
-                          <td class="image-name">{{ item.filename }}</td>
-                          <td class="coordinate">{{ item.coordinates[0].toFixed(4) }}</td>
-                          <td class="coordinate">{{ item.coordinates[1].toFixed(4) }}</td>
-                          <td class="coordinate">{{ item.coordinates[2].toFixed(4) }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <div class="image-viewer-body">
+                    <img :src="currentImageUrl" alt="이미지 미리보기" />
                   </div>
                 </div>
               </div>
@@ -128,7 +92,11 @@ export default {
       imageDirectory: 'D:\\image_set_url\\images',
       processingStatus: null,
       vectorResults: [],
-      showAllResults: false
+      showAllResults: false,
+      loadedOriginalImages: [],
+      imageViewerVisible: false,
+      currentImageName: '',
+      currentImageUrl: ''
     }
   },
   methods: {
@@ -152,7 +120,7 @@ export default {
       
       try {
         // 이미지 로드 API 호출 - 경로는 정확함 (/api/load-local-images)
-        const response = await fetch('http://localhost:8000/api/load-local-images', {
+        const response = await fetch('http://localhost:8000/api/settings/load-local-images', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -187,23 +155,36 @@ export default {
           }
           
           const transformData = await transformResponse.json();
+          console.log('변환 데이터:', transformData);
           
           this.processingStatus = {
             type: transformData.status === 'success' ? 'success' : 'warning',
-            message: transformData.status === 'success' 
+            message: transformData.message || (transformData.status === 'success' 
               ? '이미지 로드 및 벡터 변환 완료!' 
-              : '일부 이미지만 처리되었습니다.',
+              : '일부 이미지만 처리되었습니다.'),
             details: {
               processed: data.processed?.length || 0,
               vectors: transformData.count || 0,
+              filtered: transformData.filtering?.only_before_images ? '(only _before 이미지)' : '',
               errors: (data.errors?.length || 0) + (transformData.errors?.length || 0)
             }
           };
           
-          // 벡터 결과 저장
-          if (transformData.results && transformData.results.length > 0) {
-            this.vectorResults = transformData.results;
+          // 벡터 결과 저장 - 백엔드가 처리한 모든 파일명을 가져옴
+          if (transformData.debug_info && transformData.debug_info.processed_filenames) {
+            // 디버그 정보에서 처리된 모든 파일명 가져오기
+            this.vectorResults = transformData.debug_info.processed_filenames.map(filename => ({
+              filename: filename
+            }));
+            console.log(`${this.vectorResults.length}개 파일명 로드됨:`, this.vectorResults);
           }
+          else if (transformData.results && transformData.results.length > 0) {
+            this.vectorResults = transformData.results;
+            console.log(`${this.vectorResults.length}개 결과 로드됨:`, this.vectorResults);
+          }
+          
+          // 원본 이미지 목록 저장
+          this.loadedOriginalImages = loadedImages;
         } else {
           this.processingStatus = {
             type: 'error',
@@ -227,7 +208,7 @@ export default {
     async processVectorData() {
       try {
         // 벡터 데이터를 가져오는 API 호출 - settings 경로로 변경
-        const response = await fetch('http://localhost:8080/api/settings/processed-vectors', {
+        const response = await fetch('http://localhost:8000/api/settings/processed-vectors', {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -390,6 +371,14 @@ export default {
       } finally {
         this.isProcessing = false;
       }
+    },
+    viewImage(imageName) {
+      this.currentImageName = imageName;
+      this.currentImageUrl = `http://localhost:8091/images/${encodeURIComponent(imageName)}`;
+      this.imageViewerVisible = true;
+    },
+    closeImageViewer() {
+      this.imageViewerVisible = false;
     }
   }
 }
@@ -683,5 +672,131 @@ h1 {
 
 .vector-table.full-table th {
   background-color: var(--gray-200);
+}
+
+.error-count {
+  color: var(--error-700);
+}
+
+.filter-info {
+  display: inline-block;
+  background-color: #e9ecef;
+  color: #495057;
+  font-size: 0.8rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  margin-left: 0.5rem;
+  font-style: italic;
+}
+
+.processed-files-list {
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+}
+
+.processed-files-list h4 {
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  color: var(--gray-700);
+}
+
+.files-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 0.5rem;
+  background-color: var(--gray-50);
+  border-radius: 0.25rem;
+  border: 1px solid var(--gray-200);
+}
+
+.file-item {
+  padding: 0.25rem 0.5rem;
+  background-color: white;
+  border-radius: 0.25rem;
+  border: 1px solid var(--gray-200);
+  font-size: 0.9rem;
+}
+
+.file-item a {
+  text-decoration: none;
+  color: #4f46e5;
+  display: block;
+  width: 100%;
+}
+
+.file-item a:hover {
+  color: #3730a3;
+  text-decoration: underline;
+}
+
+.image-viewer-popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(2px);
+}
+
+.image-viewer-content {
+  background-color: white;
+  border-radius: 0.5rem;
+  max-width: 90%;
+  max-height: 90%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+}
+
+.image-viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.image-viewer-header h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+  color: #1f2937;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.close-button:hover {
+  color: #1f2937;
+}
+
+.image-viewer-body {
+  padding: 1rem;
+  overflow: auto;
+  text-align: center;
+  max-height: 80vh;
+}
+
+.image-viewer-body img {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
 }
 </style> 

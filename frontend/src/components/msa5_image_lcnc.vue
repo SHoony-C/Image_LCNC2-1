@@ -409,6 +409,7 @@ export default {
     const previewImageUrl = ref(null)
     const showStatusMessage = ref(false)
     const statusMessage = ref('')
+    const statusType = ref('info')
     const availableNodes = ref([])
     const isNodesLoading = ref(true)
     const flowInstance = ref(null)
@@ -2407,12 +2408,12 @@ export default {
           workflowName = data.workflowData.workflow_name;
           workflowData = data.workflowData;
         } else {
-          showStatusMessage('워크플로우 데이터가 유효하지 않습니다.', 'error');
+          setStatusMessage('워크플로우 데이터가 유효하지 않습니다.', 'error');
           return;
         }
         
         // Show loading message
-        showStatusMessage(`워크플로우 '${workflowName}' 불러오는 중...`, 'info');
+        setStatusMessage(`워크플로우 '${workflowName}' 불러오는 중...`, 'info');
         
         // 이미지 설정 (이미지 URL이 있는 경우)
         if (data.imageUrl) {
@@ -2447,7 +2448,7 @@ export default {
               flowInstance.value.fitView();
             }
             
-            showStatusMessage(`워크플로우 '${workflowName}'를 성공적으로 불러왔습니다.`, 'success');
+            setStatusMessage(`워크플로우 '${workflowName}'를 성공적으로 불러왔습니다.`, 'success');
             return;
           } catch (error) {
             console.error('Error directly loading workflow data:', error);
@@ -2462,7 +2463,7 @@ export default {
           const apiData = await response.json();
           
           if (apiData.status !== 'success') {
-            showStatusMessage(`워크플로우를 불러올 수 없습니다: ${apiData.message}`, 'error');
+            setStatusMessage(`워크플로우를 불러올 수 없습니다: ${apiData.message}`, 'error');
             return;
           }
           
@@ -2487,19 +2488,32 @@ export default {
               flowInstance.value.fitView();
             }
             
-            showStatusMessage(`워크플로우 '${workflowName}'를 성공적으로 불러왔습니다.`, 'success');
+            setStatusMessage(`워크플로우 '${workflowName}'를 성공적으로 불러왔습니다.`, 'success');
           } else {
-            showStatusMessage('워크플로우 요소를 불러올 수 없습니다.', 'error');
+            setStatusMessage('워크플로우 요소를 불러올 수 없습니다.', 'error');
           }
         } catch (error) {
           console.error('Error loading workflow via API:', error);
-          showStatusMessage('워크플로우 가져오기 중 오류가 발생했습니다.', 'error');
+          setStatusMessage('워크플로우 가져오기 중 오류가 발생했습니다.', 'error');
         }
       } catch (error) {
         console.error('Error importing workflow from MSA4:', error);
-        showStatusMessage('워크플로우 가져오기 중 오류가 발생했습니다.', 'error');
+        setStatusMessage('워크플로우 가져오기 중 오류가 발생했습니다.', 'error');
       }
     };
+
+    // Add a function to show status messages
+    const setStatusMessage = (message, type = 'info') => {
+      statusMessage.value = message
+      statusType.value = type
+      showStatusMessage.value = true
+      
+      // Auto-hide after a delay (longer for errors)
+      const delay = type === 'error' ? 5000 : 3000
+      setTimeout(() => {
+        showStatusMessage.value = false
+      }, delay)
+    }
 
     return {
       isMaximized,
@@ -2581,6 +2595,9 @@ export default {
       workflowErrorMessage,
       workflowErrorDetails,
       closeWorkflowErrorDialog,
+      statusMessage,
+      statusType,
+      setStatusMessage,
     }
   }
 }

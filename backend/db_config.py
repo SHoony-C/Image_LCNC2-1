@@ -2,7 +2,8 @@
 MySQL Database Configuration for LCNC App
 """
 import os
-from sqlalchemy import create_engine, event
+import datetime
+from sqlalchemy import create_engine, event, MetaData, Table, Column, Integer, String, Float, Boolean, DateTime, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -43,6 +44,75 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Base class for models
 Base = declarative_base()
+
+# LCNC 데이터베이스용 메타데이터 객체 생성
+lcnc_metadata = MetaData()
+
+# MSA6 측정 결과 테이블 정의
+# 일반 측정 결과 테이블
+msa6_result_cd = Table(
+    'msa6_result_cd',
+    lcnc_metadata,
+    Column('pk_id', Integer, primary_key=True, autoincrement=True),
+    Column('table_name', String(45)),
+    Column('user_name', String(45)),
+    Column('lot_id', String(45)),
+    Column('item_id', String(45)),
+    Column('subitem_id', String(45)),
+    Column('value', Float),
+    Column('create_time', DateTime, default=datetime.datetime.now)
+)
+
+# 불량 감지 결과 테이블
+msa6_result_defect = Table(
+    'msa6_result_defect',
+    lcnc_metadata,
+    Column('id', Integer, primary_key=True, autoincrement=True),
+    Column('session_id', String(255), nullable=False),
+    Column('item_id', String(255)),
+    Column('sub_item_id', String(255)),
+    Column('x_pos', Float),
+    Column('y_pos', Float),
+    Column('value', Float),
+    Column('is_bright', Boolean, default=True),
+    Column('is_striated', Boolean, default=False),
+    Column('is_distorted', Boolean, default=False),
+    Column('created_at', DateTime, default=datetime.datetime.now)
+)
+
+# LCNC 데이터베이스 연결 설정
+LCNC_SETTINGS = {
+    'HOST': os.getenv('LCNC_HOST', MYSQL_SETTINGS['HOST']),
+    'PORT': os.getenv('LCNC_PORT', MYSQL_SETTINGS['PORT']),
+    'USER': os.getenv('LCNC_USER', MYSQL_SETTINGS['USER']),
+    'PASSWORD': os.getenv('LCNC_PASSWORD', MYSQL_SETTINGS['PASSWORD']),
+    'DATABASE': os.getenv('LCNC_DATABASE', 'lcnc'),
+}
+
+# LCNC 데이터베이스 연결 문자열
+LCNC_DATABASE_URL = f"mysql+pymysql://{LCNC_SETTINGS['USER']}:{LCNC_SETTINGS['PASSWORD']}@" \
+               f"{LCNC_SETTINGS['HOST']}:{LCNC_SETTINGS['PORT']}/{LCNC_SETTINGS['DATABASE']}"
+
+# LCNC 데이터베이스용 엔진 생성
+lcnc_engine = create_engine(LCNC_DATABASE_URL, echo=True)
+
+# 테이블 생성 함수 (없는 경우에만)
+def create_lcnc_tables():
+    lcnc_metadata.create_all(lcnc_engine)
+    print("LCNC 테이블이 성공적으로 생성되었습니다.")
+
+# 서버 시작 시 테이블 생성 실행
+create_lcnc_tables()
+
+# LCNC SQL 객체
+lcnc_sql = {
+    "engine": lcnc_engine,
+    "metadata": lcnc_metadata,
+    "tables": {
+        "msa6_result_cd": msa6_result_cd,
+        "msa6_result_defect": msa6_result_defect
+    }
+}
 
 # Function to get database session
 def get_db():

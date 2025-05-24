@@ -10,8 +10,9 @@ from pydantic import BaseModel, ValidationError
 
 from models.user_models import User
 from auth_models import UserCreate, User as UserSchema, Token
-from db_config import get_db, AUTH_SETTINGS, USER_ROLES
+from db_config import get_db, AUTH_SETTINGS, USER_ROLES, MONGODB_SETTINGS
 from sqlalchemy.exc import IntegrityError
+from pymongo import MongoClient
 
 # OAuth2 password bearer for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/login")
@@ -742,7 +743,8 @@ async def log_user_action_noauth(
 async def get_workflow_by_image(filename: str):
     try:
         # Find workflow in MongoDB where the image filename is referenced
-        from database import lcnc_results
+        mongo_client = MongoClient(f"mongodb://{MONGODB_SETTINGS['HOST']}:{MONGODB_SETTINGS['PORT']}")
+        lcnc_results = mongo_client[MONGODB_SETTINGS['DATABASE']]['lcnc_result']
         
         # Query MongoDB collection for workflow that contains this image
         workflow = lcnc_results.find_one({"image_filename": filename})
@@ -779,7 +781,8 @@ async def get_workflow_by_image(filename: str):
 async def get_workflow_by_name(workflow_name: str):
     try:
         # Retrieve workflow from MongoDB by name
-        from database import lcnc_results
+        mongo_client = MongoClient(f"mongodb://{MONGODB_SETTINGS['HOST']}:{MONGODB_SETTINGS['PORT']}")
+        lcnc_results = mongo_client[MONGODB_SETTINGS['DATABASE']]['lcnc_result']
         
         # Query MongoDB collection for workflow by name
         workflow = lcnc_results.find_one({"workflow_name": workflow_name})

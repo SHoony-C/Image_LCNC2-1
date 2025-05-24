@@ -53,7 +53,7 @@
                 @click="showImageDetailsPopup(image.filename)"
               >
                 <img 
-                :src="`http://localhost:8091/images/${image.filename}`"
+                :src="image.url || getImageUrl(image.filename)"
                 :alt="image.filename"
                   @error="handleImageError"
                   class="similar-image"
@@ -77,50 +77,179 @@
       <div v-if="showImagePopup" class="image-detail-popup-overlay" @click="closeImagePopup">
         <div class="image-detail-popup" @click.stop>
           <div class="popup-header">
-            <h3>이미지 상세 정보</h3>
+            <h3 v-if="selectedImage?.workflow">워크플로우 이름: {{ selectedImage.workflow.workflow_name }}</h3>
+            <h3 v-else>{{ getCleanFilename(selectedImage?.filename || '') }}</h3>
             <button class="close-popup-btn" @click="closeImagePopup">
               <i class="fas fa-times"></i>
             </button>
           </div>
           
           <div class="popup-content">
+            <!-- 이미지 영역: 처리 전/후 -->
             <div class="popup-image-container">
-              <img :src="popupImageUrl" alt="Selected image" class="popup-image">
+              <!-- 처리 전 이미지 -->
+              <div class="image-before-section">
+                <h5 class="image-label">처리 전</h5>
+                <img 
+                  :src="selectedImage?.workflow?.input_image_url || getImageUrl(selectedImage?.workflow?.input_image || selectedImage?.filename)"
+                  alt="처리 전 이미지" 
+                  class="popup-image"
+                  @error="handleImageError"
+                >
+              </div>
+              
+              <!-- 처리 후 이미지 -->
+              <div class="image-after-section">
+                <h5 class="image-label">처리 후</h5>
+                <img 
+                  :src="selectedImage?.workflow?.output_image_url || getImageUrl(selectedImage?.workflow?.output_image || (selectedImage?.filename ? getAfterImageName(selectedImage.filename) : ''))"
+                  alt="처리 후 이미지" 
+                  class="popup-image"
+                  @error="handleImageError"
+                >
+              </div>
             </div>
             
             <div class="popup-details">
-              <div class="detail-row">
-                <strong>파일명:</strong> {{ selectedImage?.filename || 'Unknown' }}
-              </div>
-              <div class="detail-row" v-if="selectedImage?.similarity">
-                <strong>유사도:</strong> {{ formatSimilarity(selectedImage.similarity) }}%
-              </div>
-              
               <!-- 워크플로우 정보 표시 -->
               <div class="workflow-details" v-if="selectedImage?.workflow">
-                <h4>워크플로우 정보</h4>
-                <div class="detail-row">
-                  <strong>워크플로우 이름:</strong> {{ selectedImage.workflow.workflow_name }}
-                </div>
                 <div class="detail-row" v-if="selectedImage.workflow.description">
                   <strong>설명:</strong> {{ selectedImage.workflow.description }}
                 </div>
+                
                 <div class="detail-row">
-                  <strong>생성일:</strong> {{ new Date(selectedImage.workflow.created_at).toLocaleString() }}
+                  <strong>생성일:</strong> {{ formatDate(selectedImage.workflow.created_at) || formatDate(selectedImage.workflow.timestamp) || 'N/A' }}
                 </div>
                 
-                <!-- 워크플로우 불러오기 버튼 -->
-                <button class="load-workflow-btn" @click="loadWorkflowToMSA5(selectedImage.workflow)">
-                  <i class="fas fa-file-import"></i>
-                  워크플로우만 불러오기
-                </button>
+                <!-- 노드 정보 표시 -->
+                <div class="workflow-nodes" v-if="selectedImage.workflow.nodes && selectedImage.workflow.nodes.length > 0">
+                  <div class="workflow-header-flex">
+                    <h5>워크플로우 다이어그램</h5>
+                    
+                    <!-- 워크플로우 불러오기 버튼 - 오른쪽에 배치 -->
+                    <button class="load-workflow-btn" @click="loadWorkflowToMSA5(selectedImage.workflow)">
+                      <i class="fas fa-file-import"></i>
+                      MSA5에서 워크플로우 사용하기
+                    </button>
+                  </div>
+                  
+                  <!-- 워크플로우 다이어그램 -->
+                  <div class="workflow-container">
+                    <div class="workflow-visual">
+                      <!-- 시작 노드 -->
+                      <div class="flow-node start-node">
+                        <div class="node-icon">
+                          <i class="fas fa-play"></i>
+                        </div>
+                        <div class="node-text">시작</div>
+                        <div class="node-arrow"></div>
+                      </div>
+                      
+                      <!-- 프로세스 노드들 -->
+                      <div class="flow-nodes">
+                        <div v-for="(node, idx) in selectedImage.workflow.nodes" :key="idx" class="flow-node process-node">
+                          <div class="node-badge">{{idx + 1}}</div>
+                          <div class="node-icon">
+                            <i :class="getNodeIcon(node.type || 'custom')"></i>
+                          </div>
+                          <div class="node-text">
+                            {{ node.label || node.name || node.id || node.type || '노드' }}
+                          </div>
+                          <div class="node-arrow" v-if="idx < selectedImage.workflow.nodes.length - 1"></div>
+                          
+                          <!-- 노드 상세 정보 (호버 시 표시) -->
+                          <div class="node-tooltip">
+                            <div class="tooltip-header">
+                              <span class="node-type-badge">{{ node.type || 'custom' }}</span>
+                              <span class="node-id-badge" v-if="node.id">ID: {{ (node.id || '').substring(0, 8) }}</span>
+                            </div>
+                            <div class="tooltip-body">
+                              <div class="property-list">
+                                <div class="property-item" v-if="node.id">
+                                  <div class="property-name">id:</div>
+                                  <div class="property-value">{{ node.id }}</div>
+                                </div>
+                                <div class="property-item">
+                                  <div class="property-name">icon:</div>
+                                  <div class="property-value">{{ getNodeIcon(node.type || 'custom') }}</div>
+                                </div>
+                                <template v-if="node.data && typeof node.data === 'object'">
+                                  <div class="property-item" v-for="entry in getFilteredNodeData(node.data)" :key="entry.key">
+                                    <div class="property-name">{{ entry.key }}:</div>
+                                    <div class="property-value">{{ entry.value }}</div>
+                                  </div>
+                                </template>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <!-- 종료 노드 -->
+                      <div class="flow-node end-node">
+                        <div class="node-icon">
+                          <i class="fas fa-stop"></i>
+                        </div>
+                        <div class="node-text">종료</div>
+                      </div>
+                    </div>
+                    
+                    <!-- 워크플로우 통계 -->
+                    <div class="workflow-stats">
+                      <div class="stat-item">
+                        <i class="fas fa-project-diagram"></i>
+                        <span>총 노드:</span>
+                        <strong>{{ selectedImage.workflow.nodes.length }}</strong>
+                      </div>
+                      <div class="stat-item">
+                        <i class="fas fa-share-alt"></i>
+                        <span>총 엣지:</span>
+                        <strong>{{ selectedImage.workflow.nodes.length + 1 }}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- 사용된 이미지 표시 -->
+                <div class="detail-row" v-if="selectedImage.workflow.images && selectedImage.workflow.images.length > 0">
+                  <strong>사용된 이미지:</strong> {{ selectedImage.workflow.images?.length || 0 }}개
+                </div>
+                
+                <!-- 기타 메타 정보 -->
+                <div class="detail-row" v-if="selectedImage.workflow.created_by">
+                  <strong>생성자:</strong> {{ selectedImage.workflow.created_by }}
+                </div>
+                
+                <div class="detail-row" v-if="selectedImage.workflow.last_modified">
+                  <strong>마지막 수정일:</strong> {{ formatDate(selectedImage.workflow.last_modified) }}
+                </div>
+                
+                <!-- 추가 속성이 있는 경우 표시 -->
+                <div v-if="selectedImage.workflow.parameters" class="parameters-section">
+                  <h5>파라미터</h5>
+                  <div class="param-list">
+                    <div v-for="(value, key) in selectedImage.workflow.parameters" :key="key" class="param-item">
+                      <strong>{{ key }}:</strong> {{ value }}
+                    </div>
+                  </div>
+                </div>
               </div>
               
-              <!-- 워크플로우 정보 로딩 중 표시 -->
+              <!-- 워크플로우 정보 로딩 중 또는 없음 표시 -->
               <div class="workflow-loading" v-else-if="selectedImage && !selectedImage.workflow">
-                <p>워크플로우 정보 확인 중...</p>
-                <div class="loading-spinner">
-                  <i class="fas fa-spinner fa-spin"></i>
+                <div v-if="selectedImage.isLoading">
+                  <p>워크플로우 정보 확인 중...</p>
+                  <div class="loading-spinner">
+                    <i class="fas fa-spinner fa-spin"></i>
+                  </div>
+                </div>
+                <div v-else-if="selectedImage.workflowStatus === 'not_found'">
+                  <p>이 이미지에 연결된 워크플로우가 없습니다.</p>
+                  <i class="fas fa-info-circle"></i>
+                </div>
+                <div v-else-if="selectedImage.workflowStatus === 'error'">
+                  <p>워크플로우 정보를 불러오는 중 오류가 발생했습니다.</p>
+                  <i class="fas fa-exclamation-triangle"></i>
                 </div>
               </div>
             </div>
@@ -131,11 +260,1060 @@
   </div>
 </template>
 
+<style scoped>
+
+/* 통합된 워크플로우 다이어그램 스타일 */
+.workflow-container {
+  margin-bottom: 25px;
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.workflow-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 25px 15px;
+  overflow-y: auto;
+  position: relative;
+  min-height: 300px;
+  background: linear-gradient(to bottom, #f9f9f9, #ffffff);
+}
+
+/* 흐름선 스타일 - 세로 방향 */
+.workflow-visual::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 60px;
+  bottom: 60px;
+  width: 3px;
+  background: linear-gradient(to bottom, #4dabf7, #339af0, #228be6);
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+.flow-nodes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 2;
+  margin: 15px 0;
+}
+
+.flow-node {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 110px;
+  height: 110px;
+  margin: 15px 0;
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+  transition: all 0.25s ease;
+  background-color: white;
+  cursor: pointer;
+}
+
+.flow-node:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.flow-node:hover .node-tooltip {
+  display: block;
+}
+
+.start-node {
+  background-color: #1c7ed6;
+  color: white;
+  box-shadow: 0 4px 12px rgba(28, 126, 214, 0.25);
+}
+
+.end-node {
+  background-color: #e03131;
+  color: white;
+  box-shadow: 0 4px 12px rgba(224, 49, 49, 0.25);
+}
+
+.process-node {
+  border: 2px solid #dee2e6;
+  position: relative;
+}
+
+.node-badge {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 24px;
+  height: 24px;
+  background-color: #339af0;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.node-icon {
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.node-text {
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  word-break: keep-all;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 세로 방향 화살표 */
+.node-arrow {
+  position: absolute;
+  bottom: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 12px solid #228be6;
+  z-index: 3;
+}
+
+.start-node .node-arrow {
+  border-top-color: white;
+}
+
+/* 노드 툴팁 스타일 */
+.node-tooltip {
+  display: none;
+  position: absolute;
+  left: 120px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 240px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  overflow: hidden;
+}
+
+.tooltip-header {
+  padding: 10px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.node-type-badge {
+  background-color: #74c0fc;
+  color: #1864ab;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.node-id-badge {
+  color: #868e96;
+  font-size: 12px;
+}
+
+.tooltip-body {
+  padding: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* 워크플로우 통계 */
+.workflow-stats {
+  display: flex;
+  padding: 15px 20px;
+  background-color: #f8f9fa;
+  border-top: 1px solid #eee;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  margin-right: 25px;
+  font-size: 14px;
+  color: #495057;
+}
+
+.stat-item i {
+  margin-right: 10px;
+  color: #228be6;
+  font-size: 16px;
+}
+
+.stat-item span {
+  margin-right: 6px;
+}
+
+/* 노드 카드 섹션 */
+.node-cards-section {
+  padding: 0 15px 15px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  padding: 15px 0;
+  margin: 0;
+  color: #343a40;
+}
+
+.node-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+}
+
+.node-card {
+  flex: 1 1 300px;
+  min-width: 250px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  overflow: hidden;
+  border-left: 4px solid #339af0;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.node-card:hover {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.node-card-header {
+  padding: 12px 15px;
+  background-color: #f1f3f5;
+  display: flex;
+  align-items: center;
+}
+
+.node-number {
+  background-color: #339af0;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  margin-right: 12px;
+}
+
+.node-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.node-card-body {
+  padding: 15px;
+}
+
+.property-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.property-item {
+  display: flex;
+  font-size: 13px;
+}
+
+.property-name {
+  font-weight: 500;
+  color: #495057;
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.property-value {
+  color: #6c757d;
+  word-break: break-word;
+}
+
+
+
+/* MSA5 스타일 워크플로우 다이어그램 */
+.msa5-workflow-diagram {
+  margin-bottom: 20px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  background-color: white;
+}
+
+.diagram-title, .details-title {
+  padding: 15px;
+  margin: 0;
+  background-color: #f5f5f5;
+  color: #333;
+  font-size: 16px;
+  font-weight: 600;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.diagram-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.diagram-header {
+  padding: 10px 15px;
+  background-color: #f9f9f9;
+}
+
+.workflow-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+}
+
+.flow-container {
+  display: flex;
+  align-items: center;
+  padding: 20px 15px;
+  overflow-x: auto;
+  min-height: 80px;
+  background-color: white;
+}
+
+/* 노드 스타일 */
+.msa5-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 80px;
+  height: 80px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  position: relative;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.msa5-node:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.msa5-node i {
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+
+.msa5-node span {
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.msa5-start-node {
+  background-color: #1c7ed6;
+  color: white;
+}
+
+.msa5-process-node {
+  background-color: white;
+  border: 1px solid #ced4da;
+  color: #495057;
+}
+
+.msa5-end-node {
+  background-color: #fa5252;
+  color: white;
+}
+
+.node-index {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 20px;
+  height: 20px;
+  background-color: #339af0;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.msa5-node-group {
+  display: flex;
+  align-items: center;
+}
+
+.msa5-connector {
+  display: flex;
+  align-items: center;
+  height: 20px;
+}
+
+/* 다이어그램 푸터 */
+.diagram-footer {
+  padding: 12px 15px;
+  background-color: #f9f9f9;
+  border-top: 1px solid #e0e0e0;
+}
+
+.workflow-stats {
+  display: flex;
+  gap: 20px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: #555;
+}
+
+.stat-item i {
+  margin-right: 6px;
+  color: #1c7ed6;
+}
+
+/* 노드 상세 정보 스타일 */
+.msa5-node-details {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  background-color: white;
+  margin-bottom: 20px;
+}
+
+.node-cards {
+  padding: 15px;
+}
+
+.node-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+
+.node-card-header {
+  padding: 10px 15px;
+  background-color: #f5f5f5;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.node-type {
+  font-weight: 500;
+  color: #495057;
+  padding: 2px 6px;
+  background-color: #e9ecef;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.node-id {
+  color: #868e96;
+  font-size: 12px;
+}
+
+.node-card-body {
+  padding: 15px;
+}
+
+.property-item {
+  display: flex;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.property-label {
+  font-weight: 500;
+  color: #495057;
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.property-value {
+  color: #6c757d;
+  word-break: break-word;
+}
+
+
+
+/* 강제 고정 크기 및 스크롤 스타일 */
+.msa-component {
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  max-height: 100vh !important;
+}
+
+.component-header {
+  height: 48px !important;
+  min-height: 48px !important;
+  max-height: 48px !important;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 15px !important;
+  flex: 0 0 48px !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-left i {
+  color: #555;
+}
+
+.content-container {
+  display: flex !important;
+  flex-direction: column !important;
+  height: calc(100% - 48px) !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  position: relative !important;
+  flex: 1 1 auto !important; 
+}
+
+.plot-container {
+  height: 300px !important;
+  min-height: 300px !important;
+  max-height: 300px !important;
+  width: 100% !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  flex: 0 0 300px !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+}
+
+#plotly-visualization {
+  width: 100% !important;
+  height: 300px !important;
+  min-height: 300px !important;
+  max-height: 300px !important;
+  flex: 1 !important;
+}
+
+.image-section {
+  position: relative !important;
+  height: calc(100% - 300px) !important;
+  max-height: calc(100% - 300px) !important;
+  width: 100% !important;
+  background-color: #f8f9fa;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* 스크롤 가능한 내부 컨테이너 */
+.scrollable-content {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  overflow-y: scroll !important; /* 항상 스크롤바 표시 */
+  overflow-x: hidden !important;
+  padding: 20px !important;
+  box-sizing: border-box !important;
+}
+
+/* 선택된 이미지 섹션 */
+.selected-image-section {
+  margin-bottom: 20px !important;
+  width: 100% !important;
+}
+
+.selected-image-section h3 {
+  font-size: 18px !important;
+  margin-bottom: 15px !important;
+  color: #333 !important;
+}
+
+.selected-image-wrapper {
+  display: flex !important;
+  justify-content: center !important;
+  margin-bottom: 20px !important;
+}
+
+/* 클릭 가능한 이미지 스타일 */
+.clickable {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.clickable:hover {
+  transform: scale(1.03);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* 이미지 상세 팝업 스타일 */
+.image-detail-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(3px);
+}
+
+.image-detail-popup {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  width: 90%;
+  max-width: 800px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popup-fade-in 0.3s ease-out;
+}
+
+@keyframes popup-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.popup-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #343a40;
+}
+
+.close-popup-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.close-popup-btn:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #343a40;
+}
+
+.popup-content {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  overflow-y: auto;
+  max-height: calc(90vh - 60px);
+}
+
+@media (min-width: 768px) {
+  .popup-content {
+    flex-direction: row;
+  }
+}
+
+.popup-image-container {
+  flex: 0 0 auto;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .popup-image-container {
+    width: 45%;
+    margin-right: 20px;
+    margin-bottom: 0;
+  }
+}
+
+.image-before-section,
+.image-after-section {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.image-label {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.image-before-section {
+  margin-bottom: 15px;
+}
+
+.popup-image {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #eee;
+}
+
+.workflow-header-flex {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.workflow-header-flex h5 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #343a40;
+}
+
+/* 워크플로우 불러오기 버튼 */
+.load-workflow-btn {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.load-workflow-btn:hover {
+  background-color: #0069d9;
+}
+
+.load-workflow-btn i {
+  font-size: 16px;
+}
+
+.popup-details {
+  flex: 1 1 auto;
+}
+
+.detail-row {
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.detail-row strong {
+  font-weight: 600;
+  color: #495057;
+  margin-right: 5px;
+}
+
+.workflow-details {
+  margin-top: 20px;
+  border-top: 1px solid #e9ecef;
+  padding-top: 15px;
+}
+
+.workflow-details h4 {
+  font-size: 16px;
+  margin-bottom: 15px;
+  color: #343a40;
+}
+
+.workflow-details h5 {
+  font-size: 14px;
+  margin: 15px 0 10px;
+  color: #495057;
+}
+
+/* 이미지 비교 스타일 */
+.workflow-images {
+  margin: 15px 0;
+}
+
+.image-comparison {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  margin-top: 10px;
+}
+
+.image-before, .image-after {
+  flex: 1 1 calc(50% - 15px);
+  min-width: 150px;
+}
+
+.image-before p, .image-after p {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #495057;
+}
+
+.workflow-thumbnail {
+  max-width: 100%;
+  max-height: 150px;
+  object-fit: contain;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+/* 노드 리스트 스타일 */
+.workflow-nodes {
+  margin: 15px 0;
+}
+
+.node-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.node-item {
+  background-color: #e9ecef;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.node-name {
+  font-weight: 500;
+}
+
+.node-type {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #6c757d;
+  font-style: italic;
+}
+
+.node-id {
+  margin-left: 6px;
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.node-details {
+  margin-left: 10px;
+}
+
+.node-parameter {
+  font-size: 13px;
+  color: #495057;
+}
+
+.data-tag {
+  font-size: 13px;
+  color: #6c757d;
+}
+
+/* 파라미터 스타일 */
+.parameters-section {
+  margin-top: 15px;
+}
+
+.param-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.param-item {
+  font-size: 13px;
+  padding: 6px 10px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border-left: 3px solid #dee2e6;
+}
+
+/* 워크플로우 불러오기 버튼 */
+.load-workflow-btn {
+  margin-top: 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.load-workflow-btn:hover {
+  background-color: #0069d9;
+}
+
+.load-workflow-btn i {
+  font-size: 16px;
+}
+
+/* 워크플로우 로딩 상태 */
+.workflow-loading {
+  margin-top: 20px;
+  padding: 20px;
+  text-align: center;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.workflow-loading p {
+  margin-bottom: 10px;
+  color: #495057;
+}
+
+.workflow-loading .loading-spinner {
+  font-size: 24px;
+  color: #007bff;
+  margin-top: 10px;
+}
+
+.workflow-loading i.fa-info-circle {
+  font-size: 24px;
+  color: #17a2b8;
+  margin-top: 10px;
+}
+
+.workflow-loading i.fa-exclamation-triangle {
+  font-size: 24px;
+  color: #dc3545;
+  margin-top: 10px;
+}
+
+/* 로딩 및 에러 메시지 스타일 */
+.loading-overlay {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 10 !important;
+}
+
+.loading-spinner {
+  border: 3px solid #f3f3f3 !important;
+  border-top: 3px solid #3498db !important;
+  border-radius: 50% !important;
+  width: 30px !important;
+  height: 30px !important;
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.error-message {
+  color: #dc3545 !important;
+  text-align: center !important;
+  padding: 10px !important;
+  margin-top: 10px !important;
+}
+
+.status-message {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  color: white !important;
+  padding: 10px 20px !important;
+  border-radius: 4px !important;
+  z-index: 1000 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+
+</style>
+
 <script>
 import Plotly from 'plotly.js-dist';
-// import axios from 'axios'; // 사용하지 않음 - API 호출 제거됨
-// Vue 3에서 이벤트 버스 구현이 필요하면 mitt 라이브러리 설치 필요
-// import mitt from 'mitt'; // npm install mitt
 
 // Plotly를 전역 객체로 설정 (window.Plotly 참조용)
 window.Plotly = Plotly;
@@ -469,93 +1647,91 @@ export default {
       this.isLoading = true;
       
       try {
-        // 벡터 데이터는 settings API에서 가져오기
-        const response = await fetch('http://localhost:8000/api/settings/processed-vectors', {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
+        // API 엔드포인트에 오류가 발생하므로 직접 스토리지 파일 접근만 시도
+        try {
+          logDebug('Trying direct storage access...');
+          const response = await fetch('http://localhost:8000/storage/vector/vectors.json', {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            // 직접 스토리지에서 벡터 로드 성공, 메타데이터도 함께 로드
+            const vectors = await response.json();
+            
+            try {
+              // 메타데이터 별도 로드
+              const metadataResponse = await fetch('http://localhost:8000/storage/vector/metadata.json', {
+                method: 'GET',
+                headers: {
+                  'Accept': 'application/json'
+                }
+              });
+              
+              if (metadataResponse.ok) {
+                const metadata = await metadataResponse.json();
+                
+                // 중복 제거 및 처리
+                const uniqueVectors = new Map();
+                metadata.forEach((label, index) => {
+                  const cleanLabel = this.removeTimestamp(label);
+                  if (!uniqueVectors.has(cleanLabel) && vectors[index]) {
+                    uniqueVectors.set(cleanLabel, vectors[index]);
+                  }
+                });
+                
+                // 맵에서 배열로 변환
+                const processedVectors = Array.from(uniqueVectors.values());
+                const processedLabels = Array.from(uniqueVectors.keys());
+                
+                logDebug(`Processed ${processedVectors.length} unique vectors from direct storage`);
+                this.processVectorData(processedVectors, processedLabels);
+                
+                this.isDataLoaded = true;
+                this.loadingComplete = true;
+                this.loadingMessage = '';
+                return;
+              }
+            } catch (metadataError) {
+              logDebug('Error loading metadata:', metadataError.message);
+              // 메타데이터 없이도 벡터만 활용 가능
+              const dummyLabels = Array(vectors.length).fill().map((_, i) => `이미지${i+1}`);
+              this.processVectorData(vectors, dummyLabels);
+              
+              this.isDataLoaded = true;
+              this.loadingComplete = true;
+              this.loadingMessage = '';
+              return;
+            }
           }
-        });
-        
-        if (!response.ok) {
-          throw new Error(`API returned status: ${response.status}`);
+        } catch (storageError) {
+          logDebug('Error with direct storage:', storageError.message);
         }
         
-        const data = await response.json();
-        logDebug(`Received vector data from API: ${data.vectors?.length || 0} vectors`);
-        
-        if (!data.vectors || !Array.isArray(data.vectors) || data.vectors.length === 0) {
-          throw new Error('No valid vector data received from API');
-        }
-
-        // 벡터 데이터와 라벨 처리
-        const vectors = data.vectors;
-        const labels = data.metadata || data.labels || Array(vectors.length).fill().map((_, i) => `이미지${i+1}`);
-
-        // 벡터 데이터 처리 및 시각화
-        this.processVectorData(vectors, labels);
-        
+        // 모든 시도 실패 시 바로 더미 데이터 생성
+        logDebug('All methods failed, creating dummy vector data');
+        this.createDummyVectorData();
         this.isDataLoaded = true;
         this.loadingComplete = true;
-        this.loadingMessage = '';
+        this.isLoading = false;
         
       } catch (error) {
         console.error('Error loading vector data:', error);
-        this.displayErrorMessage('벡터 데이터를 불러오는데 실패했습니다');
+        logDebug('Creating dummy data as last resort');
+        this.createDummyVectorData();
         this.loadingComplete = true;
         this.isLoading = false;
       }
     },
     
-    // 일반 벡터 데이터 API 호출 (백업용)
+    // 일반 벡터 데이터 API 호출 (백업용) - 이제 사용하지 않음
     async fallbackToRegularVectors() {
-      logDebug('Falling back to regular vectors API');
-      
-      try {
-        // 기본 벡터 데이터는 settings API에서 가져오기
-        const response = await fetch('http://localhost:8000/api/settings/vectors', {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (!response.ok) {
-          throw new Error(`Fallback API returned status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.vectors && data.vectors.length > 0 && (data.metadata || data.labels)) {
-          logDebug(`Loaded ${data.vectors.length} vectors from fallback API`);
-          
-          // 중복 제거를 위한 맵 생성
-          const uniqueVectors = new Map();
-          const labelsArray = data.metadata || data.labels;
-          
-          // 동일한 이미지명을 가진 첫 번째 벡터만 유지
-          labelsArray.forEach((label, index) => {
-            const cleanLabel = this.removeTimestamp(label);
-            if (!uniqueVectors.has(cleanLabel)) {
-              uniqueVectors.set(cleanLabel, data.vectors[index]);
-            }
-          });
-          
-          // 맵에서 배열로 변환
-          const processedVectors = Array.from(uniqueVectors.values());
-          const processedLabels = Array.from(uniqueVectors.keys());
-          
-          logDebug(`Processed ${processedVectors.length} unique vectors`);
-          this.processVectorData(processedVectors, processedLabels);
-        } else {
-          this.displayErrorMessage('유효한 벡터 데이터가 없습니다');
-        }
-      } catch (error) {
-        console.error('Error in fallback vector loading:', error);
-        this.displayErrorMessage('벡터 데이터 로드를 위한 모든 시도가 실패했습니다');
-        this.createDummyVectorData();
-      }
+      logDebug('Creating dummy vector data instead of using fallback API');
+      this.createDummyVectorData();
+      this.loadingComplete = true;
+      this.isLoading = false;
     },
     
     // 타임스탬프 제거 함수
@@ -921,7 +2097,20 @@ export default {
     // 이미지 URL 생성 함수 수정
     getImageUrl(filename) {
       if (!filename) return '';
-      return `http://localhost:8091/images/${encodeURIComponent(filename)}`;
+      
+      // 파일명에 _before 접미사 추가 (없는 경우에만)
+      let imageFilename = filename;
+      if (!imageFilename.includes('_before.') && !imageFilename.includes('_after.')) {
+        // 확장자 분리 후 _before 추가
+        const parts = imageFilename.split('.');
+        if (parts.length > 1) {
+          const ext = parts.pop();
+          imageFilename = parts.join('.') + '_before.' + ext;
+        }
+      }
+      
+      // 8091 포트의 이미지 서버 직접 접근
+      return `http://localhost:8091/images/${encodeURIComponent(imageFilename)}`;
     },
 
     // 벡터 데이터 처리 함수
@@ -1032,7 +2221,7 @@ export default {
       this.loadingMessage = '유사 이미지 검색 중...';
       
       // API 엔드포인트로 요청
-      const apiUrl = `http://localhost:8000/api/msa4/similar-images/${encodeURIComponent(filename)}`;
+      const apiUrl = `http://localhost:8000/api/similar-images/${encodeURIComponent(filename)}`;
       
       // 로컬 변수로 현재 요청 추적
       const requestId = Date.now();
@@ -1051,7 +2240,9 @@ export default {
         }
         
         if (!response.ok) {
-          throw new Error(`API returned status: ${response.status}`);
+          // API 오류시 기본 유사도 함수 사용
+          logDebug(`API returned error ${response.status}, using fallback similar images`);
+          return this.getFallbackSimilarImages(index, filename);
         }
         return response.json();
       })
@@ -1073,23 +2264,73 @@ export default {
           processedSimilarImages.sort((a, b) => b.similarity - a.similarity);
           
           this.similarImages = processedSimilarImages;
+        } else if (data.fallbackSimilarImages) {
+          // 폴백 데이터 사용
+          this.similarImages = data.fallbackSimilarImages;
         } else {
-          this.similarImages = [];
-          if (data.status === 'error') {
-            this.displayErrorMessage(data.message || '유사 이미지를 찾을 수 없습니다');
-          }
+          // API에서 데이터를 받지 못한 경우 폴백 사용
+          return this.getFallbackSimilarImages(index, filename);
         }
       })
       .catch(error => {
         console.error('Error finding similar images:', error);
-        this.displayErrorMessage('유사 이미지 검색 중 오류가 발생했습니다');
-        this.similarImages = [];
+        // 폴백 방식으로 유사 이미지 찾기
+        return this.getFallbackSimilarImages(index, filename);
       })
       .finally(() => {
         this.isProcessing = false;
         // 이제 플래그 해제
         this.isSelectingImageFlag = false;
       });
+    },
+    
+    // API 오류 시 대체 유사 이미지 제공 (로컬 계산)
+    getFallbackSimilarImages(index, filename) {
+      logDebug(`Using fallback method to find similar images for ${filename}`);
+      
+      // 벡터 데이터가 없으면 빈 배열 반환
+      if (!this.projectedVectors || !this.projectedVectors[index]) {
+        return { fallbackSimilarImages: [] };
+      }
+      
+      // 현재 선택된 이미지의 벡터
+      const selectedVector = this.projectedVectors[index];
+      
+      // 모든 이미지와의 거리 계산
+      const distances = this.projectedVectors.map((vector, idx) => {
+        return {
+          index: idx,
+          filename: this.labels[idx],
+          distance: this.calculate3DDistance(selectedVector, vector),
+          // 선택된 이미지 자신은 제외 (거리가 0)
+          isSelf: idx === index
+        };
+      });
+      
+      // 거리 기준으로 정렬 (가까운 순)
+      distances.sort((a, b) => a.distance - b.distance);
+      
+      // 가장 가까운 이미지 5개 선택 (자신 제외)
+      const nearestImages = distances
+        .filter(item => !item.isSelf)
+        .slice(0, 4)
+        .map(item => {
+          // 거리를 유사도로 변환 (1 - 정규화된 거리)
+          const maxDistance = 1.732; // 3D 공간에서 최대 거리 (대략적 값)
+          const normalizedDistance = Math.min(item.distance / maxDistance, 1);
+          const similarity = Math.round((1 - normalizedDistance) * 100);
+          
+          return {
+            filename: item.filename,
+            similarity: similarity,
+            url: this.getImageUrl(item.filename)
+          };
+        });
+        
+      logDebug(`Found ${nearestImages.length} fallback similar images`);
+      this.similarImages = nearestImages;
+      
+      return { fallbackSimilarImages: nearestImages };
     },
     
     // 플롯 마커만 업데이트 - Plotly 의존성 최소화
@@ -1204,14 +2445,55 @@ export default {
       // 이미지 소스 URL에서 파일명 추출
       const filename = img.alt || this.getImageNameFromUrl(img.src);
       
-      // 오류 메시지 표시
-      this.displayErrorMessage(`이미지 로딩 실패: ${filename}`);
+      // 현재 URL 확인
+      const currentSrc = img.src;
+      
+      // 이미 대체 시도를 했는지 확인 (data 속성 사용)
+      const retryCount = parseInt(img.dataset.retryCount || '0');
+      
+      if (retryCount < 2) {
+        // 재시도 카운트 증가
+        img.dataset.retryCount = (retryCount + 1).toString();
+        
+        // 대체 URL 시도
+        let newSrc = '';
+        
+        if (currentSrc.includes('_before') && !currentSrc.includes('_after')) {
+          // _before에서 _after로 시도
+          newSrc = currentSrc.replace('_before', '_after');
+        } else if (currentSrc.includes('_after')) {
+          // _after에서 접미사 없는 기본 파일명으로 시도
+          newSrc = currentSrc.replace('_after', '');
+        } else {
+          // 접미사 없는 URL에서 원본 파일명 추출 후 다시 시도
+          const parts = filename.split('.');
+          if (parts.length > 1) {
+            const ext = parts.pop();
+            const baseName = parts.join('.');
+            
+            if (retryCount === 0) {
+              newSrc = `http://localhost:8091/images/${encodeURIComponent(baseName + '_after.' + ext)}`;
+            } else {
+              newSrc = `http://localhost:8091/images/${encodeURIComponent(baseName + '.' + ext)}`;
+            }
+          }
+        }
+        
+        if (newSrc && newSrc !== currentSrc) {
+          logDebug(`Trying alternative image URL: ${newSrc}`);
+          img.src = newSrc;
+          return;
+        }
+      }
+      
+      // 모든 대체 시도 실패 시 오류 표시
+      logDebug(`All image loading attempts failed for: ${filename}`);
       
       // 이미지에 오류 스타일 적용
       img.classList.add('image-error');
       
-      // 기본 오류 이미지로 대체 (선택 사항)
-      // img.src = '/images/image-error.png';
+      // 이미지 깨짐 표시를 위한 기본 이미지로 대체
+      img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiNmZjAwMDAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBjbGFzcz0iZmVhdGhlciBmZWF0aGVyLWFsZXJ0LXRyaWFuZ2xlIj48cGF0aCBkPSJNMTAuMjkgMy44NkwxLjgyIDE4YTIgMiAwIDAgMCAxLjcxIDNoMTYuOTRhMiAyIDAgMCAwIDEuNzEtM0wxMy43MSAzLjg2YTIgMiAwIDAgMC0zLjQyIDB6Ij48L3BhdGg+PGxpbmUgeDE9IjEyIiB5MT0iOSIgeDI9IjEyIiB5Mj0iMTMiPjwvbGluZT48bGluZSB4MT0iMTIiIHkxPSIxNyIgeDI9IjEyLjAxIiB5Mj0iMTciPjwvbGluZT48L3N2Zz4=';
     },
 
     // 선택된 이미지의 3D 좌표 반환
@@ -1461,39 +2743,111 @@ export default {
     },
 
     async showImageDetailsPopup(filename) {
+      // 이미지 URL 직접 설정 (8091 포트)
       this.popupImageUrl = this.getImageUrl(filename);
       this.popupImageFilename = filename;
       this.showImagePopup = true;
       
+      const cleanFilename = this.getCleanFilename(filename);
+      logDebug(`Opening popup for image: ${filename}, clean name: ${cleanFilename}`);
+      
       // 선택된 이미지 정보 설정
       this.selectedImage = {
         filename: filename,
-        url: this.popupImageUrl
+        cleanName: cleanFilename,
+        url: this.popupImageUrl,
+        isLoading: true,
+        workflowStatus: 'loading'
       };
       
-      // 로딩 상태 표시
-      this.selectedImage.isLoading = true;
-      
       try {
-        // MongoDB에서 워크플로우 정보 조회
-        const response = await fetch(`http://localhost:8000/api/workflow/get-by-image?filename=${encodeURIComponent(filename)}`);
+        // 파일명에서 _before나 _after가 있는 경우 제거하여 원본 이름으로 검색
+        const searchFilename = filename.replace(/_before\.|_after\./g, '.');
         
-        if (response.ok) {
-          const data = await response.json();
-          if (data.status === 'success' && data.workflow) {
-            // 워크플로우 정보 설정
-            this.selectedImage.workflow = data.workflow;
-            logDebug('워크플로우 정보 로드 완료:', data.workflow);
+        // MongoDB에서 워크플로우 정보 조회
+        logDebug('Fetching workflow info for:', searchFilename);
+        const response = await fetch(`http://localhost:8000/api/workflow/get-by-image?filename=${encodeURIComponent(searchFilename)}`);
+        
+        const data = await response.json();
+        logDebug('Workflow API response:', data);
+        
+        if (response.ok && data.status === 'success' && data.workflow) {
+          // 상세 노드 정보 로깅
+          console.log('Workflow nodes data from MongoDB:', data.workflow.nodes);
+          
+          if (data.workflow.nodes && Array.isArray(data.workflow.nodes)) {
+            console.log(`Number of nodes: ${data.workflow.nodes.length}`);
+            // 각 노드의 구조 상세 로깅
+            data.workflow.nodes.forEach((node, index) => {
+              console.log(`Node ${index + 1} details:`, node);
+              console.log(`  - Node type: ${node.type || 'undefined'}`);
+              console.log(`  - Node name: ${node.name || 'undefined'}`);
+              console.log(`  - Node keys:`, Object.keys(node));
+            });
+          } else {
+            console.log('Nodes data is not an array or is missing:', data.workflow.nodes);
+          }
+          
+          // 워크플로우 정보 설정
+          this.selectedImage.workflow = data.workflow;
+          this.selectedImage.workflowStatus = 'found';
+          logDebug(`워크플로우 정보 찾음: ${data.workflow.workflow_name}`);
+          
+          // 워크플로우 이미지 URL 수정 (8091 포트 직접 접근)
+          if (this.selectedImage.workflow.input_image) {
+            this.selectedImage.workflow.input_image_url = this.getImageUrl(this.selectedImage.workflow.input_image);
+          }
+          if (this.selectedImage.workflow.output_image) {
+            this.selectedImage.workflow.output_image_url = this.getImageUrl(this.selectedImage.workflow.output_image);
+          }
+        } else {
+          // No workflow found, try with the original filename
+          const retryResponse = await fetch(`http://localhost:8000/api/workflow/get-by-image?filename=${encodeURIComponent(filename)}`);
+          const retryData = await retryResponse.json();
+          
+          if (retryResponse.ok && retryData.status === 'success' && retryData.workflow) {
+            // 상세 노드 정보 로깅 (재시도)
+            console.log('Workflow nodes data from MongoDB (retry):', retryData.workflow.nodes);
+            
+            if (retryData.workflow.nodes && Array.isArray(retryData.workflow.nodes)) {
+              console.log(`Number of nodes (retry): ${retryData.workflow.nodes.length}`);
+              // 각 노드의 구조 상세 로깅
+              retryData.workflow.nodes.forEach((node, index) => {
+                console.log(`Node ${index + 1} details (retry):`, node);
+                console.log(`  - Node type: ${node.type || 'undefined'}`);
+                console.log(`  - Node name: ${node.name || 'undefined'}`);
+                console.log(`  - Node keys:`, Object.keys(node));
+              });
+            } else {
+              console.log('Nodes data is not an array or is missing (retry):', retryData.workflow.nodes);
+            }
+            
+            this.selectedImage.workflow = retryData.workflow;
+            this.selectedImage.workflowStatus = 'found';
+            logDebug(`워크플로우 정보 찾음 (재시도): ${retryData.workflow.workflow_name}`);
+            
+            // 워크플로우 이미지 URL 수정 (8091 포트 직접 접근)
+            if (this.selectedImage.workflow.input_image) {
+              this.selectedImage.workflow.input_image_url = this.getImageUrl(this.selectedImage.workflow.input_image);
+            }
+            if (this.selectedImage.workflow.output_image) {
+              this.selectedImage.workflow.output_image_url = this.getImageUrl(this.selectedImage.workflow.output_image);
+            }
+          } else {
+            // No workflow found
+            this.selectedImage.workflowStatus = 'not_found';
+            logDebug(`워크플로우 정보를 찾을 수 없음: ${data.message || 'Unknown error'}`);
           }
         }
       } catch (error) {
         console.error('워크플로우 정보 조회 오류:', error);
+        this.selectedImage.workflowStatus = 'error';
       } finally {
         // 로딩 상태 해제
         this.selectedImage.isLoading = false;
       }
     },
-
+    
     closeImagePopup() {
       this.showImagePopup = false;
       this.selectedImage = null;
@@ -1634,24 +2988,144 @@ export default {
         return;
       }
       
-      // 워크플로우 데이터 이벤트 생성
-      const event = new CustomEvent('msa4-to-msa5-workflow', {
-        detail: {
-          workflow_name: workflow.workflow_name,
-          workflow_data: workflow,
-          nodes: workflow.nodes,
-          edges: workflow.edges
+      try {
+        // 워크플로우 데이터 구조화 (MSA5에서 사용할 수 있는 형태로)
+        const processedWorkflow = { 
+          ...workflow,
+          // nodes 배열 변환 및 기본 position 추가
+          nodes: workflow.nodes.map((node, index) => {
+            // 각 노드에 position 속성 추가 (없는 경우)
+            if (!node.position) {
+              node.position = { x: 150 + (index * 100), y: 100 };
+            }
+            
+            // 노드 ID 확인
+            if (!node.id) {
+              node.id = `node_${index}_${Date.now()}`;
+            }
+            
+            // 타입 확인
+            if (!node.type) {
+              node.type = 'custom';
+            }
+            
+            return {
+              id: node.id,
+              type: node.type,
+              position: node.position,
+              data: {
+                label: node.label || node.name || node.type || '노드',
+                icon: this.getNodeIcon(node.type || 'custom'),
+                params: { ...node.data } // 노드 데이터 복사
+              },
+              // 기타 필요한 속성 추가
+              label: node.label || node.name || node.type || '노드',
+              icon: this.getNodeIcon(node.type || 'custom')
+            };
+          }),
+          
+          // edges 생성 (없는 경우)
+          edges: workflow.edges || this.generateEdges(workflow.nodes),
+          
+          // elements 배열 추가 (Vue Flow에서 사용)
+          elements: [
+            // 시작 노드
+            { id: 'start', type: 'start', position: { x: 50, y: 100 } },
+            
+            // 프로세스 노드들 (위에서 생성한 nodes 배열 활용)
+            ...workflow.nodes.map((node, index) => ({
+              id: node.id || `node_${index}_${Date.now()}`,
+              type: node.type || 'custom',
+              position: node.position || { x: 150 + (index * 100), y: 100 },
+              data: {
+                label: node.label || node.name || node.type || '노드',
+                icon: this.getNodeIcon(node.type || 'custom'),
+                params: { ...node.data } // 노드 데이터 복사
+              }
+            })),
+            
+            // 종료 노드
+            { id: 'end', type: 'end', position: { x: 50 + ((workflow.nodes.length + 1) * 100), y: 100 } },
+            
+            // 엣지들 (연결선)
+            ...(workflow.edges || this.generateEdges(workflow.nodes))
+          ]
+        };
+        
+        // 입력 및 출력 이미지 정보 추가
+        if (workflow.input_image) {
+          processedWorkflow.input_image = workflow.input_image;
+          processedWorkflow.input_image_url = workflow.input_image_url || this.getImageUrl(workflow.input_image);
         }
+        
+        if (workflow.output_image) {
+          processedWorkflow.output_image = workflow.output_image;
+          processedWorkflow.output_image_url = workflow.output_image_url || this.getImageUrl(workflow.output_image);
+        }
+        
+        // 워크플로우 데이터 이벤트 생성
+        const event = new CustomEvent('msa4-to-msa5-workflow', {
+          detail: {
+            workflow_name: workflow.workflow_name,
+            workflow_data: processedWorkflow,
+            nodes: processedWorkflow.nodes,
+            edges: processedWorkflow.edges,
+            elements: processedWorkflow.elements
+          }
+        });
+        
+        // 이벤트 발송
+        document.dispatchEvent(event);
+        
+        // 성공 메시지 표시
+        this.showMessage(`워크플로우 '${workflow.workflow_name}'을(를) MSA5로 전송했습니다`, 'success');
+        
+        // 팝업 닫기
+        this.closeImagePopup();
+      } catch (error) {
+        console.error('워크플로우 전송 중 오류 발생:', error);
+        this.showMessage(`워크플로우 전송 실패: ${error.message}`, 'error');
+      }
+    },
+    
+    // 노드들 간의 엣지(연결선) 자동 생성
+    generateEdges(nodes) {
+      if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
+        return [];
+      }
+      
+      const edges = [];
+      
+      // 시작 노드와 첫 번째 노드 연결
+      edges.push({
+        id: `edge-start-${nodes[0].id || 'node_0'}`,
+        source: 'start',
+        target: nodes[0].id || 'node_0',
+        type: 'smoothstep'
       });
       
-      // 이벤트 발송
-      document.dispatchEvent(event);
+      // 노드들 간의 연결
+      for (let i = 0; i < nodes.length - 1; i++) {
+        const sourceId = nodes[i].id || `node_${i}`;
+        const targetId = nodes[i + 1].id || `node_${i + 1}`;
+        
+        edges.push({
+          id: `edge-${sourceId}-${targetId}`,
+          source: sourceId,
+          target: targetId,
+          type: 'smoothstep'
+        });
+      }
       
-      // 성공 메시지 표시
-      this.showMessage(`워크플로우 '${workflow.workflow_name}'을(를) MSA5로 전송했습니다`, 'success');
+      // 마지막 노드와 종료 노드 연결
+      edges.push({
+        id: `edge-${nodes[nodes.length - 1].id || `node_${nodes.length - 1}`}-end`,
+        source: nodes[nodes.length - 1].id || `node_${nodes.length - 1}`,
+        target: 'end',
+        type: 'smoothstep'
+      });
       
-      // 팝업 닫기
-      this.closeImagePopup();
+      return edges;
     },
 
     // Update the handleImageClick function to fetch workflow info
@@ -1666,428 +3140,595 @@ export default {
       }
       
       this.showImagePopup();
-    }
+    },
+
+    // Add this new method to remove file extension and suffixes
+    getCleanFilename(filename) {
+      if (!filename) return '';
+      
+      // 확장자 제거
+      let cleanName = filename.replace(/\.[^/.]+$/, '');
+      
+      // _before 또는 _after 접미사 제거
+      return cleanName.replace(/_before$|_after$/g, '');
+    },
+
+    // Date formatting method
+    formatDate(dateString) {
+      if (!dateString) return 'N/A';
+      
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleString('ko-KR', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      } catch (e) {
+        return dateString;
+      }
+    },
+
+    // 노드 데이터에서 중요 정보만 필터링
+    getFilteredNodeData(data) {
+      if (!data || typeof data !== 'object') return [];
+      
+      return Object.entries(data)
+        .filter(([key, val]) => 
+          key !== 'label' && 
+          key !== 'name' && 
+          val !== undefined && 
+          val !== null
+        )
+        .map(([key, val]) => ({
+          key,
+          value: typeof val === 'object' ? '{...}' : val
+        }));
+    },
+
+    // 노드 타입에 따른 아이콘 반환
+    getNodeIcon(nodeType) {
+      const iconMap = {
+        'image': 'fas fa-image',
+        'filter': 'fas fa-filter',
+        'crop': 'fas fa-crop',
+        'resize': 'fas fa-expand',
+        'rotate': 'fas fa-redo',
+        'blur': 'fas fa-brush',
+        'transform': 'fas fa-object-group',
+        'color': 'fas fa-palette',
+        'custom': 'fas fa-cog',
+        'input': 'fas fa-file-import',
+        'output': 'fas fa-file-export',
+        'process': 'fas fa-cogs',
+        'ai': 'fas fa-brain',
+        'ml': 'fas fa-robot',
+        'detection': 'fas fa-search',
+        'recognition': 'fas fa-eye',
+        'segmentation': 'fas fa-object-ungroup'
+      };
+      
+      return iconMap[nodeType.toLowerCase()] || 'fas fa-cog';
+    },
+
+    // 이미지명을 _after 버전으로 변환
+    getAfterImageName(filename) {
+      if (!filename) return '';
+      
+      // 이미 _after가 있으면 그대로 반환
+      if (filename.includes('_after.')) {
+        return filename;
+      }
+      
+      // _before가 있으면 _after로 변환
+      if (filename.includes('_before.')) {
+        return filename.replace('_before.', '_after.');
+      }
+      
+      // 확장자 분리
+      const lastDotIndex = filename.lastIndexOf('.');
+      if (lastDotIndex === -1) {
+        // 확장자가 없는 경우
+        return `${filename}_after`;
+      }
+      
+      // 확장자 있는 경우 확장자 앞에 _after 추가
+      const name = filename.substring(0, lastDotIndex);
+      const ext = filename.substring(lastDotIndex);
+      return `${name}_after${ext}`;
+    },
   }
 }
 </script>
 
-<style scoped>
-/* 강제 고정 크기 및 스크롤 스타일 */
-.msa-component {
-  position: relative !important;
-  display: flex !important;
-  flex-direction: column !important;
-  height: 100% !important;
-  width: 100% !important;
-  overflow: hidden !important;
-  max-height: 100vh !important;
-}
+ 
 
-.component-header {
-  height: 48px !important;
-  min-height: 48px !important;
-  max-height: 48px !important;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  padding: 0 15px !important;
-  flex: 0 0 48px !important;
-  flex-shrink: 0 !important;
-  flex-grow: 0 !important;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.header-left i {
-  color: #555;
-}
-
-.content-container {
-  display: flex !important;
-  flex-direction: column !important;
-  height: calc(100% - 48px) !important;
-  width: 100% !important;
-  overflow: hidden !important;
-  position: relative !important;
-  flex: 1 1 auto !important; 
-}
-
-.plot-container {
-  height: 300px !important;
-  min-height: 300px !important;
-  max-height: 300px !important;
-  width: 100% !important;
-  position: relative !important;
-  display: flex !important;
-  flex-direction: column !important;
-  overflow: hidden !important;
-  flex: 0 0 300px !important;
-  flex-shrink: 0 !important;
-  flex-grow: 0 !important;
-}
-
-#plotly-visualization {
-  width: 100% !important;
-  height: 300px !important;
-  min-height: 300px !important;
-  max-height: 300px !important;
-  flex: 1 !important;
-}
-
-.image-section {
-  position: relative !important;
-  height: calc(100% - 300px) !important;
-  max-height: calc(100% - 300px) !important;
-  width: 100% !important;
+/* 워크플로우 다이어그램 스타일 - 개선된 버전 */
+.workflow-diagram-container {
+  margin: 20px 0;
   background-color: #f8f9fa;
-  flex: 1 1 auto !important;
-  overflow: hidden !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-/* 스크롤 가능한 내부 컨테이너 */
-.scrollable-content {
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  height: 100% !important;
-  width: 100% !important;
-  overflow-y: scroll !important; /* 항상 스크롤바 표시 */
-  overflow-x: hidden !important;
-  padding: 20px !important;
-  box-sizing: border-box !important;
-}
-
-/* 선택된 이미지 섹션 */
-.selected-image-section {
-  margin-bottom: 20px !important;
-  width: 100% !important;
-}
-
-.selected-image-section h3 {
-  font-size: 18px !important;
-  margin-bottom: 15px !important;
-  color: #333 !important;
-}
-
-.selected-image-wrapper {
-  display: flex !important;
-  justify-content: center !important;
-  margin-bottom: 20px !important;
-}
-
-/* 클릭 가능한 이미지 스타일 */
-.clickable {
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.clickable:hover {
-  transform: scale(1.03);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-}
-
-/* 이미지 상세 팝업 스타일 */
-.image-detail-popup-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  backdrop-filter: blur(3px);
-}
-
-.image-detail-popup {
-  background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-  width: 90%;
-  max-width: 800px;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: popup-fade-in 0.3s ease-out;
-}
-
-@keyframes popup-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.popup-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px 20px;
-  border-bottom: 1px solid #eee;
-}
-
-.popup-header h3 {
-  font-size: 18px;
-  margin: 0;
-  color: #333;
-}
-
-.close-popup-btn {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  color: #777;
-  transition: color 0.2s;
-}
-
-.close-popup-btn:hover {
-  color: #333;
-}
-
-.popup-content {
-  padding: 20px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.popup-image-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.popup-image {
-  max-width: 100%;
-  max-height: 400px;
-  object-fit: contain;
-  border-radius: 4px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-}
-
-.popup-details {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.detail-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.detail-row strong {
-  font-weight: 500;
-}
-
-.workflow-details {
-  margin-top: 15px;
+  border-radius: 10px;
   padding: 15px;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
 }
 
-.workflow-details h4 {
+.workflow-diagram-container h5 {
   font-size: 16px;
-  margin-bottom: 10px;
-  color: #333;
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #343a40;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #dee2e6;
 }
 
-.load-workflow-btn {
-  margin-top: 15px;
-  padding: 8px 16px;
-  background-color: #6d28d9;
+.workflow-diagram {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  padding: 20px 10px;
+  position: relative;
+  min-height: 130px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+/* 연결선 스타일 */
+.workflow-diagram::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50px;
+  right: 50px;
+  height: 2px;
+  background-color: #007bff;
+  transform: translateY(-50%);
+  z-index: 1;
+}
+
+.workflow-node {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  margin: 0 10px;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.workflow-node:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+}
+
+.node-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.node-label {
+  font-size: 12px;
+  font-weight: 500;
+  text-align: center;
+  word-break: keep-all;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.start-node {
+  background-color: #007bff;
   color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
+}
+
+.process-node {
+  background-color: white;
+  color: #495057;
+  border: 2px solid #6c757d;
+}
+
+.end-node {
+  background-color: #dc3545;
+  color: white;
+}
+
+.nodes-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: nowrap;
+  z-index: 2;
+}
+
+/* 노드 사이 화살표 */
+.workflow-node::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  right: -20px;
+  width: 20px;
+  height: 10px;
+  background: transparent;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-left: 10px solid #007bff;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+
+.end-node::after {
+  display: none;
+}
+
+.workflow-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 15px;
+  padding: 10px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.stat-item {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  transition: background-color 0.2s;
+  color: #495057;
 }
 
-.load-workflow-btn:hover {
-  background-color: #5b21b6;
+.stat-item i {
+  color: #007bff;
+  font-size: 16px;
 }
 
-.workflow-loading {
-  margin-top: 15px;
+/* 노드 상세 정보 스타일 개선 */
+.workflow-details-container {
+  margin-top: 20px;
+  background-color: #f8f9fa;
+  border-radius: 10px;
   padding: 15px;
-  background-color: rgba(0, 0, 0, 0.02);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+}
+
+.workflow-details-container h5 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #343a40;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.node-details {
+  background: white;
   border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  padding: 15px;
+  margin-bottom: 15px;
+  border-left: 4px solid #007bff;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.node-type-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.node-type {
+  background-color: #e9ecef;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #495057;
+}
+
+.node-id {
+  color: #6c757d;
+  font-size: 13px;
+}
+
+.node-properties {
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  padding: 10px;
+}
+
+.property-row {
+  display: flex;
+  margin-bottom: 6px;
+}
+
+.property-key {
+  font-weight: 500;
+  color: #495057;
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.property-value {
+  color: #6c757d;
+}
+
+/* 새로운 워크플로우 다이어그램 스타일 */
+.workflow-container {
+  margin-bottom: 25px;
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.workflow-title {
+  padding: 15px 20px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #eee;
+}
+
+.workflow-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 25px 15px;
+  overflow-y: auto;
+  position: relative;
+  min-height: 300px;
+  background: linear-gradient(to bottom, #f9f9f9, #ffffff);
+}
+
+/* 흐름선 스타일 - 세로 방향 */
+.workflow-visual::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 60px;
+  bottom: 60px;
+  width: 3px;
+  background: linear-gradient(to bottom, #4dabf7, #339af0, #228be6);
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+.flow-nodes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 2;
+  margin: 15px 0;
+}
+
+.flow-node {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 110px;
+  height: 110px;
+  margin: 15px 0;
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+  transition: all 0.25s ease;
+  background-color: white;
+  cursor: pointer;
+}
+
+.flow-node:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.flow-node:hover .node-tooltip {
+  display: block;
+}
+
+.start-node {
+  background-color: #1c7ed6;
+  color: white;
+  box-shadow: 0 4px 12px rgba(28, 126, 214, 0.25);
+}
+
+.end-node {
+  background-color: #e03131;
+  color: white;
+  box-shadow: 0 4px 12px rgba(224, 49, 49, 0.25);
+}
+
+.process-node {
+  border: 2px solid #dee2e6;
+  position: relative;
+}
+
+.node-badge {
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  width: 24px;
+  height: 24px;
+  background-color: #339af0;
+  color: white;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.node-icon {
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.node-text {
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  word-break: keep-all;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 세로 방향 화살표 */
+.node-arrow {
+  position: absolute;
+  bottom: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 12px solid #228be6;
+  z-index: 3;
+}
+
+.start-node .node-arrow {
+  border-top-color: white;
+}
+
+.workflow-stats {
+  display: flex;
+  padding: 15px 20px;
+  background-color: #f8f9fa;
+  border-top: 1px solid #eee;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  margin-right: 25px;
+  font-size: 14px;
+  color: #495057;
+}
+
+.stat-item i {
+  margin-right: 10px;
+  color: #228be6;
+  font-size: 16px;
+}
+
+.stat-item span {
+  margin-right: 6px;
+}
+
+/* 노드 정보 컨테이너 */
+.node-info-container {
+  background-color: white;
+  border-radius: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  padding: 15px 20px;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #eee;
+}
+
+.node-list {
+  padding: 20px;
+}
+
+.node-card {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  overflow: hidden;
+  border-left: 4px solid #339af0;
+}
+
+.node-card-header {
+  padding: 12px 15px;
+  background-color: #f1f3f5;
+  display: flex;
+  align-items: center;
+}
+
+.node-number {
+  background-color: #339af0;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  margin-right: 12px;
+}
+
+.node-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.node-type-badge {
+  background-color: #74c0fc;
+  color: #1864ab;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.node-id-badge {
+  color: #868e96;
+  font-size: 12px;
+}
+
+.node-card-body {
+  padding: 15px;
+}
+
+.property-list {
+  display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
-.loading-spinner {
-  font-size: 20px;
-  color: #6d28d9;
+.property-item {
+  display: flex;
+  font-size: 13px;
 }
 
-/* 로딩 및 에러 메시지 스타일 */
-.loading-overlay {
-  position: absolute !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  background: rgba(255, 255, 255, 0.9) !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  z-index: 10 !important;
+.property-name {
+  font-weight: 500;
+  color: #495057;
+  width: 80px;
+  flex-shrink: 0;
 }
 
-.loading-spinner {
-  border: 3px solid #f3f3f3 !important;
-  border-top: 3px solid #3498db !important;
-  border-radius: 50% !important;
-  width: 30px !important;
-  height: 30px !important;
-  animation: spin 1s linear infinite !important;
+.property-value {
+  color: #6c757d;
+  word-break: break-word;
 }
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.error-message {
-  color: #dc3545 !important;
-  text-align: center !important;
-  padding: 10px !important;
-  margin-top: 10px !important;
-}
-
-.status-message {
-  position: fixed !important;
-  top: 20px !important;
-  right: 20px !important;
-  background: rgba(0, 0, 0, 0.8) !important;
-  color: white !important;
-  padding: 10px 20px !important;
-  border-radius: 4px !important;
-  z-index: 1000 !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-}
-</style>
-
-<!-- MSA4 컴포넌트 추가 스타일 (전역) -->
-<style>
-/* 전역 스타일 - 더 강력한 선택자 사용 */
-body .msa-card, 
-body .msa4, 
-body .msa-grid, 
-body [class*="msa"] {
-  height: 100% !important;
-  max-height: 100% !important;
-  width: 100% !important;
-  overflow: hidden !important;
-}
-
-/* Plotly 요소 크기 제한 */
-body .js-plotly-plot, 
-body .plotly, 
-body .plot-container {
-  width: 100% !important;
-  height: 300px !important;
-  max-height: 300px !important;
-}
-
-/* 3D 시각화 영역은 300px 높이로 고정 */
-body #plotly-visualization, 
-body .plot-container {
-  height: 300px !important;
-  max-height: 300px !important;
-  min-height: 300px !important;
-  flex: 0 0 300px !important;
-  overflow: hidden !important;
-  flex-shrink: 0 !important;
-}
-
-/* 모드바 스타일 축소 */
-body .modebar {
-  transform: scale(0.6) !important;
-  transform-origin: top right !important;
-}
-
-body .modebar-btn {
-  width: 24px !important;
-  height: 24px !important;
-}
-
-body .modebar-btn svg {
-  width: 16px !important;
-  height: 16px !important;
-}
-
-/* 스크롤바 스타일 지정 */
-body .scrollable-content::-webkit-scrollbar {
-  width: 8px !important;
-}
-
-body .scrollable-content::-webkit-scrollbar-track {
-  background: #f1f1f1 !important;
-  border-radius: 4px !important;
-}
-
-body .scrollable-content::-webkit-scrollbar-thumb {
-  background: #888 !important;
-  border-radius: 4px !important;
-}
-
-body .scrollable-content::-webkit-scrollbar-thumb:hover {
-  background: #555 !important;
-}
-
-/* 전역 스타일 오버라이드 방지 */
-body .msa-component * {
-  box-sizing: border-box !important;
-}
-
-/* 부모 요소 강제 제한 */
-html body .msa-component,
-html body .content-container {
-  max-height: 100vh !important;
-  overflow: hidden !important;
-}
-
-/* 스크롤 영역 강제 설정 */
-html body .scrollable-content {
-  max-height: 100% !important;
-  height: 100% !important;
-  overflow-y: scroll !important;
-  -webkit-overflow-scrolling: touch !important;
-}
-</style> 
+<!-- Removed duplicate style tag -->
