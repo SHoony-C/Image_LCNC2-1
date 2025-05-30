@@ -30,7 +30,7 @@
 
     <!-- 이미지 측정 팝업 -->
     <MSA6ImagePopup
-      v-if="showMeasurementPopup"
+      v-show="showMeasurementPopup && finalImage"
       :imageUrl="finalImage"
       :showPopup="showMeasurementPopup"
       @close="closeMeasurementPopup"
@@ -55,7 +55,30 @@ export default {
     }
   },
   mounted() {
+    // MSA5 이미지 처리 이벤트 리스너 등록
     window.addEventListener('msa5-image-processed', this.handleMSA5ImageProcessed)
+    
+    // 측정 팝업 컴포넌트가 항상 존재하지만 처음에는 보이지 않게 설정
+    this.showMeasurementPopup = false
+    
+    // MSA5 이미지 처리 완료 여부 확인 (초기화)
+    const isWorkflowCompleted = localStorage.getItem('msa5_workflow_completed') === 'true';
+    console.log('MSA6: 워크플로우 처리 완료 여부:', isWorkflowCompleted);
+    
+    // 워크플로우가 완료된 경우에만 이미지 표시
+    if (isWorkflowCompleted && localStorage.getItem('msa6_final_image')) {
+      console.log('MSA6: 기존에 처리된 이미지 로드');
+      this.finalImage = localStorage.getItem('msa6_final_image')
+      this.showResult = true
+    } else {
+      // 워크플로우가 완료되지 않았으면 이미지 초기화
+      console.log('MSA6: 워크플로우가 완료되지 않아 이미지 표시하지 않음');
+      this.finalImage = null;
+      this.showResult = false;
+      // 저장된 이미지도 제거
+      localStorage.removeItem('msa6_final_image');
+      localStorage.removeItem('msa5_workflow_completed');
+    }
   },
   beforeUnmount() {
     window.removeEventListener('msa5-image-processed', this.handleMSA5ImageProcessed)
@@ -65,6 +88,9 @@ export default {
       if (event.detail && event.detail.imageUrl) {
         this.finalImage = event.detail.imageUrl
         this.showResult = true
+        
+        // 이미지 URL을 localStorage에 저장하여 페이지 새로고침 시에도 유지
+        localStorage.setItem('msa6_final_image', event.detail.imageUrl)
       }
     },
     toggleMaximize() {
@@ -72,10 +98,12 @@ export default {
     },
     openMeasurementPopup() {
       if (this.finalImage) {
+        console.log('Opening measurement popup with image:', this.finalImage)
         this.showMeasurementPopup = true
       }
     },
     closeMeasurementPopup() {
+      console.log('Closing measurement popup, data will be preserved')
       this.showMeasurementPopup = false
     }
   }

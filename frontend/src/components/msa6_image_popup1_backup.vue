@@ -1,71 +1,18 @@
 <template>
-  <div class="msa6-image-popup-container">
   <Teleport to="body">
-      <div class="image-measurement-popup" v-show="showPopup" @click.self="closePopup">
+    <div class="image-measurement-popup" v-if="showPopup" @click.self="closePopup">
       <div class="measurement-container" @click.stop>
         <div class="measurement-header">
           <div class="header-left">
-              <h3 class="header-title">이미지 측정 도구</h3>
+            <h3>이미지 측정 도구</h3>
           </div>
           
           <div class="header-right">
             <div class="measurement-options">
-                <!-- 배율/스케일바 선택 옵션 추가 -->
-                <div class="option-group scale-option-group">
-                  <span class="option-group-label">측정 방식</span>
-                  <div class="scale-method-selector">
-                    <button 
-                      class="option-btn scale-btn" 
-                      :class="{ active: scaleMethod === 'magnification' }" 
-                      @click="scaleMethod = 'magnification'"
-                      title="배율 기반 측정">
-                      <i class="fas fa-search-plus"></i>
-                      <span class="btn-text">배율</span>
-                    </button>
-                    <button 
-                      class="option-btn scale-btn" 
-                      :class="{ active: scaleMethod === 'scaleBar' }" 
-                      @click="scaleMethod = 'scaleBar'"
-                      title="스케일바 기반 측정">
-                      <i class="fas fa-ruler"></i>
-                      <span class="btn-text">스케일바</span>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- 스케일바 모드인 경우 수동 스케일바 그리기 버튼 추가 -->
-                <div class="option-group" v-if="scaleMethod === 'scaleBar'">
-                  <span class="option-group-label">스케일바 설정</span>
-                  <button 
-                    class="option-btn" 
-                    :class="{ active: isDrawingScaleBar }" 
-                    @click="toggleScaleBarDrawing"
-                    title="수동 스케일바 그리기">
-                    <i class="fas fa-pencil-ruler"></i>
-                  </button>
-                  <button 
-                    class="option-btn" 
-                    @click="detectScaleBar"
-                    title="자동 스케일바 감지">
-                    <i class="fas fa-magic"></i>
-                  </button>
-                </div>
-
-                <!-- 배율 설정 필드 - 스케일바 모드가 아닐 때만 표시 -->
-                <div class="option-group" v-if="scaleMethod !== 'scaleBar'">
+              <div class="option-group">
                 <span class="option-group-label">배율</span>
                 <input type="number" v-model="magnification" min="0.1" step="0.1" class="header-input no-spinners" title="측정 배율 설정" />
               </div>
-                
-                <!-- 스케일바 값 입력 필드 추가 -->
-                <div class="option-group" v-if="scaleMethod === 'scaleBar'">
-                  <span class="option-group-label">스케일바 길이</span>
-                  <input type="number" v-model="scaleBarValue" min="0.1" step="0.1" class="header-input no-spinners" title="스케일바 길이" />
-                  <select v-model="scaleBarUnit" class="unit-selector">
-                    <option value="nm">nm</option>
-                    <option value="μm">μm</option>
-                  </select>
-                </div>
 
               <div class="option-group">
                 <span class="option-group-label">기준선</span>
@@ -127,7 +74,7 @@
             </div>
             
             <button class="reset-btn" @click="resetMeasurements" title="모든 측정 결과 초기화">
-                <i class="fas fa-trash-alt"></i> <span class="btn-text">초기화</span>
+              <i class="fas fa-trash-alt"></i> 초기화
             </button>
             <button class="close-btn" @click="closePopup">
               <i class="fas fa-times"></i>
@@ -255,24 +202,16 @@
                   </table>
                 </div>
                 <div class="results-bottom-bar">
-                  <div class="results-summary" v-if="measurementMode !== 'defect'">
-                    전체 {{ filteredMeasurements.length }}개 / {{ selectedRows.length }}개 선택됨
+                  <div class="results-summary">
+                    <span>총 측정: {{ measurementMode === 'defect' ? defectMeasurements.length : filteredMeasurements.length }}</span>
                   </div>
-                  <div class="results-summary" v-else>
-                    전체 {{ defectMeasurements.length }}개 / {{ selectedDefects.length }}개 선택됨
-                  </div>
-
-                  <!-- 이미지 전/후 전환 버튼 추가 -->
-                  <div class="image-toggle-controls">
-                    <button class="image-toggle-btn" @click="toggleImage" :title="isAfterImage ? '이전 이미지 보기' : '이후 이미지 보기'">
-                      <i class="fas" :class="isAfterImage ? 'fa-arrow-left' : 'fa-arrow-right'"></i>
-                      <span>{{ isAfterImage ? '이전' : '이후' }} 이미지</span>
-                    </button>
-                  </div>
-                  
-                  <button class="save-measurements-btn" @click="saveMeasurementsToLCNC" :disabled="isSaving || (measurementMode === 'defect' ? defectMeasurements.length === 0 : filteredMeasurements.length === 0)">
-                    <i class="fas" :class="isSaving ? 'fa-spinner fa-spin' : 'fa-save'"></i>
-                    <span>{{ isSaving ? '저장 중...' : '측정 결과 저장' }}</span>
+                  <button 
+                    class="save-measurements-btn" 
+                    @click="showTableSelector"
+                    :disabled="isSaving || (measurementMode === 'defect' ? defectMeasurements.length === 0 : filteredMeasurements.length === 0)"
+                  >
+                    <i class="fas fa-save"></i>
+                    {{ isSaving ? '저장 중...' : '측정 결과 저장' }}
                   </button>
                 </div>
               </div>
@@ -307,39 +246,15 @@
           :class="['notification', notification.type]">
         {{ notification.message }}
       </div>
-      </div>
-    </Teleport>
-    
-    <Teleport to="body">
-      <div class="scale-choice-popup super-overlay" v-if="showScaleChoicePopup">
-        <div class="scale-choice-content">
-          <h3>스케일바 감지 알림</h3>
-          <p>스케일바 자동감지에 실패했습니다. </p>
-          <p>측정 방식을 선택해주세요</p>
-          <div class="scale-choice-buttons">
-            <button class="choice-btn magnification-btn" @click="selectScaleMethod('magnification')">
-              <i class="fas fa-search-plus"></i>
-              <span>배율 기반 측정</span>
-              <small>배율 값을 기준으로 측정합니다</small>
-            </button>
-            <button class="choice-btn scalebar-btn" @click="selectScaleMethod('scaleBar')">
-              <i class="fas fa-pencil-ruler"></i>
-              <span>수동 스케일바 설정</span>
-              <small>이미지의 스케일바를 직접 지정합니다</small>
-            </button>
-          </div>
-        </div>
+      
+      <!-- 하단 '데이터베이스에 저장' 버튼 제거 -->
     </div>
   </Teleport>
-  </div>
 </template>
 
 <script>
 import LogService from '../utils/logService'
 import TableNameSelector from './TableNameSelector.vue';
-import PopupDebug from '../utils/popupDebug';
-// 개별 함수를 직접 가져오기
-import { patchDetectScaleBar, showScaleDetectionFailurePopup } from '../utils/popupOverride';
 
 export default {
   name: 'MSA6ImagePopup',
@@ -374,12 +289,6 @@ export default {
       isSettingReference: false,
       scale: 1,
       magnification: 500,
-      // 스케일바 관련 데이터 추가
-      scaleMethod: 'magnification', // 'magnification' 또는 'scaleBar'
-      scaleBarDetected: false,
-      scaleBarValue: 500, // 기본값 500
-      scaleBarUnit: 'nm', // 'nm' 또는 'μm'
-      scaleBarMeasurement: null, // 스케일바 측정 결과
       imageData: null,
       imageRatio: 1,
       prevWidth: 1,
@@ -427,75 +336,17 @@ export default {
         message: '',
         type: 'info',
         timeout: null
-      },
-      // 수동 스케일바 그리기 관련 변수 추가
-      isDrawingScaleBar: false,
-      manualScaleBar: null,
-      $_isInitialLoad: true,
-      // 스케일바 감지 실패 시 선택 팝업 관련 변수 추가
-      showScaleChoicePopup: false,
-      // 첫 번째 감지 시도 플래그 추가
-      isFirstDetectionAttempt: true,
-      // 최초 로드 완료 플래그 추가
-      initialLoadDone: false,
-      isAfterImage: true, // 기본적으로 처리 후 이미지 표시
-      beforeImageUrl: null, // 처리 전 이미지 URL
-      afterImageUrl: null,  // 처리 후 이미지 URL (현재 imageUrl)
-      currentRenderingImage: null, // 현재 렌더링 중인 이미지 (캔버스용)
-      
-      // 측정 유지를 위한 측정값 백업
-      measurementsBackup: null,
-      isImageChanging: false,
+      }
     };
   },
   mounted() {
-    console.log('[mounted] 컴포넌트 마운트됨');
-    
-    // 이벤트 리스너 등록
+    this.loadImage();
     window.addEventListener('resize', this.onWindowResize);
     window.addEventListener('keydown', this.handleKeyDown);
-    
-    
-    // 최초 로드 시에만 초기화 플래그 설정
-    if (!this.initialLoadDone) {
-      this.$_isInitialLoad = true;
-      this.isFirstDetectionAttempt = true;
-      console.log('[mounted] 최초 로드, 초기화 플래그 설정');
-    } else {
-      console.log('[mounted] 재마운트, 측정 데이터 유지');
-    }
     
     // 디버깅용 전역 변수 설정
     window.imageMeasurement = this;
     console.log('Component mounted. Use window.imageMeasurement to access component in console');
-    
-    // 플래그 초기값 로깅
-    console.log('[mounted] 초기 상태 - showScaleChoicePopup:', this.showScaleChoicePopup);
-    console.log('[mounted] 초기 상태 - isFirstDetectionAttempt:', this.isFirstDetectionAttempt);
-    console.log('[mounted] 초기 상태 - scaleMethod:', this.scaleMethod);
-    
-    // 디버깅 유틸리티 설정
-    window.popupDebug = PopupDebug;
-    console.log('팝업 디버깅 유틸리티가 콘솔에 window.popupDebug로 노출되었습니다.');
-    
-    // 팝업 오버라이드 함수 전역으로 노출
-    window.showScalePopup = () => showScaleDetectionFailurePopup(this);
-    
-    // detectScaleBar 함수 패치
-    setTimeout(() => {
-      console.log('[mounted] 팝업 오버라이드 시스템 적용 시도');
-      const patchResult = patchDetectScaleBar(this);
-      console.log('[mounted] 패치 결과:', patchResult);
-      
-      // 스케일바 자동 감지 시도 (이미 이미지가 로드된 경우)
-      if (this.image && this.imageData && this.scaleMethod === 'scaleBar' && !this.initialLoadDone) {
-        console.log('[mounted] 이미지 로드됨, 스케일바 감지 시도');
-        this.detectScaleBar();
-      }
-    }, 500);
-    
-    // MSA5에서 처리된 시작/종료 이미지 로드
-    this.loadMSA5Images();
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.onWindowResize);
@@ -513,9 +364,9 @@ export default {
       
       console.log(`[filteredMeasurements] 측정값 카테고리: 밝은 영역=${brightCount}, 어두운 영역=${darkCount}, 전체 선=${totalCount}`);
       
-      // 원래 필터링 로직에 isTotal이 아닌 항목만 포함하도록 수정
+      // 원래 필터링 로직
       const filtered = this.segmentedMeasurements.filter(segment => 
-        (this.isReversed ? !segment.isBright : segment.isBright) && !segment.isTotal
+        this.isReversed ? !segment.isBright : segment.isBright
       );
       
       console.log(`[filteredMeasurements] 필터링된 측정값: ${filtered.length}개`);
@@ -543,17 +394,8 @@ export default {
       immediate: true,
       handler(newUrl) {
         if (newUrl) {
-          console.log('[watch:imageUrl] 이미지 URL 변경:', newUrl);
           this.$nextTick(() => {
             this.loadImage();
-            
-            // 이미지 로드 후 스케일바 감지 시도 (지연 적용)
-            if (this.scaleMethod === 'scaleBar') {
-              setTimeout(() => {
-                console.log('[watch:imageUrl] 이미지 URL 변경 후 스케일바 감지 시도');
-                this.detectScaleBar();
-              }, 1000);
-            }
           });
         }
       }
@@ -563,100 +405,42 @@ export default {
         // 배율 변경 시 모든 측정값 업데이트
         this.updateAllMeasurements();
       }
-    },
-    showPopup: {
-      handler(newVal) {
-        console.log('[watch:showPopup] MSA6 팝업 상태 변경:', newVal);
-        
-        // 컴포넌트가 비활성화될 때 스케일바 선택 팝업도 함께 닫기
-        if (newVal === false && this.showScaleChoicePopup) {
-          console.log('[watch:showPopup] MSA6 팝업이 닫힘, 스케일바 선택 팝업도 닫기');
-          this.showScaleChoicePopup = false;
-          this.forceClosePopup();
-        }
-        
-        // 기존 기능 호출
-        this.watchShowPopup(newVal);
-      },
-      immediate: true
-    },
-    // 스케일바 감지 상태 감시
-    scaleBarDetected: {
-      handler(detected) {
-        console.log('[watch:scaleBarDetected] 스케일바 감지 상태 변경:', detected);
-        // 감지 실패 시 팝업 표시 (조건 제거)
-        if (!detected && this.scaleMethod === 'scaleBar') {
-          console.log('[watch:scaleBarDetected] 감지 실패, 선택 팝업 표시');
-          this.showScaleChoicePopup = true;
-          this.showNotification('스케일바 자동 감지에 실패했습니다. 측정 방식을 선택해주세요.', 'warning');
-        }
-      }
-    },
-    isAfterImage: {
-      handler(newVal) {
-        console.log('[watch:isAfterImage] 이미지 전환 상태 변경:', newVal);
-      }
     }
   },
   methods: {
     async loadImage() {
-      console.log('[loadImage] 이미지 로드 시작:', this.imageUrl);
+      this.image = new Image();
+      this.image.crossOrigin = 'anonymous';
+      this.image.src = this.imageUrl;
       
-      if (!this.imageUrl) {
-        console.error('[loadImage] 이미지 URL이 없습니다.');
-        return;
-      }
+      await new Promise((resolve) => {
+        this.image.onload = () => {
+          this.updateCanvasSize();
+          resolve();
+        };
+      });
       
-      // 이미지 로드 전에 현재 이미지 URL 저장
-      this.currentRenderingImage = this.imageUrl;
-      
-      // 이미지 로드 (handleImageLoad에서 이미지 처리 및 측정값 복원)
-      const img = this.$refs.sourceImage;
-      if (img) {
-        img.src = this.imageUrl;
-        // 이미지 로드 완료 이벤트는 handleImageLoad에서 처리
-      }
+      // 로그 저장 - 측정 팝업 열기
+      LogService.logAction('open_measurement_popup', {
+        imageLoaded: true
+      })
     },
     async handleImageLoad() {
-      console.log('[handleImageLoad] 이미지 로드 완료, 이미지 변경 중:', this.isImageChanging);
-      
-      const canvas = this.$refs.canvas;
       const img = this.$refs.sourceImage;
-      const container = this.$refs.container;
       
-      if (!canvas || !img || !container) {
-        console.error('[handleImageLoad] Canvas, Image 또는 Container 요소를 찾을 수 없습니다.');
-        return;
-      }
+      // 원본 이미지 비율 저장
+      this.imageRatio = img.naturalWidth / img.naturalHeight;
       
-      // 이미지 크기에 맞게 캔버스 조정
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
+      // 이미지 데이터 추출을 위한 임시 캔버스
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = img.naturalWidth;
+      tempCanvas.height = img.naturalHeight;
+      const tempCtx = tempCanvas.getContext('2d');
       
-      // 컨테이너 크기에 맞게 캔버스 크기 조정 (비율 유지)
+      tempCtx.drawImage(img, 0, 0);
+      this.imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+      
       this.updateCanvasSize();
-      
-      // 이미지 데이터 추출
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      this.imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      
-      // 이미지 변경 중인 경우 측정값 복원
-      if (this.isImageChanging && this.measurementsBackup) {
-        console.log('[handleImageLoad] 이미지 변경 후 측정값 복원, 측정값 개수:', this.measurementsBackup.length);
-        this.measurements = this.measurementsBackup;
-        this.measurementsBackup = null;
-        this.isImageChanging = false;
-      }
-      
-      // 스케일바 자동 감지 (설정된 경우)
-      if (this.scaleMethod === 'scaleBar' && !this.isDrawingScaleBar) {
-        this.detectScaleBar();
-      }
-      
-      // 이미지 로드 완료 후 측정값 렌더링
-      this.render();
-      this.initialLoadDone = true;
     },
     updateCanvasSize() {
       const img = this.$refs.sourceImage;
@@ -723,45 +507,22 @@ export default {
       const endX = (end.x / canvas.width) * img.naturalWidth;
       const endY = (end.y / canvas.height) * img.naturalHeight;
       
-      // 원본 이미지 좌표에서의 거리 계산
+      // 원본 이미지 좌표에서의 거리 계산 및 배율 적용
       const dx = endX - startX;
       const dy = endY - startY;
       
-      // 피타고라스 정리로 거리 계산
+      // 피타고라스 정리로 거리 계산 후 배율 적용
       const distance = Math.sqrt(dx * dx + dy * dy);
+      const value = distance * this.magnification;
       
-      let value;
-      
-      if (this.scaleMethod === 'scaleBar' && this.scaleBarDetected && this.scaleBarMeasurement) {
-        // 스케일바 기반 측정
-        const scaleBarPixelLength = this.scaleBarMeasurement.pixelLength;
-        let scaleBarRealLength = this.scaleBarValue;
-        
-        // 단위 변환 (μm -> nm)
-        if (this.scaleBarUnit === 'μm') {
-          scaleBarRealLength *= 1000; // 1μm = 1000nm
-        }
-        
-        // 픽셀 거리에 스케일 적용
-        value = (distance / scaleBarPixelLength) * scaleBarRealLength;
-        
-        console.log(`[calculateValue] 스케일바 기반 계산: 
-          거리=${distance.toFixed(4)} 픽셀,
-          스케일바=${scaleBarPixelLength.toFixed(2)} 픽셀 = ${this.scaleBarValue} ${this.scaleBarUnit},
-          비율=${(scaleBarRealLength / scaleBarPixelLength).toFixed(4)} ${this.scaleBarUnit === 'μm' ? 'nm' : this.scaleBarUnit}/픽셀,
-          최종값=${value.toFixed(2)} nm`);
-      } else {
-        // 배율 기반 측정 (기존 코드)
-        value = distance * this.magnification;
-        
-        console.log(`[calculateValue] 배율 기반 계산: 
+      // 디버깅 강화 - 계산 과정과 결과 표시
+      console.log(`[calculateValue] 거리 계산: 
         시작점=(${startX.toFixed(2)}, ${startY.toFixed(2)}), 
         끝점=(${endX.toFixed(2)}, ${endY.toFixed(2)}), 
         dx=${dx.toFixed(2)}, dy=${dy.toFixed(2)}, 
         거리=${distance.toFixed(4)},
         배율=${this.magnification}, 
         최종값=${value.toFixed(2)}`);
-      }
       
       // 결과값을 그대로 반환 (반올림하지 않음)
       return value;
@@ -771,24 +532,6 @@ export default {
         const pos = this.getLocalPos(e);
         this.areaSelectionStart = pos;
         this.areaSelectionEnd = pos;
-        this.isMeasuring = true;
-        this.render();
-        return;
-      }
-
-      // 수동 스케일바 그리기 모드인 경우
-      if (this.isDrawingScaleBar) {
-        e.preventDefault();
-        e.stopPropagation();
-        const pos = this.getLocalPos(e);
-        
-        // 스케일바 측정 시작
-        this.currentMeasurement = {
-          start: {...pos},
-          end: {...pos},
-          isScaleBar: true
-        };
-        
         this.isMeasuring = true;
         this.render();
         return;
@@ -848,14 +591,6 @@ export default {
         return;
       }
 
-      // 수동 스케일바 그리기 모드인 경우
-      if (this.isDrawingScaleBar && this.currentMeasurement) {
-        const pos = this.getLocalPos(e);
-        this.currentMeasurement.end = {...pos};
-        this.render();
-        return;
-      }
-
       // 기존 측정 업데이트 로직
       const pos = this.getLocalPos(e);
 
@@ -902,52 +637,6 @@ export default {
             console.log('Selected area rect set:', this.selectedAreaRect);
           }
         }
-        this.render();
-        return;
-      }
-
-      // 수동 스케일바 그리기 모드인 경우
-      if (this.isDrawingScaleBar && this.currentMeasurement) {
-        const distance = Math.sqrt(
-          Math.pow(this.currentMeasurement.end.x - this.currentMeasurement.start.x, 2) +
-          Math.pow(this.currentMeasurement.end.y - this.currentMeasurement.start.y, 2)
-        );
-        
-        // 최소 길이 체크
-        if (distance > 10) {
-          // 그린 선을 스케일바로 설정
-          this.manualScaleBar = { ...this.currentMeasurement };
-          
-          // 캔버스 좌표를 이미지 좌표로 변환
-          const img = this.$refs.sourceImage;
-          const canvas = this.$refs.canvas;
-          
-          const startX = (this.manualScaleBar.start.x / canvas.width) * img.naturalWidth;
-          const startY = (this.manualScaleBar.start.y / canvas.height) * img.naturalHeight;
-          const endX = (this.manualScaleBar.end.x / canvas.width) * img.naturalWidth;
-          const endY = (this.manualScaleBar.end.y / canvas.height) * img.naturalHeight;
-          
-          // 스케일바 픽셀 길이 계산
-          const pixelLength = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
-          
-          // 스케일바 측정값 저장
-          this.scaleBarMeasurement = {
-            start: this.manualScaleBar.start,
-            end: this.manualScaleBar.end,
-            pixelLength: pixelLength,
-            unit: this.scaleBarUnit
-          };
-          
-          // 스케일바 감지 상태 업데이트
-          this.scaleBarDetected = true;
-          
-          // 스케일바 값 입력 다이얼로그 표시
-          this.showScaleBarValueDialog();
-          
-          console.log(`[endMeasurement] 수동 스케일바 설정 완료, 픽셀 길이: ${pixelLength}`);
-        }
-        
-        this.currentMeasurement = null;
         this.render();
         return;
       }
@@ -1342,7 +1031,29 @@ export default {
       const totalValue = this.calculateValue(measurement.start, measurement.end);
       console.log(`[createBoundedSegments] 전체 선 측정값: ${totalValue}`);
       
-      // 전체 선 길이 측정값 저장 코드 제거 (total 값 생성 안함)
+      // 전체 선 길이 측정값 저장
+      const totalMeasurement = {
+        start: { ...measurement.start },
+        end: { ...measurement.end },
+        brightness: this.calculateAverageBrightness(measurement.start, measurement.end),
+        isBright: this.calculateAverageBrightness(measurement.start, measurement.end) > this.brightnessThreshold,
+        itemId: measurement.itemId,
+        subItemId: `${measurement.itemId}-total`,
+        value: totalValue,
+        isTotal: true // 전체 선 표시
+      };
+      
+      // 기준선 관련 속성 복사
+      if (measurement.relativeToReference) {
+        totalMeasurement.relativeToReference = measurement.relativeToReference;
+      }
+      // 수평/수직 방향 속성 유지
+      if (measurement.isHorizontal) {
+        totalMeasurement.isHorizontal = true;
+      }
+      
+      // 전체 선 측정값 추가
+      this.segmentedMeasurements.push(totalMeasurement);
       
       // 세그먼트 생성
       if (transitions.length === 0) {
@@ -1513,61 +1224,12 @@ export default {
     render() {
       if (!this.ctx) return;
       
-      // 캔버스 초기화 및 이미지 다시 그리기
-      this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
-      this.ctx.drawImage(this.image, 0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+      const canvas = this.$refs.canvas;
+      const img = this.$refs.sourceImage;
       
-      // 감지된 스케일바 표시 (디버깅 용도)
-      if (this.scaleBarDetected && this.scaleBarMeasurement && this.scaleMethod === 'scaleBar') {
-        this.ctx.beginPath();
-        this.ctx.moveTo(this.scaleBarMeasurement.start.x, this.scaleBarMeasurement.start.y);
-        this.ctx.lineTo(this.scaleBarMeasurement.end.x, this.scaleBarMeasurement.end.y);
-        this.ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
-        this.ctx.lineWidth = 2;
-        this.ctx.stroke();
-        
-        // 스케일바 텍스트 표시
-        this.ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
-        this.ctx.font = '12px Arial';
-        this.ctx.fillText(
-          `${this.scaleBarValue} ${this.scaleBarUnit}`, 
-          this.scaleBarMeasurement.start.x, 
-          this.scaleBarMeasurement.start.y - 5
-        );
-      }
-      
-      // 수동 스케일바 그리기 모드인 경우 안내 텍스트 표시
-      if (this.isDrawingScaleBar) {
-        this.ctx.fillStyle = 'rgba(255, 255, 0, 0.8)';
-        this.ctx.font = '14px Arial';
-        this.ctx.fillText(
-          '이미지의 스케일바 위에 선을 그려주세요', 
-          20, 
-          30
-        );
-        
-        // 현재 그리고 있는 스케일바 선 표시 - 더 눈에 띄게 표시
-        if (this.isMeasuring && this.currentMeasurement && this.currentMeasurement.isScaleBar) {
-          this.ctx.beginPath();
-          this.ctx.moveTo(this.currentMeasurement.start.x, this.currentMeasurement.start.y);
-          this.ctx.lineTo(this.currentMeasurement.end.x, this.currentMeasurement.end.y);
-          this.ctx.strokeStyle = 'rgba(255, 255, 0, 0.9)'; // 밝은 노란색
-          this.ctx.lineWidth = 3; // 두꺼운 선
-          this.ctx.setLineDash([5, 5]); // 점선
-          this.ctx.stroke();
-          this.ctx.setLineDash([]); // 점선 초기화
-          
-          // 시작점과 끝점 표시
-          this.ctx.fillStyle = 'rgba(255, 255, 0, 0.9)';
-          this.ctx.beginPath();
-          this.ctx.arc(this.currentMeasurement.start.x, this.currentMeasurement.start.y, 5, 0, Math.PI * 2);
-          this.ctx.fill();
-          
-          this.ctx.beginPath();
-          this.ctx.arc(this.currentMeasurement.end.x, this.currentMeasurement.end.y, 5, 0, Math.PI * 2);
-          this.ctx.fill();
-        }
-      }
+      // 캔버스 초기화
+      this.ctx.clearRect(0, 0, canvas.width, canvas.height);
+      this.ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
       // 디버깅 정보 콘솔에 출력
       console.log('Render - mode:', this.measurementMode);
@@ -1803,13 +1465,6 @@ export default {
       console.log('모드 변경:', mode);
       this.debugInfo.lastAction = `모드 변경: ${mode}`;
       this.measurementMode = mode;
-      
-      // 수동 스케일바 그리기 모드 비활성화 
-      // (다른 측정 모드가 활성화되면 스케일바 그리기 모드는 비활성화)
-      if (this.isDrawingScaleBar) {
-        this.isDrawingScaleBar = false;
-      }
-      
       this.selectedMeasurement = null;
       this.areaStart = null;
       this.areaEnd = null;
@@ -1825,15 +1480,8 @@ export default {
         measurementsCount: this.measurementMode === 'defect' 
           ? this.defectMeasurements.length 
           : this.filteredMeasurements.length
-      });
+      })
       
-      // v-show 방식에서는 컴포넌트가 파괴되지 않으므로 데이터를 유지
-      console.log('[closePopup] 팝업 닫기 - 측정 데이터 유지 (측정값:', this.measurements.length, '개)');
-      
-      // initialLoadDone 플래그는 true로 유지하여 재로드 시 초기화 방지
-      console.log('[closePopup] initialLoadDone 플래그 유지:', this.initialLoadDone);
-      
-      // 팝업만 닫기
       this.$emit('close');
     },
     applySelectedIds() {
@@ -2483,17 +2131,17 @@ export default {
      * 알림 메시지 표시
      */
     showNotification(message, type = 'info') {
-      // 기존 타이머 취소
+      // 이전 타이머가 있으면 제거
       if (this.notification.timeout) {
         clearTimeout(this.notification.timeout);
       }
       
-      // 알림 메시지 설정
+      // 알림 설정
+      this.notification.show = true;
       this.notification.message = message;
       this.notification.type = type;
-      this.notification.show = true;
       
-      // 3초 후 알림 숨기기
+      // 3초 후 자동으로 닫기
       this.notification.timeout = setTimeout(() => {
         this.notification.show = false;
       }, 3000);
@@ -2502,503 +2150,6 @@ export default {
     createSegments(measurement) {
       // 경계가 있는 세그먼트 생성 함수 사용
       this.createBoundedSegments(measurement);
-    },
-    // 스케일바 감지 함수 추가
-    detectScaleBar() {
-      console.log('[detectScaleBar] 함수 호출됨!');
-      if (!this.imageData) {
-        console.log('[detectScaleBar] 이미지 데이터 없음, 감지 중단');
-        
-        // 이미지 데이터가 없는 경우 항상 팝업 표시 (조건 검사 제거)
-        if (this.scaleMethod === 'scaleBar') {
-          console.log('[detectScaleBar] 이미지 데이터 없음, 선택 팝업 표시');
-          this.scaleBarDetected = false;
-          
-          // 글로벌 변수에 디버깅 정보 추가
-          window._popupDebug = {
-            attempt: 1,
-            stage: 'initial_call',
-            timestamp: new Date().toISOString()
-          };
-          
-          // 즉시 팝업 표시 - 지연 없이
-          console.log('[detectScaleBar] 즉시 팝업 표시 시도');
-          this.showScaleChoicePopup = true;
-          console.log('[detectScaleBar] 팝업 표시 플래그 설정:', this.showScaleChoicePopup);
-          
-          // 알림 표시
-          this.showNotification('스케일바 자동 감지에 실패했습니다. 측정 방식을 선택해주세요.', 'warning');
-          
-          // DOM 업데이트 후 스타일 강제 적용
-          this.$nextTick(() => {
-            try {
-              // 팝업 요소 직접 스타일 적용
-              const popupElement = document.querySelector('.scale-choice-popup');
-              if (popupElement) {
-                console.log('[detectScaleBar] 팝업 요소 발견, 스타일 강제 적용');
-                
-                // 인라인 스타일 최대한 강하게 적용
-                const inlineStyles = `
-                  position: fixed !important;
-                  top: 0 !important;
-                  left: 0 !important;
-                  right: 0 !important;
-                  bottom: 0 !important;
-                  width: 100vw !important;
-                  height: 100vh !important;
-                  display: flex !important;
-                  visibility: visible !important;
-                  z-index: 99999999 !important;
-                  background: rgba(0, 0, 0, 0.8) !important;
-                  justify-content: center !important;
-                  align-items: center !important;
-                  pointer-events: auto !important;
-                  opacity: 1 !important;
-                `;
-                
-                popupElement.setAttribute('style', inlineStyles);
-                
-                // 내용 요소에도 스타일 적용
-                const contentElement = popupElement.querySelector('.scale-choice-content');
-                if (contentElement) {
-                  contentElement.style.zIndex = '100000000';
-                  contentElement.style.position = 'relative';
-                  contentElement.style.boxShadow = '0 0 30px rgba(0, 0, 0, 0.8)';
-                  contentElement.style.opacity = '1';
-                  contentElement.style.visibility = 'visible';
-                  contentElement.style.display = 'block';
-                }
-                
-                console.log('[detectScaleBar] 스타일 적용 완료, 선택 버튼 스타일 확인');
-                
-                // 선택 버튼 스타일 확인
-                const buttons = popupElement.querySelectorAll('.choice-btn');
-                if (buttons.length > 0) {
-                  console.log(`[detectScaleBar] ${buttons.length}개 버튼 발견, 스타일 적용`);
-                  buttons.forEach(btn => {
-                    btn.style.opacity = '1';
-                    btn.style.visibility = 'visible';
-                    btn.style.display = 'flex';
-                  });
-                } else {
-                  console.warn('[detectScaleBar] 선택 버튼을 찾을 수 없음');
-                }
-              } else {
-                // 팝업이 없는 경우 강제로 생성
-                console.error('[detectScaleBar] 팝업 요소를 찾을 수 없음, 강제 생성 시도');
-                // 기존 코드는 유지
-              }
-            } catch (error) {
-              console.error('[detectScaleBar] 팝업 표시 중 오류:', error);
-            }
-          });
-        }
-        return;
-      }
-      
-      console.log('[detectScaleBar] 스케일바 감지 시작, 초기 로드 상태:', this.$_isInitialLoad);
-      
-      const img = this.$refs.sourceImage;
-      const width = img.naturalWidth;
-      const height = img.naturalHeight;
-      
-      // 이미지 하단 1/4 영역만 스캔 (스케일바는 보통 하단에 있음)
-      const scanStartY = Math.floor(height * 0.75);
-      
-      // 스케일바 감지 알고리즘 - 수평 라인에서 일정 간격의 밝은 픽셀 찾기
-      let scaleBarFound = false;
-      let scaleBarY = 0;
-      let scaleBarStartX = 0;
-      let scaleBarEndX = 0;
-      
-      // 아래에서 위로 스캔
-      for (let y = height - 1; y >= scanStartY; y--) {
-        let whiteSegments = [];
-        let inWhiteSegment = false;
-        let segmentStart = 0;
-        
-        // 각 행에서 흰색 세그먼트 찾기
-        for (let x = 0; x < width; x++) {
-          const idx = (y * width + x) * 4;
-          // 그레이스케일 값 계산 (R, G, B 평균)
-          const gray = (this.imageData.data[idx] + this.imageData.data[idx + 1] + this.imageData.data[idx + 2]) / 3;
-          
-          if (gray > 200) { // 밝은 픽셀 (흰색 세그먼트의 일부)
-            if (!inWhiteSegment) {
-              inWhiteSegment = true;
-              segmentStart = x;
-            }
-          } else if (inWhiteSegment) { // 어두운 픽셀 (세그먼트 종료)
-            inWhiteSegment = false;
-            whiteSegments.push({start: segmentStart, end: x - 1});
-          }
-        }
-        
-        // 마지막 세그먼트가 이미지 끝까지 계속되는 경우
-        if (inWhiteSegment) {
-          whiteSegments.push({start: segmentStart, end: width - 1});
-        }
-        
-        // 스케일바 조건: 약 10개의 균일한 세그먼트가 있어야 함
-        if (whiteSegments.length >= 8 && whiteSegments.length <= 12) {
-          // 세그먼트 간격이 균일한지 확인
-          let segmentWidths = [];
-          let gapWidths = [];
-          
-          for (let i = 0; i < whiteSegments.length; i++) {
-            segmentWidths.push(whiteSegments[i].end - whiteSegments[i].start);
-            if (i > 0) {
-              gapWidths.push(whiteSegments[i].start - whiteSegments[i-1].end);
-            }
-          }
-          
-          // 세그먼트 및 간격의 평균 너비 계산
-          const avgSegmentWidth = segmentWidths.reduce((sum, width) => sum + width, 0) / segmentWidths.length;
-          const avgGapWidth = gapWidths.length ? gapWidths.reduce((sum, width) => sum + width, 0) / gapWidths.length : 0;
-          
-          // 균일성 검사: 세그먼트와 간격의 표준편차가 낮아야 함
-          const segmentStdDev = Math.sqrt(segmentWidths.reduce((sum, width) => sum + Math.pow(width - avgSegmentWidth, 2), 0) / segmentWidths.length);
-          const gapStdDev = gapWidths.length ? Math.sqrt(gapWidths.reduce((sum, width) => sum + Math.pow(width - avgGapWidth, 2), 0) / gapWidths.length) : 0;
-          
-          // 표준편차가 낮으면 (균일하면) 스케일바로 간주
-          if (segmentStdDev / avgSegmentWidth < 0.3 && gapStdDev / avgGapWidth < 0.3) {
-            scaleBarFound = true;
-            scaleBarY = y;
-            scaleBarStartX = whiteSegments[0].start;
-            scaleBarEndX = whiteSegments[whiteSegments.length - 1].end;
-            break;
-          }
-        }
-      }
-      
-      if (scaleBarFound) {
-        console.log(`[detectScaleBar] 스케일바 감지 성공: y=${scaleBarY}, x=${scaleBarStartX}-${scaleBarEndX}`);
-        
-        // 캔버스 좌표로 변환
-        const canvas = this.$refs.canvas;
-        const scaleBarStartCanvas = {
-          x: (scaleBarStartX / width) * canvas.width,
-          y: (scaleBarY / height) * canvas.height
-        };
-        const scaleBarEndCanvas = {
-          x: (scaleBarEndX / width) * canvas.width,
-          y: (scaleBarY / height) * canvas.height
-        };
-        
-        // 스케일바 측정값 저장
-        this.scaleBarMeasurement = {
-          start: scaleBarStartCanvas,
-          end: scaleBarEndCanvas,
-          pixelLength: scaleBarEndX - scaleBarStartX,
-          unit: this.scaleBarUnit
-        };
-        
-        // 스케일바 감지 상태 업데이트
-        this.scaleBarDetected = true;
-        
-        // 모든 측정값 업데이트
-        this.updateAllMeasurements();
-        
-        // 스케일바 인식 성공 알림
-        this.showNotification('스케일바를 성공적으로 인식했습니다.', 'success');
-      } else {
-        console.log('[detectScaleBar] 스케일바 감지 실패');
-        this.scaleBarDetected = false;
-        this.scaleBarMeasurement = null;
-        
-        // 항상 팝업 표시 (isFirstDetectionAttempt 조건 제거)
-        if (this.scaleMethod === 'scaleBar') {
-          console.log('[detectScaleBar] 감지 실패, 선택 팝업 표시');
-          
-          // 팝업 표시 및 DOM 조작 (지연 적용)
-          setTimeout(() => {
-            // 알림 표시
-            this.showNotification('스케일바 자동 감지에 실패했습니다. 측정 방식을 선택해주세요.', 'warning');
-            
-            // 팝업 표시
-            this.showScaleChoicePopup = true;
-            console.log('[detectScaleBar] 팝업 표시 플래그 설정:', this.showScaleChoicePopup);
-            
-            // DOM 업데이트 후 스타일 강제 적용
-            this.$nextTick(() => {
-              try {
-                // 팝업 요소 직접 스타일 적용
-                const popupElement = document.querySelector('.scale-choice-popup');
-                if (popupElement) {
-                  console.log('[detectScaleBar] 팝업 요소 발견, 스타일 강제 적용');
-                  // 모든 다른 요소보다 위에 표시되도록 인라인 스타일 적용
-                  popupElement.style.zIndex = '999999';
-                  popupElement.style.position = 'fixed';
-                  popupElement.style.top = '0';
-                  popupElement.style.left = '0';
-                  popupElement.style.width = '100%';
-                  popupElement.style.height = '100%';
-                  
-                  // 내용 요소에도 스타일 적용
-                  const contentElement = popupElement.querySelector('.scale-choice-content');
-                  if (contentElement) {
-                    contentElement.style.zIndex = '1000000';
-                    contentElement.style.position = 'relative';
-                    contentElement.style.boxShadow = '0 0 30px rgba(0, 0, 0, 0.8)';
-                  }
-                } else {
-                  console.error('[detectScaleBar] 팝업 요소를 찾을 수 없음');
-                }
-              } catch (e) {
-                console.error('[detectScaleBar] 팝업 스타일 적용 중 오류:', e);
-              }
-            });
-          }, 300); // 지연 시간 늘림
-        }
-      }
-      
-      this.render();
-    },
-    // 스케일바 값 입력 다이얼로그 표시 함수 수정
-    showScaleBarValueDialog() {
-      // 기본값 표시
-      const defaultValue = this.scaleBarUnit === 'μm' ? 1 : 500;
-      const value = prompt(`스케일바의 실제 길이를 입력하세요 (${this.scaleBarUnit}):`, defaultValue);
-      
-      if (value !== null) {
-        const numValue = parseFloat(value);
-        if (!isNaN(numValue) && numValue > 0) {
-          this.scaleBarValue = numValue;
-          this.updateAllMeasurements();
-          this.showNotification(`스케일바가 ${numValue} ${this.scaleBarUnit}로 설정되었습니다.`, 'success');
-          
-          // 스케일바 설정 완료 후 자동으로 선측정 모드로 전환
-          this.isDrawingScaleBar = false;
-          this.measurementMode = 'line';
-          
-          console.log('[showScaleBarValueDialog] 스케일바 설정 완료, 선측정 모드로 전환');
-        } else {
-          this.showNotification('유효한 숫자를 입력해주세요.', 'error');
-          this.showScaleBarValueDialog(); // 다시 표시
-        }
-      } else {
-        // 취소한 경우 스케일바 설정 취소
-        this.scaleBarDetected = false;
-        this.scaleBarMeasurement = null;
-        this.manualScaleBar = null;
-        this.scaleMethod = 'magnification';
-        this.isDrawingScaleBar = false;
-        this.measurementMode = 'line';
-        this.showNotification('스케일바 설정이 취소되었습니다.', 'warning');
-      }
-    },
-    // 측정 방식 선택 함수 추가
-    selectScaleMethod(method) {
-      console.log(`[selectScaleMethod] 사용자가 선택한 측정 방식: ${method}, 이전 방식: ${this.scaleMethod}`);
-      
-      // 선택 팝업 닫기 - showScaleChoicePopup 플래그 설정
-      this.showScaleChoicePopup = false;
-      
-      // DOM 요소도 직접 제어하여 확실하게 팝업 숨기기 (v-show 문제 해결)
-      this.$nextTick(() => {
-        const popupElement = document.querySelector('.scale-choice-popup');
-        if (popupElement) {
-          popupElement.style.display = 'none';
-          console.log('[selectScaleMethod] 팝업 요소 직접 숨김 처리');
-        }
-      });
-      
-      // 사용자 선택에 따라 처리
-      if (method === 'magnification') {
-        // 배율 기반 측정 선택
-        this.scaleMethod = 'magnification';
-        this.isDrawingScaleBar = false; // 스케일바 그리기 모드 비활성화
-        this.measurementMode = 'line'; // 선 측정 모드로 설정
-        this.showNotification('배율 기반 측정 방식을 선택했습니다.', 'info');
-      } else if (method === 'scaleBar') {
-        // 수동 스케일바 설정 선택
-        this.scaleMethod = 'scaleBar';
-        this.isDrawingScaleBar = true;
-        this.measurementMode = 'scaleBar';
-        this.showNotification('수동 스케일바 설정 모드를 선택했습니다. 이미지의 스케일바 위에 선을 그려주세요.', 'info');
-      }
-      
-      // 첫 번째 감지 시도 플래그 해제
-      this.isFirstDetectionAttempt = false;
-      
-      this.render();
-      
-      // 이벤트 발생 기록
-      LogService.logAction(`select_scale_method_${method}`, {
-        previous: this.scaleMethod,
-        selected: method
-      });
-    },
-    // 측정 데이터 저장 메서드
-    saveMeasurementData() {
-      try {
-        // 저장할 측정 데이터 객체 생성
-        const measurementData = {
-          measurements: this.measurements,
-          segmentedMeasurements: this.segmentedMeasurements,
-          defectMeasurements: this.defectMeasurements,
-          referenceLines: this.referenceLines,
-          activeReferenceLine: this.activeReferenceLine,
-          nextId: this.nextId,
-          brightSubIdCounter: this.brightSubIdCounter,
-          darkSubIdCounter: this.darkSubIdCounter,
-          scaleMethod: this.scaleMethod,
-          magnification: this.magnification,
-          scaleBarValue: this.scaleBarValue,
-          scaleBarUnit: this.scaleBarUnit,
-          scaleBarDetected: this.scaleBarDetected,
-          measurementMode: this.measurementMode,
-          timestamp: new Date().getTime()
-        };
-        
-        // localStorage에 저장
-        localStorage.setItem('msa6_measurement_data', JSON.stringify(measurementData));
-        console.log('[saveMeasurementData] 측정 데이터 저장 완료');
-      } catch (error) {
-        console.error('[saveMeasurementData] 데이터 저장 중 오류:', error);
-      }
-    },
-
-    // 측정 데이터 복원 메서드
-    restoreMeasurementData() {
-      try {
-        // localStorage에서 데이터 가져오기
-        const savedData = localStorage.getItem('msa6_measurement_data');
-        if (!savedData) {
-          console.log('[restoreMeasurementData] 저장된 측정 데이터 없음');
-          return false;
-        }
-        
-        // 10분(600,000ms) 이내의 데이터만 복원
-        const data = JSON.parse(savedData);
-        const now = new Date().getTime();
-        if (now - data.timestamp > 600000) {
-          console.log('[restoreMeasurementData] 저장된 데이터가 너무 오래됨, 복원하지 않음');
-          localStorage.removeItem('msa6_measurement_data');
-          return false;
-        }
-        
-        // 데이터 복원
-        this.measurements = data.measurements || [];
-        this.segmentedMeasurements = data.segmentedMeasurements || [];
-        this.defectMeasurements = data.defectMeasurements || [];
-        this.referenceLines = data.referenceLines || [];
-        this.activeReferenceLine = data.activeReferenceLine || null;
-        this.nextId = data.nextId || 1;
-        this.brightSubIdCounter = data.brightSubIdCounter || 1;
-        this.darkSubIdCounter = data.darkSubIdCounter || 1;
-        this.scaleMethod = data.scaleMethod || 'magnification';
-        this.magnification = data.magnification || 500;
-        this.scaleBarValue = data.scaleBarValue || 500;
-        this.scaleBarUnit = data.scaleBarUnit || 'nm';
-        this.scaleBarDetected = data.scaleBarDetected || false;
-        this.measurementMode = data.measurementMode || 'line';
-        
-        console.log('[restoreMeasurementData] 측정 데이터 복원 완료');
-        this.showNotification('이전 측정 데이터가 복원되었습니다.', 'info');
-        return true;
-      } catch (error) {
-        console.error('[restoreMeasurementData] 데이터 복원 중 오류:', error);
-        return false;
-      }
-    },
-    // toggleScaleBarDrawing 메서드를 찾아서 수정하거나 없으면 새로 추가
-    toggleScaleBarDrawing() {
-      this.isDrawingScaleBar = !this.isDrawingScaleBar;
-      
-      // 스케일바 선택 팝업이 열려있으면 닫기
-      if (this.showScaleChoicePopup) {
-        this.showScaleChoicePopup = false;
-        
-        // DOM 요소도 직접 제어하여 확실하게 팝업 숨기기
-        this.$nextTick(() => {
-          const popupElement = document.querySelector('.scale-choice-popup');
-          if (popupElement) {
-            popupElement.style.display = 'none';
-            console.log('[toggleScaleBarDrawing] 팝업 요소 직접 숨김 처리');
-          }
-        });
-      }
-      
-      if (this.isDrawingScaleBar) {
-        // 스케일바 그리기 모드로 전환
-        this.showNotification('수동 스케일바 그리기 모드가 활성화되었습니다. 이미지의 스케일바 위에 선을 그려주세요.', 'info');
-      } else {
-        // 일반 측정 모드로 전환
-        this.measurementMode = 'line';
-        this.showNotification('일반 측정 모드로 전환되었습니다.', 'info');
-      }
-      
-      this.render();
-    },
-    toggleImage() {
-      console.log('[toggleImage] 이미지 전환 시작, 현재:', this.isAfterImage ? '처리 후' : '처리 전');
-      
-      // 이미지 URL 확인
-      if (this.isAfterImage && !this.beforeImageUrl) {
-        alert('처리 전 이미지가 없습니다.');
-        return;
-      }
-      
-      if (!this.isAfterImage && !this.afterImageUrl) {
-        alert('처리 후 이미지가 없습니다.');
-        return;
-      }
-      
-      // 현재 측정값 백업
-      this.measurementsBackup = JSON.parse(JSON.stringify(this.measurements));
-      this.isImageChanging = true;
-      
-      // 이미지 전환
-      this.isAfterImage = !this.isAfterImage;
-      
-      // URL 설정
-      const newImageUrl = this.isAfterImage 
-        ? this.afterImageUrl 
-        : this.beforeImageUrl;
-      
-      console.log(`[toggleImage] 이미지 변경: ${this.isAfterImage ? '처리 후' : '처리 전'} 이미지로 전환`);
-      this.imageUrl = newImageUrl;
-      
-      // 이미지 로드
-      this.loadImage();
-    },
-    // MSA5 이미지 로드 함수 추가
-    loadMSA5Images() {
-      // 시작 이미지와 종료 이미지 URL 가져오기
-      this.beforeImageUrl = localStorage.getItem('msa5_start_image') || null;
-      this.afterImageUrl = localStorage.getItem('msa6_final_image') || null;
-      
-      console.log('[loadMSA5Images] 이미지 로드:', {
-        beforeImage: this.beforeImageUrl ? '있음' : '없음',
-        afterImage: this.afterImageUrl ? '있음' : '없음'
-      });
-      
-      // 현재 설정된 이미지 URL 확인
-      if (!this.imageUrl && this.afterImageUrl) {
-        this.imageUrl = this.afterImageUrl;
-        this.isAfterImage = true;
-      } else if (!this.imageUrl && this.beforeImageUrl) {
-        this.imageUrl = this.beforeImageUrl;
-        this.isAfterImage = false;
-      }
-      
-      // 현재 렌더링 이미지 설정
-      this.currentRenderingImage = this.imageUrl;
-    },
-    watchShowPopup(newVal) {
-      console.log('[watchShowPopup] 팝업 표시 상태 변경:', newVal);
-      
-      if (newVal) {
-        // 팝업이 표시될 때 이미지 로드
-        this.$nextTick(() => {
-          this.loadMSA5Images();
-          this.loadImage();
-        });
-      } else {
-        // 팝업이 닫힐 때 현재 이미지 상태 저장 (측정 데이터는 v-show로 유지됨)
-        console.log('[watchShowPopup] 팝업 닫힘, 상태 저장');
-      }
     }
   }
 };
@@ -3032,39 +2183,37 @@ export default {
 }
 
 .measurement-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.75rem 1rem;
+  padding: 1rem 1.5rem;
   background: #7950f2;
   border-bottom: 1px solid #6741d9;
-  flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .header-left {
   display: flex;
   align-items: center;
+  gap: 1rem;
 }
 
-.header-title {
+.header-left h3 {
   margin: 0;
-  font-size: 1.25rem;
   color: #fff;
+  font-size: 1.25rem;
   font-weight: 600;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+  gap: 1.5rem;
 }
 
 .measurement-options {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  flex-wrap: wrap;
+  gap: 1rem;
   background: rgba(255, 255, 255, 0.1);
   padding: 0.5rem;
   border-radius: 8px;
@@ -3073,10 +2222,8 @@ export default {
 .option-group {
   display: flex;
   align-items: center;
+  gap: 0.5rem;
   padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  margin-right: 0.5rem;
-  margin-bottom: 0.25rem;
   border-right: 1px solid rgba(255, 255, 255, 0.2);
 }
 
@@ -3085,63 +2232,30 @@ export default {
 }
 
 .option-group-label {
-  font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.8);
+  font-size: 0.85rem;
+  font-weight: 500;
   margin-right: 0.5rem;
-  white-space: nowrap;
 }
 
 .option-btn {
-  background: rgba(255, 255, 255, 0.1);
+  width: 36px;
+  height: 36px;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  width: 2.25rem;
-  height: 2.25rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  margin: 0 0.125rem;
-  transition: all 0.2s;
-  color: #fff;
 }
 
 .option-btn i {
-  font-size: 0.9rem;
+  font-size: 1.1rem;
 }
-
-.btn-text {
-  margin-left: 0.25rem;
-}
-
-.scale-btn {
-  min-width: 4rem;
-}
-
-.reset-btn, .close-btn {
-  padding: 0.375rem 0.75rem;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.reset-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #fff;
-}
-
-.close-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #fff;
-}
-
-/* option-btn 클래스 뒤에 hover와 active 상태 스타일 추가 */
 
 .option-btn:hover {
   background: rgba(255, 255, 255, 0.2);
@@ -3154,10 +2268,23 @@ export default {
   border-color: #fff;
 }
 
-/* reset-btn 및 close-btn hover 상태 추가 */
-.reset-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
+.close-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-btn i {
+  font-size: 1.2rem;
 }
 
 .close-btn:hover {
@@ -3952,568 +3079,5 @@ export default {
     opacity: 1;
     transform: translate(-50%, 0);
   }
-}
-
-.scale-method-selector {
-  display: flex;
-  gap: 5px;
-}
-
-.scale-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 100px;
-  padding: 0 12px;
-  height: 36px;
-  transition: all 0.2s ease;
-}
-
-.scale-btn i {
-  font-size: 1.1rem;
-}
-
-.scale-btn .btn-text {
-  font-size: 0.9rem;
-  font-weight: 500;
-  white-space: nowrap;
-}
-
-.scale-option-group {
-  min-width: 220px;
-}
-
-.measurement-options {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 0.75rem;
-  border-radius: 8px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-}
-
-.option-group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.5rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.2);
-  white-space: nowrap;
-}
-
-.unit-selector {
-  width: 50px;
-  background-color: #f0f0f0;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 2px 5px;
-  font-size: 0.85rem;
-}
-
-.notification {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  border-radius: 4px;
-  color: white;
-  font-size: 14px;
-  z-index: 9999;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: all 0.3s ease;
-  max-width: 400px;
-}
-
-.notification.info {
-  background-color: #2196F3;
-}
-
-.notification.success {
-  background-color: #4CAF50;
-}
-
-.notification.warning {
-  background-color: #FF9800;
-}
-
-.notification.error {
-  background-color: #F44336;
-}
-
-/* 반응형 미디어 쿼리 - 1.5배 크게 설정 */
-@media (max-width: 2100px) {
-  .scale-btn {
-    min-width: 90px;
-    padding: 0 10px;
-  }
-  
-  .scale-option-group {
-    min-width: 200px;
-  }
-  
-  .option-group {
-    padding: 0.25rem 0.4rem;
-    gap: 0.4rem;
-  }
-}
-
-@media (max-width: 1800px) {
-  .scale-btn {
-    min-width: 36px;
-    padding: 0;
-  }
-  
-  .scale-btn .btn-text {
-    display: none;
-  }
-  
-  .scale-option-group {
-    min-width: auto;
-  }
-  
-  .option-group {
-    padding: 0.25rem;
-    gap: 0.25rem;
-  }
-  
-  .option-group-label {
-    font-size: 0.85rem;
-    margin-right: 0.25rem;
-  }
-  
-  .measurement-options {
-    padding: 0.5rem;
-    gap: 0.75rem;
-  }
-}
-
-@media (max-width: 1500px) {
-  .measurement-options {
-    padding: 0.4rem;
-    gap: 0.5rem;
-  }
-  
-  .option-group {
-    padding: 0.2rem;
-    gap: 0.2rem;
-    border-right: none;
-  }
-  
-  .option-group-label {
-    font-size: 0.75rem;
-  }
-  
-  .option-btn {
-    width: 32px;
-    height: 32px;
-  }
-  
-  .header-input {
-    width: 50px;
-  }
-}
-
-@media (max-width: 1200px) {
-  .measurement-header {
-    padding: 0.75rem;
-  }
-  
-  .measurement-options {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    padding: 0.3rem;
-    gap: 0.3rem;
-    max-width: calc(100vw - 180px);
-  }
-  
-  .option-group {
-    margin-bottom: 0.2rem;
-    flex-shrink: 0;
-  }
-  
-  .header-right {
-    flex-wrap: wrap;
-  }
-  
-  .option-btn {
-    width: 30px;
-    height: 30px;
-  }
-  
-  .option-btn i {
-    font-size: 1rem;
-  }
-}
-
-@media (max-width: 900px) {
-  .measurement-header {
-    flex-direction: column;
-    padding: 0.5rem;
-    gap: 0.5rem;
-    align-items: flex-start;
-  }
-  
-  .header-right {
-    width: 100%;
-    justify-content: space-between;
-  }
-  
-  .measurement-options {
-    width: 100%;
-    max-width: 100%;
-    overflow-x: auto;
-    justify-content: flex-start;
-    padding: 0.25rem;
-    margin-bottom: 0.5rem;
-  }
-  
-  .option-group {
-    flex-shrink: 0;
-    margin-bottom: 0.25rem;
-  }
-  
-  .option-group-label {
-    font-size: 0.7rem;
-  }
-  
-  .option-btn {
-    width: 28px;
-    height: 28px;
-  }
-  
-  .option-btn i {
-    font-size: 0.9rem;
-  }
-  
-  .scale-btn {
-    min-width: 28px;
-  }
-  
-  .reset-btn, .close-btn {
-    margin-top: 0.5rem;
-  }
-}
-
-@media (max-width: 576px) {
-  .option-btn {
-    width: 26px;
-    height: 26px;
-  }
-  
-  .option-btn i {
-    font-size: 0.8rem;
-  }
-  
-  .option-group-label {
-    font-size: 0.65rem;
-  }
-  
-  .header-input {
-    width: 40px;
-    font-size: 0.8rem;
-  }
-  
-  .unit-selector {
-    width: 40px;
-    font-size: 0.75rem;
-  }
-  
-  .measurement-options {
-    padding: 0.2rem;
-    gap: 0.2rem;
-  }
-  
-  .option-group {
-    padding: 0.15rem;
-    gap: 0.15rem;
-  }
-}
-
-/* 스케일바 감지 실패 시 선택 팝업 스타일 */
-.scale-choice-popup {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  background: rgba(0, 0, 0, 0.8) !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  z-index: 9999999 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  transform: none !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-.super-overlay {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  z-index: 9999999 !important;
-  background-color: rgba(0, 0, 0, 0.8) !important;
-  transform: none !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-.scale-choice-content {
-  background: #fff !important;
-  border-radius: 16px !important;
-  padding: 2.5rem !important;
-  width: 90% !important;
-  max-width: 500px !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
-  text-align: center !important;
-  position: relative !important;
-  z-index: 10000000 !important;
-  transform: none !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-.scale-choice-content h3 {
-  color: #7950f2 !important;
-  margin: 0 0 1rem 0 !important;
-  font-size: 1.8rem !important;
-  font-weight: 700 !important;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) !important;
-}
-
-.scale-choice-content p {
-  color: #495057 !important;
-  margin-bottom: 0.75rem !important;
-  font-size: 1.1rem !important;
-  line-height: 1.5 !important;
-}
-
-.scale-choice-content p:last-of-type {
-  margin-bottom: 2rem !important;
-}
-
-.scale-choice-buttons {
-  display: flex !important;
-  justify-content: center !important;
-  gap: 1.5rem !important;
-}
-
-.choice-btn {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 1.8rem !important;
-  border-radius: 12px !important;
-  border: none !important;
-  background: #f8f0ff !important;
-  color: #7950f2 !important;
-  font-size: 1.1rem !important;
-  font-weight: 600 !important;
-  cursor: pointer !important;
-  transition: all 0.3s ease !important;
-  flex: 1 !important;
-  max-width: 200px !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-}
-
-.choice-btn i {
-  font-size: 2.5rem !important;
-  margin-bottom: 0.8rem !important;
-}
-
-.choice-btn span {
-  margin-bottom: 0.5rem !important;
-}
-
-.choice-btn small {
-  font-size: 0.85rem !important;
-  font-weight: 400 !important;
-  color: rgba(0, 0, 0, 0.6) !important;
-  line-height: 1.3 !important;
-}
-
-.choice-btn:hover {
-  background: #7950f2 !important;
-  color: #fff !important;
-  transform: translateY(-5px) !important;
-  box-shadow: 0 8px 20px rgba(121, 80, 242, 0.4) !important;
-}
-
-.choice-btn:hover small {
-  color: rgba(255, 255, 255, 0.8) !important;
-}
-
-.magnification-btn {
-  background: #e7f5ff !important;
-  color: #228be6 !important;
-}
-
-.magnification-btn:hover {
-  background: #228be6 !important;
-  color: #fff !important;
-  box-shadow: 0 8px 20px rgba(34, 139, 230, 0.4) !important;
-}
-
-.scalebar-btn {
-  background: #fff4e6 !important;
-  color: #fd7e14 !important;
-}
-
-.scalebar-btn:hover {
-  background: #fd7e14 !important;
-  color: #fff !important;
-  box-shadow: 0 8px 20px rgba(253, 126, 20, 0.4) !important;
-}
-
-@media (max-width: 576px) {
-  .scale-choice-buttons {
-    flex-direction: column !important;
-    align-items: center !important;
-  }
-  
-  .choice-btn {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-}
-
-.msa6-image-popup-container {
-  /* 컨테이너에 스타일 추가하지 않음 - 기존 스타일 유지 */
-}
-
-/* 스타일 섹션 끝부분에 다음 CSS 추가 */
-
-/* 반응형 디자인을 위한 미디어 쿼리 */
-@media (max-width: 1200px) {
-  .measurement-header {
-    flex-direction: column;
-    padding: 0.5rem;
-    gap: 0.5rem;
-  }
-  
-  .header-left {
-    width: 100%;
-    justify-content: center;
-  }
-  
-  .header-title {
-    font-size: 1.2rem;
-    margin: 0.25rem 0;
-  }
-  
-  .option-group-label {
-    display: none;
-  }
-  
-  .btn-text {
-    display: none;
-  }
-  
-  .option-group {
-    padding: 0.25rem;
-    margin-right: 0.25rem;
-  }
-  
-  .header-input {
-    width: 3rem;
-  }
-  
-  .measurement-options {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-}
-
-@media (max-width: 768px) {
-  .option-btn {
-    width: 2rem;
-    height: 2rem;
-    padding: 0.25rem;
-  }
-  
-  .reset-btn, .close-btn {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.8rem;
-  }
-  
-  .measurement-container {
-    width: 95%;
-    height: 95%;
-  }
-  
-  .measurement-content {
-    flex-direction: column;
-  }
-  
-  .right-panel {
-    width: 100%;
-    max-height: 40vh;
-  }
-  
-  .image-container {
-    width: 100%;
-    height: 60vh;
-  }
-}
-
-/* option-btn 클래스 뒤에 hover와 active 상태 스타일 추가 */
-
-.option-btn:hover {
-  background: #f1f3f5;
-  border-color: #adb5bd;
-}
-
-.option-btn.active {
-  background: #4c6ef5;
-  color: white;
-  border-color: #4c6ef5;
-}
-
-/* reset-btn 및 close-btn hover 상태 추가 */
-.reset-btn:hover {
-  background: #e9ecef;
-  border-color: #adb5bd;
-}
-
-.close-btn:hover {
-  background: #ff6b6b;
-}
-
-.image-toggle-controls {
-  display: flex;
-  align-items: center;
-}
-
-.image-toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1rem;
-  background-color: #7950f2;
-  color: white;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.image-toggle-btn:hover {
-  background-color: #6741d9;
-}
-
-.image-toggle-btn i {
-  font-size: 0.85rem;
 }
 </style>
