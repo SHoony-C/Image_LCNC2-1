@@ -6,7 +6,7 @@
         <span>이미지 전처리 LCNC</span>
       </div>
       <div class="header-right">
-        <button @click="saveWorkflow" class="save-btn" :disabled="!canSaveWorkflow" title="현재 워크플로우 저장">
+        <button @click="saveWorkflow" class="save-btn" :disabled="!canSaveWorkflow || !processedImages['end']" title="현재 워크플로우 저장">
           <i class="fas fa-save"></i>
           저장
         </button>
@@ -72,7 +72,7 @@
         </div>
       </div>
 
-      <div class="workflow-area" @dragover="onDragOver" @drop="onDrop" ref="workflowArea">
+      <div class="workflow-area" @dragover="onDragOver" @drop="onDrop" @click="handleCanvasClick" ref="workflowArea">
         <!-- 워크플로우 오류 하이라이트 표시 -->
         <div class="workflow-error-highlight" v-if="processingStatus === 'error'"></div>
 
@@ -386,17 +386,24 @@ import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import '@vue-flow/core/dist/style.css'
 import LogService from '../utils/logService'
+import { mapValues } from 'lodash'
 
 export default {
   name: 'MSA5ImageLCNC',
   components: {
     VueFlow,
-    MiniMap,
-    Handle,
     Background,
-    Controls
+    Controls,
+    Handle,
+    MiniMap
   },
-  setup() {
+  props: {
+    initialImage: {
+      type: String,
+      default: null
+    }
+  },
+  setup(props) {
     const isMaximized = ref(false)
     const hasInput = ref(false)
     const hasOutput = ref(false)
@@ -431,6 +438,7 @@ export default {
     const workflowErrorMessage = ref('')
     const workflowErrorDetails = ref('')
     const showWorkflowErrorDialog = ref(false)
+    const workflowArea = ref(null)  // 워크플로우 영역 DOM 참조 추가
     
     // 이미지 해시 계산 함수
     const calculateImageHash = async (imageUrl) => {
@@ -590,7 +598,6 @@ export default {
       if (event.key === 'Delete' && selectedNode.value) {
         console.log('Delete 키 감지 - 노드 삭제 실행');
         deleteSelectedNode();
-        event.preventDefault();
         return;
       }
       
@@ -598,23 +605,22 @@ export default {
       if (event.key === 'Delete' && selectedEdge.value) {
         console.log('Delete 키 감지 - 엣지 삭제 실행');
         deleteSelectedEdge();
-        event.preventDefault();
         return;
       }
       
       // Ctrl+Z: 실행 취소
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z') {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
         console.log('Ctrl+Z 감지 - 실행 취소 실행');
-        event.preventDefault();
         undo();
+        event.preventDefault();
         return;
       }
       
       // Ctrl+Y: 다시 실행
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'y') {
         console.log('Ctrl+Y 감지 - 다시 실행 실행');
-        event.preventDefault();
         redo();
+        event.preventDefault();
         return;
       }
     }
@@ -650,6 +656,123 @@ export default {
     const onDragOver = (event) => {
       event.preventDefault()
       event.dataTransfer.dropEffect = 'move'
+    }
+    
+    // 드롭 이벤트 핸들러
+    const onDrop = (event) => {
+      event.preventDefault()
+      
+      try {
+        // 드래그 데이터 가져오기
+        const nodeData = JSON.parse(event.dataTransfer.getData('application/vueflow'))
+        
+        if (!nodeData) {
+          console.warn('드롭된 데이터가 없습니다')
+          return
+        }
+        
+        // 드롭 위치 계산 (workflowArea 참조가 없을 경우 기본 위치 사용)
+        let position = { x: 100, y: 100 };
+        
+        if (workflowArea.value && flowInstance.value) {
+          const reactFlowBounds = workflowArea.value.getBoundingClientRect()
+          position = flowInstance.value.project({
+            x: event.clientX - reactFlowBounds.left,
+            y: event.clientY - reactFlowBounds.top
+          })
+        }
+        
+        // 노드 ID 생성 (타입 + 타임스탬프)
+        const id = `${nodeData.id}_${Date.now()}`
+        
+        // 노드 타입 결정
+        let type = 'custom'
+        if (nodeData.id === 'merge') {
+          type = 'merge'
+        }
+        
+        // 새 노드 생성
+        const newNode = {
+          id,
+          type,
+          position,
+          data: {
+            ...nodeData,
+            params: getDefaultParams(nodeData.id, defaultOptions.value)
+          }
+        }
+        
+        // 상태 저장 (실행 취소 지원)
+        saveToHistory()
+        
+        // 노드 추가
+        elements.value = [...elements.value, newNode]
+        
+        // 새 노드 생성 후 약간의 딜레이 후 선택 (UI 렌더링 보장)
+        setTimeout(() => {
+          const addedNode = elements.value.find(el => el.id === id)
+          if (addedNode) {
+            selectedNode.value = addedNode
+          }
+        }, 100)
+      } catch (error) {
+        console.error('노드 드롭 처리 중 오류:', error)
+      }
+    }
+    
+    // 노드 타입별 기본 파라미터 가져오기
+    const getDefaultParams = (nodeType, defaultOpts) => {
+      // 기본값이 없는 경우 빈 객체 반환
+      if (!defaultOpts || !nodeType) {
+        return {}
+      }
+      
+      // nodeType에 해당하는 기본 파라미터 반환
+      const params = defaultOpts[nodeType] || {}
+      
+      // 파라미터 타입별로 UI 구성을 위한 메타데이터 추가
+      const result = {}
+      
+      // 파라미터 형식 변환 및 메타데이터 추가
+      Object.entries(params).forEach(([key, value]) => {
+        let paramConfig = {
+          value: value,
+          label: key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' '),
+          min: 0,
+          max: 1000,
+          step: 1
+        }
+        
+        // 파라미터 타입에 따른 특수 설정
+        if (key.includes('factor')) {
+          paramConfig.min = 0
+          paramConfig.max = 2
+          paramConfig.step = 0.1
+        } else if (key.includes('angle')) {
+          paramConfig.min = -360
+          paramConfig.max = 360
+          paramConfig.step = 1
+        } else if (key.includes('threshold')) {
+          paramConfig.min = 0
+          paramConfig.max = 255
+          paramConfig.step = 1
+        } else if (key.includes('radius')) {
+          paramConfig.min = 0
+          paramConfig.max = 50
+          paramConfig.step = 1
+        } else if (key.includes('direction') || key.includes('method') || key.includes('model')) {
+          // 옵션형 파라미터는 select 요소로 표시
+          paramConfig.options = Array.isArray(value) ? value : 
+            key === 'direction' ? ['horizontal', 'vertical'] :
+            key === 'method' ? ['canny', 'sobel', 'laplacian'] :
+            key === 'model' ? ['yolov5', 'yolov8', 'faster_rcnn'] : 
+            [value]
+        }
+        
+        result[key] = paramConfig
+      })
+      
+      return result
     }
 
     // 최대화 버튼 토글
@@ -751,108 +874,60 @@ export default {
     // 워크플로우 처리 시작
     const processStart = async () => {
       if (!inputImage.value) {
-        alert('이미지를 먼저 선택해주세요.');
-        return;
+        showStatusMessage.value = true
+        statusMessage.value = '이미지가 없습니다. 먼저 이미지를 로드해주세요.'
+        setTimeout(() => { showStatusMessage.value = false }, 5000)
+        return
       }
       
-      // 프로세스 시작 시 시작 이미지 localStorage에 저장
-      localStorage.setItem('msa5_start_image', inputImage.value);
-      console.log('시작 이미지 저장:', inputImage.value?.substring(0, 50) + '...');
-      
-      // 기존 코드
-      processingStatus.value = 'processing';
-      statusMessage.value = '이미지 처리 중...';
-      showStatusMessage.value = true;
-      
-      // 로그 저장 - 워크플로우 실행
-      LogService.logAction('start_workflow_processing', {
-        nodeCount: elements.value.filter(el => el.type !== 'end').length - 1,
-        hasImage: !!inputImage.value
-      });
-      
-      // 작업 재시도를 위한 플래그
-      let attempts = 0;
-      const maxAttempts = 3;
+      // 액션 로깅 데이터 준비
+      const logData = {
+        component: 'MSA5',
+        hasImage: !!inputImage.value,
+        nodeCount: elements.value.filter(el => el.type !== 'smoothstep').length - 2,
+        connectionCount: elements.value.filter(el => el.type === 'smoothstep').length
+      };
       
       try {
-        // 워크플로우 파싱
-        const workflow = parseWorkflow(elements.value);
-        
-        // 이미지 처리 프로세스 시작
-        while (attempts < maxAttempts) {
-          try {
-            await runWorkflow(workflow);
-            break;
-          } catch (error) {
-            attempts++;
-            console.error(`워크플로우 처리 실패 (시도 ${attempts}/${maxAttempts}):`, error);
-            
-            if (attempts >= maxAttempts) {
-              throw error;
-            }
-            
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          }
-        }
-        
-        // 워크플로우 실행 완료
-        processingStatus.value = 'success';
-        statusMessage.value = '이미지 처리가 완료되었습니다!';
-        showStatusMessage.value = true;
-        
-        // MSA6로 최종 이미지 전달
-        if (processedImages.end) {
-          console.log('최종 이미지를 MSA6로 전달:', processedImages.end?.substring(0, 50) + '...');
-          
-          // localStorage에도 저장 - 오직 end 이미지가 있을 때만 저장
-          localStorage.setItem('msa6_final_image', processedImages.end);
-          
-          // 워크플로우 처리 완료 플래그 설정
-          localStorage.setItem('msa5_workflow_completed', 'true');
-          console.log('워크플로우 처리 완료 플래그 설정됨');
-          
-          // 이벤트로 전달
-          window.dispatchEvent(new CustomEvent('msa5-image-processed', { 
-            detail: { 
-              imageUrl: processedImages.end,
-              originalImageUrl: inputImage.value
-            } 
-          }));
-        } else {
-          // end 이미지가 없으면 localStorage에서 제거하여 MSA6에 표시되지 않도록 함
-          localStorage.removeItem('msa6_final_image');
-          localStorage.removeItem('msa5_workflow_completed');
-        }
-        
-        // 워크플로우 저장 가능 상태로 설정
-        canSaveWorkflow.value = true;
-        
-        // 로그 저장 - 워크플로우 실행 성공
-        LogService.logAction('workflow_processing_success', {
-          processedImages: Object.keys(processedImages).length
-        });
-      } catch (error) {
-        console.error('워크플로우 처리 중 오류 발생:', error);
-        processingStatus.value = 'error';
-        
-        const errorMessage = error.response?.data?.detail || error.message || '알 수 없는 오류';
-        statusMessage.value = `오류: ${errorMessage}`;
-        showStatusMessage.value = true;
-        
-        // 로그 저장 - 워크플로우 실행 실패
-        LogService.logAction('workflow_processing_error', {
-          error: errorMessage
-        });
-        
-        // 워크플로우 오류 표시
-        showWorkflowError('워크플로우 처리 오류', errorMessage);
+        // 액션 로깅 - 프로세스 시작 (한 번만 호출되도록 개선됨)
+        LogService.logAction('process_start', logData)
+          .catch(err => console.error('로그 저장 실패:', err));
+      } catch (err) {
+        // 로깅 실패는 무시하고 계속 진행
+        console.error('로그 저장 오류:', err);
       }
       
-      // 상태 메시지 일정 시간 후 숨김
-      setTimeout(() => {
-        showStatusMessage.value = false;
-      }, 5000);
-    };
+      // 시작 전에 워크플로우 검증 수행
+      const validationResult = validateWorkflow()
+      
+      if (!validationResult.valid) {
+        showStatusMessage.value = true
+        statusMessage.value = validationResult.message
+        setTimeout(() => { showStatusMessage.value = false }, 5000)
+        console.error('워크플로우 검증 실패:', validationResult)
+        return
+      }
+      
+      processingStatus.value = 'processing'
+      statusMessage.value = '워크플로우 처리 중...'
+      showStatusMessage.value = true
+      
+      try {
+        // 워크플로우 처리
+        await processWorkflow()
+        
+        // 처리 완료 후 저장 버튼 활성화
+        canSaveWorkflow.value = true
+        
+        // MongoDB에 자동 저장하는 코드 제거 - 저장은 사용자가 '저장' 버튼을 클릭할 때만 수행
+      } catch (error) {
+        console.error('워크플로우 처리 중 오류 발생:', error)
+        processingStatus.value = 'error'
+        statusMessage.value = `처리 오류: ${error.message || '알 수 없는 오류'}`
+        showStatusMessage.value = true
+        setTimeout(() => { showStatusMessage.value = false }, 5000)
+      }
+    }
     
     // 워크플로우 유효성 검증 함수
     const validateWorkflow = () => {
@@ -1048,715 +1123,484 @@ export default {
       return finalPath
     }
     
+    // 일반 노드 처리 함수
+    const processNode = async (node, inputImage) => {
+      try {
+        console.log(`[processNode] 노드 ${node.id} 처리 시작, 타입: ${node.data?.nodeId || node.data?.id}`);
+        
+        // 노드에 파라미터가 없으면 기본값 설정
+        if (!node.data?.params) {
+          console.warn(`[processNode] 노드 ${node.id}에 파라미터가 없습니다. 기본값 사용`);
+          node.data.params = getDefaultParams(node.data?.nodeId || node.data?.id, defaultOptions.value);
+        }
+        
+        // 노드 타입 및 파라미터 추출
+        const nodeType = node.data?.nodeId || node.data?.id;
+        const params = {};
+        
+        // 파라미터 객체 구성
+        if (node.data?.params) {
+          Object.entries(node.data.params).forEach(([key, param]) => {
+            params[key] = param.value;
+          });
+        }
+        
+        console.log(`[processNode] API 요청 준비: ${node.id}, 타입: ${nodeType}`, params);
+        
+        // 입력 이미지 URL에서 이미지 형식 추출 (가능한 경우)
+        let imageFormat = null;
+        if (inputImage) {
+          // URL에서 파일 확장자 추출 시도
+          try {
+            const fileExtMatch = inputImage.match(/\.([^.?]+)(?:\?|$)/);
+            if (fileExtMatch && fileExtMatch[1]) {
+              imageFormat = fileExtMatch[1].toLowerCase();
+              console.log(`[processNode] 입력 이미지 형식 감지: ${imageFormat}`);
+            }
+          } catch (e) {
+            console.warn(`[processNode] 이미지 형식 감지 실패:`, e);
+          }
+        }
+        
+        // FormData 생성
+        const formData = new FormData();
+        
+        // 이미지 데이터를 Blob으로 변환
+        const response = await fetch(inputImage);
+        
+        // 응답 헤더에서 Content-Type 확인
+        const contentType = response.headers.get('Content-Type');
+        if (contentType && contentType.startsWith('image/') && !imageFormat) {
+          // Content-Type에서 형식 추출 (image/jpeg -> jpeg)
+          const formatFromHeader = contentType.split('/')[1];
+          if (formatFromHeader) {
+            imageFormat = formatFromHeader.toLowerCase();
+            console.log(`[processNode] Content-Type에서 이미지 형식 감지: ${imageFormat}`);
+          }
+        }
+        
+        const blob = await response.blob();
+        
+        // Blob 타입에서 형식 확인 (우선순위 높음)
+        if (blob.type && blob.type.startsWith('image/') && (!imageFormat || blob.type !== `image/${imageFormat}`)) {
+          const formatFromBlob = blob.type.split('/')[1];
+          if (formatFromBlob) {
+            imageFormat = formatFromBlob.toLowerCase();
+            console.log(`[processNode] Blob 타입에서 이미지 형식 감지: ${imageFormat}`);
+          }
+        }
+        
+        // 적절한 파일 이름 구성 (형식 포함)
+        const fileName = imageFormat ? `image.${imageFormat}` : 'image.png';
+        
+        // FormData에 이미지와 파라미터 추가
+        formData.append('image', blob, fileName);
+        formData.append('params', JSON.stringify(params));
+        
+        // 명시적으로 형식 파라미터 추가 (필요한 경우)
+        // 이미지 변환 노드에서 원본 형식 보존을 위해 유용
+        if (imageFormat && ['resize', 'grayscale', 'crop', 'rotate', 'flip', 'brightness', 
+                             'contrast', 'blur', 'sharpen', 'threshold', 'edge', 'hue',
+                             'gamma', 'histogram_equalization', 'clahe', 'gaussian_blur',
+                             'median_filter', 'anisotropic_diffusion', 'normalize'].includes(nodeType)) {
+          formData.append('format', imageFormat);
+          console.log(`[processNode] 원본 이미지 형식 파라미터 추가: ${imageFormat}`);
+        }
+        
+        // 백엔드 API 호출 - 노드 타입에 맞는 엔드포인트 사용
+        const apiUrl = `http://localhost:8000/api/msa5/work/${nodeType}`;
+        
+        console.log(`[processNode] 요청 URL: ${apiUrl}, 파일명: ${fileName}`);
+        
+        const apiResponse = await fetch(apiUrl, {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!apiResponse.ok) {
+          const errorText = await apiResponse.text();
+          throw new Error(`API 응답 오류 (${apiResponse.status}): ${errorText}`);
+        }
+        
+        // 응답 헤더에서 Content-Type 확인
+        const responseContentType = apiResponse.headers.get('Content-Type');
+        let outputFormat = 'png'; // 기본값
+        
+        if (responseContentType) {
+          if (responseContentType.includes('image/jpeg')) {
+            outputFormat = 'jpg';
+          } else if (responseContentType.includes('image/png')) {
+            outputFormat = 'png';
+          } else if (responseContentType.includes('image/gif')) {
+            outputFormat = 'gif';
+          } else if (responseContentType.includes('image/webp')) {
+            outputFormat = 'webp';
+          }
+          console.log(`[processNode] 응답 Content-Type: ${responseContentType}, 감지된 출력 형식: ${outputFormat}`);
+        }
+        
+        // 응답에서 이미지 데이터 추출
+        const imageBlob = await apiResponse.blob();
+        
+        // Blob 타입을 확인하여 출력 형식 재확인
+        if (imageBlob.type && imageBlob.type.startsWith('image/')) {
+          const blobFormat = imageBlob.type.split('/')[1];
+          if (blobFormat) {
+            outputFormat = blobFormat.toLowerCase();
+            console.log(`[processNode] Blob에서 재확인된 출력 형식: ${outputFormat}`);
+          }
+        }
+        
+        // 적절한 확장자 포함하여 URL 생성
+        const processedImageUrl = URL.createObjectURL(imageBlob);
+        
+        console.log(`[processNode] 노드 ${node.id} 처리 완료, 출력 형식: ${outputFormat}`);
+        return processedImageUrl;
+      } catch (error) {
+        console.error(`[processNode] 노드 ${node.id} 처리 중 오류:`, error);
+        throw error;
+      }
+    }
+    
+    // 병합 노드 처리 함수
+    const processMergeNode = async (node) => {
+      try {
+        console.log(`[processMergeNode] 병합 노드 ${node.id} 처리 시작`);
+        
+        // 병합 노드로 들어오는 모든 엣지 찾기
+        const inputEdges = elements.value.filter(
+          el => el.type === 'smoothstep' && el.target === node.id
+        );
+        
+        // 각 입력에 대한 이미지 데이터 수집
+        const imagePromises = [];
+        
+        // 주요 이미지 형식 추적 (첫 번째 이미지를 기본으로 사용)
+        let primaryImageFormat = null;
+        
+        for (const edge of inputEdges) {
+          const sourceNodeId = edge.source;
+          const sourceImage = processedImages[sourceNodeId];
+          
+          if (sourceImage) {
+            // 이미지 URL에서 형식 추출 시도
+            try {
+              const fileExtMatch = sourceImage.match(/\.([^.?]+)(?:\?|$)/);
+              if (fileExtMatch && fileExtMatch[1]) {
+                // 첫 번째 이미지 형식을 추적
+                if (primaryImageFormat === null) {
+                  primaryImageFormat = fileExtMatch[1].toLowerCase();
+                  console.log(`[processMergeNode] 주요 이미지 형식 설정: ${primaryImageFormat}`);
+                }
+              }
+            } catch (e) {
+              console.warn(`[processMergeNode] 이미지 형식 추출 실패:`, e);
+            }
+            
+            // 이미지 데이터를 Blob으로 변환
+            const response = await fetch(sourceImage);
+            const blob = await response.blob();
+            
+            // Blob 타입에서 형식 확인 (더 정확함)
+            if (blob.type && blob.type.startsWith('image/')) {
+              const formatFromBlob = blob.type.split('/')[1];
+              // 주요 형식이 없으면 첫 번째 이미지의 형식을 사용
+              if (formatFromBlob && primaryImageFormat === null) {
+                primaryImageFormat = formatFromBlob.toLowerCase();
+                console.log(`[processMergeNode] Blob 타입에서 주요 이미지 형식 설정: ${primaryImageFormat}`);
+              }
+            }
+            
+            imagePromises.push({ sourceNodeId, blob });
+          }
+        }
+        
+        if (imagePromises.length < 2) {
+          console.error(`[processMergeNode] 병합 노드 ${node.id}에 충분한 입력 이미지가 없습니다.`);
+          throw new Error("병합에는 최소 2개의 이미지가 필요합니다.");
+        }
+        
+        // 파라미터 추출
+        const params = {};
+        if (node.data?.params) {
+          Object.entries(node.data.params).forEach(([key, param]) => {
+            params[key] = param.value;
+          });
+        }
+        
+        // FormData 생성
+        const formData = new FormData();
+        
+        // 각 이미지를 FormData에 추가
+        for (let i = 0; i < imagePromises.length; i++) {
+          const { sourceNodeId, blob } = imagePromises[i];
+          
+          // 이미지 형식을 포함한 파일 이름 사용
+          const imageFormat = blob.type && blob.type.startsWith('image/') 
+            ? blob.type.split('/')[1] 
+            : (primaryImageFormat || 'png');
+          
+          formData.append('images', blob, `image_${i}.${imageFormat}`);
+        }
+        
+        // 파라미터 추가
+        formData.append('params', JSON.stringify(params));
+        
+        // 원본 형식 전달 - 명시적으로 format 파라미터 추가
+        if (primaryImageFormat) {
+          formData.append('format', primaryImageFormat);
+          console.log(`[processMergeNode] 원본 이미지 형식 파라미터 추가: ${primaryImageFormat}`);
+        }
+        
+        console.log(`[processMergeNode] 병합 API 요청 준비, 출력 형식: ${primaryImageFormat || 'png'}`);
+        
+        // 백엔드 API 호출
+        const apiUrl = `http://localhost:8000/api/msa5/work/merge`;
+        const apiResponse = await fetch(apiUrl, {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!apiResponse.ok) {
+          const errorText = await apiResponse.text();
+          throw new Error(`병합 API 응답 오류 (${apiResponse.status}): ${errorText}`);
+        }
+        
+        // 응답 헤더에서 Content-Type 확인
+        const responseContentType = apiResponse.headers.get('Content-Type');
+        let outputFormat = primaryImageFormat || 'png'; // 기본적으로 입력 형식 유지
+        
+        if (responseContentType) {
+          if (responseContentType.includes('image/jpeg')) {
+            outputFormat = 'jpg';
+          } else if (responseContentType.includes('image/png')) {
+            outputFormat = 'png';
+          } else if (responseContentType.includes('image/gif')) {
+            outputFormat = 'gif';
+          } else if (responseContentType.includes('image/webp')) {
+            outputFormat = 'webp';
+          }
+          console.log(`[processMergeNode] 응답 Content-Type: ${responseContentType}, 감지된 출력 형식: ${outputFormat}`);
+        }
+        
+        // 응답에서 이미지 데이터 추출
+        const imageBlob = await apiResponse.blob();
+        
+        // Blob 타입 확인
+        if (imageBlob.type && imageBlob.type.startsWith('image/')) {
+          const blobFormat = imageBlob.type.split('/')[1];
+          if (blobFormat) {
+            outputFormat = blobFormat.toLowerCase();
+            console.log(`[processMergeNode] Blob에서 재확인된 출력 형식: ${outputFormat}`);
+          }
+        }
+        
+        const processedImageUrl = URL.createObjectURL(imageBlob);
+        
+        console.log(`[processMergeNode] 병합 노드 ${node.id} 처리 완료, 출력 형식: ${outputFormat}`);
+        return processedImageUrl;
+      } catch (error) {
+        console.error(`[processMergeNode] 병합 노드 ${node.id} 처리 중 오류:`, error);
+        throw error;
+      }
+    }
+    
     // 워크플로우 실제 처리 함수
     const processWorkflow = async () => {
       try {
-        console.log('워크플로우 처리 시작')
+        console.log('[processWorkflow] 워크플로우 처리 시작 ====================================');
+        console.log('[processWorkflow] 네트워크 상태 확인:', navigator.onLine ? '온라인' : '오프라인');
+        console.log('[processWorkflow] 백엔드 API 기본 URL: http://localhost:8000/api/msa5/work');
         
         // 처리 큐 초기화
-        processingQueue.value = []
+        const queue = []
+        const visited = new Set(['start']) // 시작 노드 방문 표시
         
-        // 시작 노드 처리
-        const startNode = elements.value.find(node => node.id === 'start')
-        if (!startNode) {
-          throw new Error('시작 노드를 찾을 수 없습니다')
+        // 입력 이미지 처리
+        processedImages['start'] = inputImage.value
+        
+        // 세션 스토리지에 시작 이미지 URL 저장
+        sessionStorage.setItem('msa5_start_image_url', inputImage.value);
+        console.log('MSA5: 세션 스토리지에 시작 이미지 URL 저장:', inputImage.value.substring(0, 30) + '...');
+        
+        // 연결 관계 확인 - 간선 처리 준비
+        const graph = {}
+        elements.value.filter(el => el.type !== 'smoothstep').forEach(node => {
+          graph[node.id] = []
+        })
+        
+        elements.value.filter(el => el.type === 'smoothstep').forEach(conn => {
+          if (!graph[conn.source]) graph[conn.source] = []
+          graph[conn.source].push(conn.target)
+        })
+        
+        console.log('[processWorkflow] 노드 그래프 구성:', graph);
+        
+        // BFS 큐 초기화 - 시작 노드의 모든 연결 추가
+        for (const nodeId of graph['start']) {
+          queue.push(nodeId)
         }
         
-        // 시작 노드에서 나가는 엣지 찾기
-        const startEdges = elements.value.filter(edge => 
-          edge.type === 'smoothstep' && edge.source === 'start'
-        )
-        
-        // 시작 이미지 확인
-        const startImage = processedImages['start']
-        if (!startImage) {
-          throw new Error('시작 이미지가 없습니다')
-        }
-        
-        // 처리 큐에 시작 엣지 추가
-        processingQueue.value.push(...startEdges)
-        console.log('처리 큐 초기화:', processingQueue.value.length, '개 엣지')
-        
-        // 큐에 있는 엣지 순서대로 처리
-        while (processingQueue.value.length > 0) {
-          const edge = processingQueue.value.shift()
-          console.log('현재 처리 중인 엣지:', edge.id)
+        // BFS 처리 - 레벨별로 모든 노드 처리
+        while (queue.length > 0) {
+          const batchSize = queue.length // 현재 레벨의 노드 수
+          const currentBatch = queue.splice(0, batchSize) // 현재 레벨의 노드 추출
           
-          const sourceNode = elements.value.find(node => node.id === edge.source)
-          const targetNode = elements.value.find(node => node.id === edge.target)
+          console.log(`[processWorkflow] 현재 처리 배치 (${currentBatch.length}개 노드):`, currentBatch);
           
-          if (!sourceNode || !targetNode) {
-            console.warn('엣지의 소스 또는 타겟 노드를 찾을 수 없습니다:', edge.id)
-            continue
-          }
+          // 현재 레벨의 노드 모두 병렬 처리
+          const processingPromises = []
           
-          // 이미 처리된 노드는 건너뜀
-          if (processedImages[targetNode.id]) {
-            console.log(`노드 ${targetNode.id}는 이미 처리되었습니다. 건너뜁니다.`)
-            continue
-          }
-          
-          // 소스 노드의 출력 이미지 확인
-          const sourceImage = processedImages[sourceNode.id]
-          if (!sourceImage) {
-            console.warn(`소스 노드 ${sourceNode.id}의 이미지가 없습니다`)
-            continue
-          }
-          
-          // 타겟 노드 처리
-          let processedImage = null
-          
-          if (targetNode.type === 'merge') {
-            // 병합 노드 특별 처리 - 모든 입력 확인
-            processedImage = await processMergeNode(targetNode)
-            if (!processedImage) {
-              console.log(`병합 노드 ${targetNode.id}는 아직 모든 입력이 준비되지 않았습니다`)
+          for (const nodeId of currentBatch) {
+            if (visited.has(nodeId)) continue // 이미 방문한 노드 건너뛰기
+            
+            const node = elements.value.find(el => el.id === nodeId)
+            if (!node) {
+              console.error(`[processWorkflow] 노드 ID ${nodeId}에 해당하는 노드가 없습니다.`);
               continue
             }
-          } else if (targetNode.id === 'end') {
-            // 종료 노드는 처리 없이 이미지 전달
-            processedImage = sourceImage
-            console.log('종료 노드 도달')
-          } else {
-            // 일반 노드 처리
-            processedImage = await processNode(targetNode, sourceImage)
-          }
-          
-          // 처리 결과 저장
-          processedImages[targetNode.id] = processedImage
-          console.log(`노드 ${targetNode.id} 처리 완료, 결과 저장됨`)
-          
-          // 다음 처리할 엣지 큐에 추가 (종료 노드가 아닌 경우)
-          if (targetNode.id !== 'end') {
-            const nextEdges = elements.value.filter(
-              e => e.type === 'smoothstep' && e.source === targetNode.id
+            
+            console.log(`[processWorkflow] 노드 처리 시작: ${nodeId}, 타입: ${node.data?.nodeId || node.data?.id}`);
+            
+            // 입력 이미지 찾기 - 노드로 들어오는 엣지의 소스 노드의 이미지
+            const inputEdges = elements.value.filter(
+              el => el.type === 'smoothstep' && el.target === nodeId
             )
             
-            nextEdges.forEach(nextEdge => {
-              if (!processingQueue.value.some(qEdge => qEdge.id === nextEdge.id)) {
-                processingQueue.value.push(nextEdge)
-              }
-            })
-            
-            console.log(`${nextEdges.length}개의 다음 엣지가 큐에 추가됨`)
-          }
-        }
-        
-        // 워크플로우 처리 완료
-        console.log('워크플로우 처리 완료')
-        
-        // 종료 노드 이미지 확인
-        const finalImage = processedImages['end']
-        if (finalImage) {
-          console.log('최종 처리 이미지 준비 완료')
-          
-          // 이벤트 발생 - 다른 컴포넌트로 이미지 전달
-          const imageProcessedEvent = new CustomEvent('msa5-image-processed', {
-            detail: { 
-              imageUrl: finalImage,
-              timestamp: new Date().toISOString()
+            if (inputEdges.length === 0) {
+              console.error(`[processWorkflow] 노드 ${nodeId}에 입력 연결이 없습니다.`);
+              continue
             }
-          })
+            
+            const sourceNodeId = inputEdges[0].source
+            const inputImage = processedImages[sourceNodeId]
+            
+            if (!inputImage) {
+              console.error(`[processWorkflow] 소스 노드 ${sourceNodeId}의 이미지가 없습니다.`);
+              continue
+            }
+            
+            // 실제 노드 타입에 따른 처리
+            let processingPromise;
+            
+            if (nodeId === 'end') {
+              // 종료 노드는 그대로 입력 이미지 전달
+              processingPromise = Promise.resolve(inputImage);
+              console.log(`[processWorkflow] 종료 노드 처리 - 이미지 전달`);
+            } else if (node.data?.nodeId === 'merge' || node.data?.id === 'merge') {
+              // 병합 노드 처리
+              console.log(`[processWorkflow] 병합 노드 처리 시작: ${nodeId}`);
+              processingPromise = processMergeNode(node);
+            } else {
+              // 일반 노드 처리
+              console.log(`[processWorkflow] 일반 노드 처리 시작: ${nodeId}, 타입: ${node.data?.nodeId || node.data?.id}`);
+              processingPromise = processNode(node, inputImage);
+            }
+            
+            // 노드 처리 결과를 저장
+            processingPromises.push(
+              processingPromise.then(processedImage => {
+                if (processedImage) {
+                  processedImages[nodeId] = processedImage;
+                  visited.add(nodeId);
+                  console.log(`[processWorkflow] 노드 ${nodeId} 처리 완료, 결과 이미지 저장됨`);
+                  
+                  // 다음 노드 큐에 추가
+                  for (const nextNodeId of graph[nodeId] || []) {
+                    if (!visited.has(nextNodeId)) {
+                      queue.push(nextNodeId);
+                    }
+                  }
+                } else {
+                  console.warn(`[processWorkflow] 노드 ${nodeId} 처리 결과가 없습니다.`);
+                }
+                return nodeId;
+              }).catch(error => {
+                console.error(`[processWorkflow] 노드 ${nodeId} 처리 중 오류 발생:`, error);
+                return null;
+              })
+            );
+          }
           
-          window.dispatchEvent(imageProcessedEvent)
-          console.log('이미지 처리 완료 이벤트 발송')
-          
-          hasOutput.value = true
-          statusMessage.value = '이미지 처리가 완료되었습니다!'
-        } else {
-          console.warn('최종 이미지가 없습니다')
-          statusMessage.value = '이미지 처리 중 오류가 발생했습니다'
-          hasOutput.value = false
+          // 현재 레벨의 모든 노드 처리 대기
+          console.log(`[processWorkflow] 현재 배치의 ${processingPromises.length}개 노드 처리 대기 중...`);
+          const results = await Promise.all(processingPromises);
+          console.log(`[processWorkflow] 배치 처리 완료, 결과:`, results.filter(Boolean));
         }
         
-        processingStatus.value = 'completed'
-        showStatusMessage.value = true
-        setTimeout(() => { showStatusMessage.value = false }, 3000)
+        console.log('[processWorkflow] 모든 노드 처리 완료');
+        console.log('[processWorkflow] 처리된 이미지:', Object.keys(processedImages));
         
+        // 최종 결과 처리 - 측정 결과가 있을 경우 MSA6으로 전달
+        if (processedImages['end']) {
+          console.log('[processWorkflow] 종료 노드의 이미지 데이터가 있습니다. 결과 전달 준비');
+          console.log('[processWorkflow] 최종 이미지 URL:', processedImages['end'].substring(0, 30) + '...');
+          
+          // 세션 스토리지에 시작 및 종료 이미지 URL 저장
+          sessionStorage.setItem('msa5_start_image_url', processedImages['start']);
+          sessionStorage.setItem('msa5_end_image_url', processedImages['end']);
+          console.log('[processWorkflow] 세션 스토리지에 이미지 URL 저장 완료 - 시작/종료 이미지');
+          
+          // MSA6에 이미지 전달 - 항상 이벤트 발생 (localStorage 체크 제거)
+          console.log('[processWorkflow] MSA6로 이미지 전달 이벤트 발생 시작');
+          
+          try {
+            // 이벤트 이름 변경: msa6:imageProcessed -> msa5-image-processed
+            const imageProcessedEvent = new CustomEvent('msa5-image-processed', {
+              detail: {
+                imageUrl: processedImages['end'],
+                timestamp: new Date().toISOString()
+              }
+            });
+            
+            // 이벤트 상세 정보 로깅
+            console.log('[processWorkflow] 이벤트 객체 생성됨:', {
+              name: 'msa5-image-processed',
+              detail: {
+                imageUrlPrefix: processedImages['end'].substring(0, 30) + '...',
+                timestamp: new Date().toISOString()
+              }
+            });
+            
+            // window 객체에 이벤트 발생
+            window.dispatchEvent(imageProcessedEvent);
+            console.log('[processWorkflow] window에 이벤트 발송 완료');
+            
+            // document 객체에도 이벤트 발생 (추가 시도)
+            document.dispatchEvent(imageProcessedEvent);
+            console.log('[processWorkflow] document에도 이벤트 발송 완료');
+            
+            // 기존 이벤트 이름으로도 시도 (호환성 유지)
+            const originalEvent = new CustomEvent('msa6:imageProcessed', {
+              detail: {
+                imageUrl: processedImages['end'],
+                timestamp: new Date().toISOString()
+              }
+            });
+            window.dispatchEvent(originalEvent);
+            document.dispatchEvent(originalEvent);
+            console.log('[processWorkflow] 기존 이벤트 이름(msa6:imageProcessed)으로도 발송 완료');
+          } catch (eventError) {
+            console.error('[processWorkflow] 이벤트 발송 중 오류:', eventError);
+          }
+          
+          hasOutput.value = true;
+          statusMessage.value = '이미지 처리가 완료되었습니다!';
+        } else {
+          console.warn('최종 이미지가 없습니다');
+          statusMessage.value = '이미지 처리 중 오류가 발생했습니다';
+          hasOutput.value = false;
+        }
+        
+        processingStatus.value = 'completed';
+        showStatusMessage.value = true;
+        setTimeout(() => { showStatusMessage.value = false }, 3000);
       } catch (error) {
-        console.error('워크플로우 처리 중 오류 발생:', error)
+        console.error('워크플로우 처리 중 오류 발생:', error);
         processingStatus.value = 'error'
         statusMessage.value = `처리 오류: ${error.message || '알 수 없는 오류'}`
         showStatusMessage.value = true
         setTimeout(() => { showStatusMessage.value = false }, 5000)
-        throw error; // 에러를 다시 던져서 상위 호출자가 처리할 수 있게 함
-      }
-    }
-    
-    // 일반 노드 처리 함수
-    const processNode = async (node, inputImage) => {
-      try {
-        console.log(`${node.data.id} 타입 노드 처리 시작`)
-        
-        // 실제 구현에서는 여기서 백엔드 API 호출하여 이미지 처리
-        // 예시 코드이므로 입력 이미지를 그대로 반환
-        
-        // 처리 지연 시뮬레이션 (실제 구현에서는 제거)
-        await new Promise(resolve => setTimeout(resolve, 500))
-        
-        console.log(`${node.data.id} 노드 처리 완료`)
-        return inputImage
-      } catch (error) {
-        console.error(`노드 처리 오류:`, error)
-        throw error
-      }
-    }
-    
-    // 병합 노드 특별 처리 함수
-    const processMergeNode = async (node) => {
-      try {
-        // 병합 노드로 들어오는 모든 입력 연결 찾기
-        const inputConnections = elements.value.filter(
-          el => el.type === 'smoothstep' && 
-               el.target === node.id && 
-               el.targetHandle?.startsWith('input-')
-        )
-        
-        if (inputConnections.length === 0) {
-          return null // 입력 연결 없음
-        }
-        
-        // 모든 입력 이미지 수집
-        const inputImages = []
-        let allInputsReady = true
-        
-        for (const conn of inputConnections) {
-          const sourceImage = processedImages[conn.source]
-          if (!sourceImage) {
-            // 하나라도 준비되지 않은 입력이 있으면 처리 불가
-            allInputsReady = false
-            break
-          }
-          inputImages.push(sourceImage)
-        }
-        
-        if (!allInputsReady) {
-          return null // 아직 모든 입력이 준비되지 않음
-        }
-        
-        console.log(`병합 노드 처리: ${inputImages.length}개 이미지 병합`)
-        
-        // 실제 구현에서는 여기서 백엔드 API 호출하여 이미지 병합
-        // 예시 코드이므로 첫 번째 입력 이미지를 그대로 반환
-        
-        // 처리 지연 시뮬레이션 (실제 구현에서는 제거)
-        await new Promise(resolve => setTimeout(resolve, 800))
-        
-        console.log('병합 처리 완료')
-        return inputImages[0]
-      } catch (error) {
-        console.error('병합 노드 처리 오류:', error)
-        throw error
-      }
-    }
-
-    // 노드의 기본 파라미터 반환
-    const getDefaultParams = (nodeId, defaults) => {
-      const nodeDefaults = defaults[nodeId] || {}
-      const params = {}
-      
-      // 노드 타입에 따른 기본 파라미터 설정
-      switch (nodeId) {
-        case 'resize':
-          params.width = { label: '너비', value: nodeDefaults.width || 100, min: 1, max: 5000, step: 1 }
-          params.height = { label: '높이', value: nodeDefaults.height || 100, min: 1, max: 5000, step: 1 }
-          break
-        case 'crop':
-          params.x = { label: 'X 좌표', value: nodeDefaults.x || 0, min: 0, max: 5000, step: 1 }
-          params.y = { label: 'Y 좌표', value: nodeDefaults.y || 0, min: 0, max: 5000, step: 1 }
-          params.width = { label: '너비', value: nodeDefaults.width || 100, min: 1, max: 5000, step: 1 }
-          params.height = { label: '높이', value: nodeDefaults.height || 100, min: 1, max: 5000, step: 1 }
-          break
-        case 'rotate':
-          params.angle = { label: '각도', value: nodeDefaults.angle || 0, min: -360, max: 360, step: 1 }
-          break
-        case 'brightness':
-          params.factor = { label: '밝기', value: nodeDefaults.factor || 1, min: 0, max: 3, step: 0.1 }
-          break
-        case 'blur':
-          params.radius = { label: '반경', value: nodeDefaults.radius || 5, min: 0, max: 20, step: 1 }
-          break
-        case 'merge':
-          params.merge_type = { 
-            label: '병합 방식', 
-            value: nodeDefaults.merge_type || 'horizontal',
-            options: ['horizontal', 'vertical', 'grid', 'overlay']
-          }
-          params.spacing = { label: '간격', value: nodeDefaults.spacing || 10, min: 0, max: 100, step: 1 }
-          break
-        default:
-          console.warn(`Node type "${nodeId}" has no default parameters defined.`)
-      }
-      
-      return params
-    }
-
-    // 백엔드에서 사용 가능한 노드 로드
-    const loadAvailableNodes = async () => {
-      isNodesLoading.value = true
-      try {
-        // 가상의 노드 목록 설정 (실제 구현에서는 백엔드에서 로드)
-        availableNodes.value = [
-          { id: 'resize', label: '크기 조정', icon: 'fas fa-expand' },
-          { id: 'crop', label: '이미지 자르기', icon: 'fas fa-crop' },
-          { id: 'rotate', label: '회전', icon: 'fas fa-sync' },
-          { id: 'brightness', label: '밝기 조정', icon: 'fas fa-sun' },
-          { id: 'blur', label: '블러 효과', icon: 'fas fa-blur' },
-          { id: 'merge', label: '이미지 병합', icon: 'fas fa-object-group' }
-        ]
-        
-        defaultOptions.value = {
-          resize: { width: 800, height: 600 },
-          crop: { x: 0, y: 0, width: 200, height: 200 },
-          rotate: { angle: 90 },
-          brightness: { factor: 1.2 },
-          blur: { radius: 5 },
-          merge: { merge_type: 'horizontal', spacing: 10 }
-        }
-        
-        // 초기 엘리먼트 설정
-        elements.value = [
-          { 
-            id: 'start', 
-            type: 'start', 
-            position: { x: 100, y: 100 }, 
-            data: { label: '시작' } 
-          },
-          { 
-            id: 'end', 
-            type: 'end', 
-            position: { x: 500, y: 300 }, 
-            data: { label: '종료' } 
-          }
-        ]
-      } catch (error) {
-        console.error('노드 로드 중 오류 발생:', error)
-        statusMessage.value = '노드 로드 중 오류가 발생했습니다.'
-        showStatusMessage.value = true
-        setTimeout(() => { showStatusMessage.value = false }, 3000)
-      } finally {
-        isNodesLoading.value = false
-      }
-    }
-
-    // 이미지 업데이트 핸들러
-    const handleImageUpdate = async (event) => {
-      console.log('MSA1에서 이미지 업데이트 이벤트 수신:', event)
-      
-      let imageUrl = null
-      
-      if (event.detail && event.detail.imageUrl) {
-        imageUrl = event.detail.imageUrl
-      }
-      
-      if (imageUrl) {
-        try {
-          // 이미지 설정
-          inputImage.value = imageUrl
-          processedImages['start'] = imageUrl
-          console.log('이미지 업데이트 완료')
-          
-          // 상태 메시지 표시
-          showStatusMessage.value = true;
-          statusMessage.value = 'MSA1에서 이미지 수신됨, 유사 이미지 검색 중...';
-          
-          // 벡터 DB에서 유사 이미지 검색 API 호출
-          const formData = new FormData();
-          
-          // Base64 이미지를 Blob으로 변환
-          const base64Response = await fetch(imageUrl);
-          const blob = await base64Response.blob();
-          
-          // 파일명 생성 (현재 시간 기준)
-          const filename = `search_${Date.now()}.png`;
-          
-          // FormData에 파일 추가
-          formData.append('file', blob, filename);
-          
-          // 유사 이미지 검색 API 호출
-          const response = await fetch('http://localhost:8000/api/msa5/upload-and-find-similar', {
-            method: 'POST',
-            body: formData
-          });
-          
-          if (!response.ok) {
-            throw new Error(`API 요청 실패: ${response.status}`);
-          }
-          
-          const result = await response.json();
-          
-          if (result.status === 'success') {
-            console.log('유사 이미지 검색 결과:', result);
-            
-            // 유사 이미지 결과를 MSA4로 전달
-            const similarEvent = new CustomEvent('msa5-to-msa4-similar-images', {
-              detail: {
-                originalImage: {
-                  url: imageUrl,
-                  filename: filename
-                },
-                similarImages: result.similar_images.map(img => ({
-                  ...img,
-                  url: img.url || img.image_url,  // URL 필드 확인
-                  image_url: img.image_url || img.url  // image_url 필드 확인
-                }))
-              }
-            });
-            
-            document.dispatchEvent(similarEvent);
-            
-            // 성공 메시지 표시
-            statusMessage.value = 'MSA1에서 이미지 수신 및 유사 이미지 검색 완료';
-          } else {
-            throw new Error(result.message || '유사 이미지를 찾을 수 없습니다.');
-          }
-        } catch (error) {
-          console.error('이미지 처리 또는 유사 이미지 검색 중 오류:', error);
-          statusMessage.value = `오류: ${error.message || '알 수 없는 오류'}`;
-        } finally {
-          // 몇 초 후 상태 메시지 숨김
-          setTimeout(() => {
-            showStatusMessage.value = false;
-          }, 3000);
-        }
-      }
-    }
-
-    // 노드 추가 시 히스토리 저장 추가
-    const onDrop = (event) => {
-      event.preventDefault()
-
-      const bounds = event.currentTarget.getBoundingClientRect()
-      const position = flowInstance.value.project({
-        x: event.clientX - bounds.left,
-        y: event.clientY - bounds.top
-      })
-
-      const nodeData = JSON.parse(event.dataTransfer.getData('application/vueflow'))
-
-      // 현재 상태 저장
-      saveToHistory()
-
-      const newNode = {
-        id: `${nodeData.id}-${Date.now()}`,
-        type: nodeData.id === 'merge' ? 'merge' : 'custom',
-        position,
-        data: {
-          id: nodeData.id,
-          label: nodeData.label,
-          icon: nodeData.icon,
-          params: getDefaultParams(nodeData.id, defaultOptions.value)
-        }
-      }
-      console.log("Dropped new node:", newNode)
-
-      elements.value.push(newNode)
-    }
-
-    // 연결 시 히스토리 저장 추가
-    const onConnect = (params) => {
-      const { source, target, sourceHandle, targetHandle } = params
-      if (isValidConnection(source, target, sourceHandle, targetHandle)) {
-        // 현재 상태 저장
-        saveToHistory()
-        
-        // 연결 생성
-        elements.value.push({
-          id: `e${source}-${target}${sourceHandle ? `-${sourceHandle}` : ''}${targetHandle ? `-${targetHandle}` : ''}`,
-          source,
-          target,
-          sourceHandle,
-          targetHandle,
-          type: 'smoothstep'
-        })
-        
-        // 입력/출력 연결 상태 업데이트
-        updateConnections()
-      }
-    }
-
-    // 유효한 연결인지 확인 (병합 노드의 경우 여러 입력 허용)
-    const isValidConnection = (source, target, sourceHandle, targetHandle) => {
-      if (source === target) return false
-      if (source === 'end') return false
-      if (target === 'start') return false
-      
-      // 이미 같은 연결이 있는지 확인
-      const existingConnection = elements.value.find(
-        el => el.type === 'smoothstep' && 
-        el.source === source && 
-        el.target === target &&
-        el.sourceHandle === sourceHandle &&
-        el.targetHandle === targetHandle
-      )
-      
-      // 병합 노드가 아닌 경우 한 개의 입력만 허용
-      const targetNode = elements.value.find(el => el.id === target)
-      if (targetNode && targetNode.type !== 'merge' && target !== 'end') {
-        const incomingConnections = elements.value.filter(
-          el => el.type === 'smoothstep' && el.target === target
-        )
-        
-        if (incomingConnections.length > 0) {
-          console.log('이미 입력이 있는 노드:', target)
-          return false
-        }
-      }
-      
-      return !existingConnection
-    }
-
-    // 워크플로우 저장 함수
-    const saveWorkflow = async () => {
-      if (!inputImage.value || elements.value.length < 3) {
-        showStatusMessage.value = true
-        statusMessage.value = '워크플로우를 저장하려면 입력 이미지와 최소 하나의 노드가 필요합니다.'
-        setTimeout(() => {
-          showStatusMessage.value = false
-        }, 3000)
-        return
-      }
-      
-      // 디버깅 로그 추가
-      console.log('MSA5: saveWorkflow 버튼 클릭됨');
-      
-      // 액션 로깅 데이터 준비
-      const logData = {
-        component: 'MSA5',
-        hasImage: !!inputImage.value,
-        hasResult: !!processedImages['end'],
-        nodeCount: elements.value.filter(el => el.type !== 'smoothstep').length - 2,
-        connectionCount: elements.value.filter(el => el.type === 'smoothstep').length
-      };
-      console.log('MSA5: 로그 데이터 준비됨:', logData);
-      
-      try {
-        // 액션 로깅 - 워크플로우 저장 시도
-        console.log('MSA5: LogService.logAction 호출 시작 - save_workflow');
-        const logResult = await LogService.logAction('save_workflow', logData);
-        console.log('MSA5: LogService.logAction 호출 완료:', logResult);
-      } catch (err) {
-        console.error('MSA5: 로그 저장 실패:', err);
-      }
-      
-      // 저장 다이얼로그 표시
-      showSaveWorkflowDialog.value = true
-      workflowName.value = currentImageTitle.value || ''
-      // 공백을 언더스코어로 변환
-      workflowName.value = workflowName.value.replace(/ /g, '_')
-      workflowDescription.value = ''
-      
-      // 다음 tick에 input에 포커스
-      nextTick(() => {
-        if (workflowNameInput.value) {
-          workflowNameInput.value.focus()
-        }
-      })
-    }
-    
-    // 저장 취소
-    const cancelSaveWorkflow = () => {
-      showSaveWorkflowDialog.value = false
-      workflowName.value = ''
-      workflowDescription.value = ''
-    }
-    
-    // 저장 확인 및 실제 저장 처리
-    const confirmSaveWorkflow = async () => {
-      if (!workflowName.value) {
-        return;
-      }
-      
-      // 이름에 공백이 있는지 확인
-      if (workflowName.value.includes(' ')) {
-        const originalName = workflowName.value;
-        workflowName.value = workflowName.value.replace(/ /g, '_');
-        
-        // 사용자에게 경고 메시지 표시
-        showStatusMessage.value = true;
-        statusMessage.value = `제목에 공백이 포함되어 있어 '${originalName}'에서 '${workflowName.value}'로 자동 변환되었습니다.`;
-        setTimeout(() => { showStatusMessage.value = false }, 3000);
-      }
-      
-      // 중복 이름 확인을 위해 API 호출
-      try {
-        // 중복 확인 API 호출
-        const checkResponse = await fetch('http://localhost:8000/api/external_storage/check-title', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ title: workflowName.value })
-        });
-        
-        const checkResult = await checkResponse.json();
-        
-        // 중복된 이름이 있는 경우
-        if (checkResult.status === 'duplicate_name') {
-          // 중복 경고 팝업 표시
-          showDuplicateNameWarning();
-          return;
-        }
-        
-        // 중복이 아닌 경우 계속 진행
-        showSaveWorkflowDialog.value = false;
-        
-        try {
-          console.log('워크플로우 저장 시작...');
-          
-          // 입력 이미지 확인
-          if (!inputImage.value) {
-            showStatusMessage.value = true;
-            statusMessage.value = '저장 실패: 입력 이미지가 없습니다.';
-            setTimeout(() => { showStatusMessage.value = false }, 3000);
-            console.error('워크플로우 저장 실패: 입력 이미지 없음');
-            return;
-          }
-          
-          // 이미지 URL에서 파일명 추출
-          const getFilenameFromUrl = (url) => {
-            return url.split('/').pop() || `image_${Date.now()}.png`;
-          };
-          
-          const inputFilename = getFilenameFromUrl(inputImage.value);
-          let outputFilename = processedImages['end'] ? getFilenameFromUrl(processedImages['end']) : '';
-          
-          // 세션 ID 생성
-          const sessionId = `workflow_${Date.now()}`;
-          
-          // 저장할 워크플로우 데이터 구성 - 이미지 데이터는 포함하지 않음
-          const workflowData = {
-            session_id: sessionId,
-            input_image_filename: inputFilename,
-            output_image_filename: outputFilename,
-            elements: elements.value,
-            workflow_name: workflowName.value,
-            workflow_description: workflowDescription.value,
-            image_title: currentImageTitle.value || '', // 빈 값으로 설정하여 서버에서 자동 생성되도록 함
-            timestamp: new Date().toISOString()
-          }
-          
-          console.log('워크플로우 데이터 구성 완료. API 요청 시작...');
-          
-          // 1. 원본 이미지를 external storage API로 저장
-          if (inputImage.value && processedImages['end']) {
-            try {
-              showStatusMessage.value = true;
-              statusMessage.value = '이미지 저장 중...';
-              
-              // API 요청 데이터 구성
-              const requestData = {
-                title: workflowName.value.replace(/ /g, '_'),  // 공백을 언더스코어(_)로 변경
-                description: workflowDescription.value || '',
-                before_image: inputImage.value,
-                after_image: processedImages['end'],
-                workflow_id: sessionId,
-                tags: ['lcnc', '이미지 처리']
-              };
-              
-              // 외부 이미지 저장 API 호출
-              const extResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(requestData)
-              });
-              
-              if (extResponse.ok) {
-                const extResult = await extResponse.json();
-                console.log('이미지 저장 결과:', extResult);
-                
-                // 경고 메시지가 있는 경우 표시
-                if (extResult.warning) {
-                  showStatusMessage.value = true;
-                  statusMessage.value = extResult.warning;
-                  setTimeout(() => { showStatusMessage.value = false }, 4000);
-                }
-                
-                // 실제 저장된 이미지 URL 또는 파일명을 워크플로우 데이터에 추가
-                if (extResult.image_data) {
-                  workflowData.before_image_url = extResult.image_data.before_url;
-                  workflowData.after_image_url = extResult.image_data.after_url;
-                  
-                  // 파일명을 업데이트
-                  const beforeFilename = extResult.image_data.before_url.split('/').pop();
-                  const afterFilename = extResult.image_data.after_url.split('/').pop();
-                  
-                  if (beforeFilename) workflowData.input_image_filename = beforeFilename;
-                  if (afterFilename) workflowData.output_image_filename = afterFilename;
-                }
-              }
-            } catch (extError) {
-              console.error('이미지 저장 중 오류 발생:', extError);
-              // 이미지 저장 실패를 알리지만 워크플로우 저장은 계속 진행
-              showStatusMessage.value = true;
-              statusMessage.value = '이미지 저장 중 오류가 발생했지만 워크플로우 저장을 진행합니다.';
-            }
-          }
-          
-          // 2. 워크플로우 데이터를 MongoDB에 저장
-          const response = await fetch('http://localhost:8000/api/msa5/save-workflow', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(workflowData)
-          });
-          
-          if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`워크플로우 저장 실패: ${response.status} ${response.statusText} - ${errorText}`);
-          }
-          
-          const result = await response.json();
-          console.log('API 응답 받음:', result);
-          
-          if (result.status === 'success') {
-            // 경고 메시지가 있는 경우 표시
-            if (result.warning) {
-              showStatusMessage.value = true;
-              statusMessage.value = result.warning;
-              setTimeout(() => { showStatusMessage.value = false }, 4000);
-            } else {
-              // 성공 메시지 표시
-              showStatusMessage.value = true;
-              statusMessage.value = '워크플로우가 성공적으로 저장되었습니다!';
-              setTimeout(() => {
-                showStatusMessage.value = false;
-              }, 3000);
-            }
-            
-            // 세션 ID를 localStorage에 저장 (측정 결과 저장 시 사용)
-            localStorage.setItem('current_workflow_session_id', workflowData.session_id);
-            
-            // 저장된 워크플로우 목록 업데이트
-            const imageHash = await calculateImageHash(inputImage.value);
-            savedWorkflows.value[imageHash] = {
-              session_id: workflowData.session_id,
-              workflow_name: workflowData.workflow_name,
-              image_title: currentImageTitle.value,
-              timestamp: workflowData.timestamp
-            }
-          } else {
-            throw new Error(result.message || '서버에서 저장 실패 응답을 반환했습니다.');
-          }
-          
-        } catch (error) {
-          console.error('워크플로우 저장 중 오류 발생:', error);
-          showStatusMessage.value = true;
-          statusMessage.value = `워크플로우 저장 실패: ${error.message}`;
-          setTimeout(() => {
-            showStatusMessage.value = false;
-          }, 5000);
-        }
-      } catch (error) {
-        console.error('중복 이름 확인 중 오류:', error);
-        showStatusMessage.value = true;
-        statusMessage.value = `중복 이름 확인 실패: ${error.message}`;
-        setTimeout(() => {
-          showStatusMessage.value = false;
-        }, 5000);
       }
     }
 
@@ -1808,117 +1652,56 @@ export default {
       }
     }
     
-    // MSA4에서 이미지 데이터 받기 - 이벤트 리스너
-    onMounted(() => {
-      // 이벤트 리스너 등록 - MSA4에서 이미지 선택 시 호출
-      document.addEventListener('msa4-to-msa5-image', handleImageUpdate)
-      
-      // MSA1에서 이미지 선택 시 호출되는 이벤트 리스너 추가
-      document.addEventListener('msa1-to-msa5-image', handleImageUpdate)
-      
-      // 워크플로우 이벤트 리스너 등록 - MSA4에서 워크플로우 불러오기 선택 시 호출
-      document.addEventListener('msa4-to-msa5-workflow', handleWorkflowFromMSA4)
-      
-      // 노드 목록 로드
-      loadAvailableNodes()
-      
-      // 워크플로우 처리 완료 플래그 초기화
-      localStorage.removeItem('msa5_workflow_completed');
-      console.log('MSA5 마운트: 워크플로우 처리 완료 플래그 초기화됨');
-    })
-
-    onUnmounted(() => {
-      // 이벤트 리스너 제거
-      document.removeEventListener('msa4-to-msa5-image', handleImageUpdate)
-      document.removeEventListener('msa1-to-msa5-image', handleImageUpdate)
-      document.removeEventListener('msa4-to-msa5-workflow', handleWorkflowFromMSA4)
-    })
-    
-    // 워크플로우 데이터 로드 및 적용
-    const loadWorkflow = (workflowData) => {
-      if (!workflowData || !workflowData.nodes) {
-        console.error('유효하지 않은 워크플로우 데이터:', workflowData)
-        showStatusMessage.value = true
-        statusMessage.value = '워크플로우 데이터가 유효하지 않습니다.'
-        setTimeout(() => {
-          showStatusMessage.value = false
-        }, 3000)
-        return
-      }
-      
+    // MSA4나 MSA1에서 이미지 데이터 받기 - 이벤트 핸들러
+    const handleImageUpdate = (event) => {
       try {
-        // 기존 요소 초기화
-        elements.value = []
+        console.log('MSA5: 이미지 이벤트 수신', event.type);
         
-        // 시작 노드 추가
-        elements.value.push({
-          id: 'start',
-          type: 'start',
-          position: { x: 50, y: 100 }
-        })
+        // 이벤트 데이터 추출
+        const data = event.detail;
         
-        // 종료 노드 추가
-        elements.value.push({
-          id: 'end',
-          type: 'end',
-          position: { x: 400, y: 100 }
-        })
+        if (!data) {
+          console.warn('MSA5: 이벤트에 데이터가 없습니다');
+          return;
+        }
         
-        // 워크플로우 노드 추가
-        let x = 150
-        let y = 100
+        // 이미지 URL과 제목 추출
+        const imageUrl = data.imageUrl || data.url || data.image;
+        const imageTitle = data.imageTitle || data.title || data.name || '';
         
-        // 노드 데이터 로드
-        const loadedNodes = []
+        if (!imageUrl) {
+          console.warn('MSA5: 이벤트에 이미지 URL이 없습니다');
+          return;
+        }
         
-        workflowData.nodes.forEach((node, index) => {
-          // 노드 위치 계산
-          const nodePosition = node.position || { x: x + index * 100, y }
-          
-          // 노드 생성
-          const newNode = {
-            id: node.id || `node_${index}`,
-            type: node.type || 'custom',
-            label: node.label || '처리 노드',
-            position: nodePosition,
-            data: {
-              label: node.label || '처리 노드',
-              icon: node.icon || 'fas fa-cog',
-              params: {},  // 파라미터는 별도로 처리
-            }
-          }
-          
-          // 노드 파라미터 복원
-          const params = {}
-          Object.keys(node).forEach(key => {
-            // id, label, position 등 기본 속성은 제외
-            if (!['id', 'label', 'position', 'type', 'icon'].includes(key)) {
-              params[key] = node[key]
-            }
-          })
-          
-          newNode.data.params = params
-          loadedNodes.push(newNode)
-        })
+        console.log(`MSA5: 이미지 수신 - URL: ${imageUrl.substring(0, 30)}..., 제목: ${imageTitle}`);
         
-        // 로드된 노드를 elements에 추가
-        elements.value = [...elements.value, ...loadedNodes]
+        // 이미지 설정
+        setImage(imageUrl, imageTitle);
         
-        // 성공 메시지 표시
-        showStatusMessage.value = true
-        statusMessage.value = '워크플로우를 성공적으로 불러왔습니다!'
-        setTimeout(() => {
-          showStatusMessage.value = false
-        }, 3000)
+        // processedImages에 시작 이미지로 설정
+        processedImages['start'] = imageUrl;
         
+        // 세션 스토리지에 시작 이미지 URL 저장
+        sessionStorage.setItem('msa5_start_image_url', imageUrl);
+        console.log('MSA5: 세션 스토리지에 시작 이미지 URL 저장:', imageUrl.substring(0, 30) + '...');
+        
+        // 이벤트 타입에 따른 추가 처리
+        if (event.type === 'msa4-to-msa5-image') {
+          console.log('MSA5: MSA4에서 이미지 수신됨');
+        } else if (event.type === 'msa1-to-msa5-image') {
+          // MSA1에서 온 경우 특별한 처리 (있다면)
+          console.log('MSA5: MSA1에서 이미지 수신됨');
+        }
       } catch (error) {
-        console.error('워크플로우 로드 중 오류:', error)
-        showStatusMessage.value = true
-        statusMessage.value = `워크플로우 로드 실패: ${error.message}`
-        setTimeout(() => {
-          showStatusMessage.value = false
-        }, 3000)
+        console.error('MSA5: 이미지 업데이트 처리 중 오류 발생', error);
       }
+    }
+
+    // 워크플로우 저장 관련 함수
+    const saveWorkflow = async () => {
+      // 워크플로우 저장 UI 표시
+      showSaveWorkflowDialog.value = true
     }
 
     // 워크플로우 노드 요약 정보 반환
@@ -2244,7 +2027,7 @@ export default {
                 tags: ['lcnc', '이미지 처리']
               };
               
-              // 외부 이미지 저장 API 호출
+              // 외부 이미지 저장 API 호출 - 이 API는 이제 파일만 저장하고 MongoDB에는 저장하지 않음
               const extResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
                 method: 'POST',
                 headers: {
@@ -2296,6 +2079,44 @@ export default {
           
           if (!response.ok) {
             const errorText = await response.text();
+            
+            // 409 Conflict 오류 처리 (중복 워크플로우 이름)
+            if (response.status === 409) {
+              try {
+                const errorData = JSON.parse(errorText);
+                if (errorData.status === 'duplicate') {
+                  console.log('중복된 워크플로우 이름 감지됨:', errorData);
+                  // 중복 오류 상태 설정
+                  showDuplicateNameError.value = true;
+                  
+                  // 중복 경고 메시지 표시 (기존 input에 error 클래스 추가)
+                  if (newWorkflowNameInput.value) {
+                    newWorkflowNameInput.value.classList.add('input-error');
+                    
+                    // 애니메이션 효과를 위해 timeout 후 클래스 제거
+                    setTimeout(() => {
+                      if (newWorkflowNameInput.value) {
+                        newWorkflowNameInput.value.classList.remove('input-error');
+                      }
+                    }, 2000);
+                  }
+                  
+                  // 중복 경고 메시지를 대화 상자 내에 표시
+                  statusMessage.value = '해당 이름도 중복됩니다. 다른 이름을 입력하세요.';
+                  showStatusMessage.value = true;
+                  
+                  // 약간의 지연 후 메시지 숨김
+                  setTimeout(() => { 
+                    showStatusMessage.value = false;
+                  }, 3000);
+                  
+                  return;
+                }
+              } catch (jsonError) {
+                console.error('중복 오류 응답 파싱 실패:', jsonError);
+              }
+            }
+            
             throw new Error(`워크플로우 저장 실패: ${response.status} ${response.statusText} - ${errorText}`);
           }
           
@@ -2482,208 +2303,524 @@ export default {
       }, delay)
     }
 
-    // 파일 업로드 또는 이미지 선택 부분을 찾아 수정
-    const handleImageUpload = (event) => {
-      // 기존 코드
-      const file = event.target.files[0];
-      if (!file) return;
+    // 워크플로우 초기화 메소드
+    const initializeWorkflow = () => {
+      // 캔버스 초기화
+      clearCanvas()
       
-      // 이미지 파일 체크
-      if (!file.type.match('image.*')) {
-        alert('이미지 파일만 업로드 가능합니다.');
+      // 워크플로우 요소 및 이미지 초기화
+      elements.value = initialElements
+      processedImages = {}
+      
+      // 세션 스토리지에서 MSA5 종료 이미지 상태 초기화
+      sessionStorage.removeItem('msa5_end_image')
+      sessionStorage.removeItem('msa5_processing')
+      console.log('MSA5: 워크플로우 초기화, 종료 이미지 상태 초기화됨')
+      
+      // 그리드 재설정
+      nextTick(() => {
+        setupGrid()
+      })
+    }
+
+    // 백엔드에서 사용 가능한 노드 로드
+    const loadAvailableNodes = async () => {
+      isNodesLoading.value = true
+      console.log('===============================================');
+      console.log('【노드 목록 로드 시작...】');
+      console.log('===============================================');
+      
+      try {
+        // 백엔드 API에서 노드 목록 로드 시도
+        const apiUrl = 'http://localhost:8000/api/msa5/nodes';
+        console.log(`API 호출 URL: ${apiUrl}`);
+        
+        // fetch API 호출 전에 로그 출력
+        console.time('API 호출 시간');
+        
+        try {
+          const response = await fetch(apiUrl);
+          console.timeEnd('API 호출 시간');
+          
+          console.log('API 응답 상태코드:', response.status);
+          
+          if (response.ok) {
+            try {
+              const data = await response.json();
+              console.log('API 응답 데이터:', data);
+              
+              if (data.options && Array.isArray(data.options)) {
+                console.log(`노드 데이터 개수: ${data.options.length}`);
+                availableNodes.value = data.options;
+                
+                // 기본 옵션 설정 - 이 부분을 수정하여 백엔드에서 받은 defaultOptions 사용
+                if (data.defaultOptions) {
+                  defaultOptions.value = data.defaultOptions;
+                  console.log('기본 옵션 설정 완료:', defaultOptions.value);
+                }
+                
+                console.log('노드 목록 업데이트 완료:', availableNodes.value);
+              } else {
+                console.warn('❌ 백엔드 응답에 options 배열이 없거나 형식이 맞지 않습니다:', data);
+                console.warn('기본 노드 목록을 사용합니다.');
+                useDefaultNodes();
+              }
+            } catch (parseError) {
+              console.error('❌ JSON 파싱 오류:', parseError);
+              console.warn('JSON 파싱에 실패했습니다. 기본 노드 목록을 사용합니다.');
+              useDefaultNodes();
+            }
+          } else {
+            console.error(`❌ API 요청 실패: ${response.status} ${response.statusText}`);
+            const errorText = await response.text();
+            console.error('오류 응답 내용:', errorText);
+            console.warn('API 요청이 실패했습니다. 기본 노드 목록을 사용합니다.');
+            useDefaultNodes();
+          }
+        } catch (fetchError) {
+          console.timeEnd('API 호출 시간');
+          console.error('❌ fetch 호출 오류:', fetchError);
+          console.error('오류 세부 정보:', {
+            name: fetchError.name,
+            message: fetchError.message,
+            stack: fetchError.stack
+          });
+          console.warn('백엔드 연결에 실패했습니다. 기본 노드 목록을 사용합니다.');
+          useDefaultNodes();
+        }
+      } finally {
+        // 노드 로드 후 초기 요소 설정
+        initializeElements();
+        
+        // 노드 목록이 로드되면 로딩 상태 해제
+        isNodesLoading.value = false;
+        console.log('노드 로딩 상태 업데이트:', isNodesLoading.value);
+        console.log('===============================================');
+        console.log('【노드 목록 로드 완료】');
+        console.log('===============================================');
+      }
+    }
+    
+    // 기본 노드 설정 함수
+    const useDefaultNodes = () => {
+      // 가상의 노드 목록 설정 (백엔드 API 오류 시 대체)
+      availableNodes.value = [
+        { id: 'resize', label: '크기 조정', icon: 'fas fa-expand' },
+        { id: 'crop', label: '이미지 자르기', icon: 'fas fa-crop' },
+        { id: 'rotate', label: '회전', icon: 'fas fa-sync' },
+        { id: 'brightness', label: '밝기 조정', icon: 'fas fa-sun' },
+        { id: 'blur', label: '블러 효과', icon: 'fas fa-blur' },
+        { id: 'merge', label: '이미지 병합', icon: 'fas fa-object-group' },
+        { id: 'object_detection', label: '객체 감지', icon: 'fas fa-search' },
+        { id: 'style_transfer', label: '스타일 변환', icon: 'fas fa-paint-brush' }
+      ]
+      
+      defaultOptions.value = {
+        resize: { width: 800, height: 600 },
+        crop: { x: 0, y: 0, width: 200, height: 200 },
+        rotate: { angle: 90 },
+        brightness: { factor: 1.2 },
+        blur: { radius: 5 },
+        merge: { merge_type: 'horizontal', spacing: 10 },
+        object_detection: { confidence: 0.5 },
+        style_transfer: { style_strength: 0.8 }
+      }
+      
+      console.log('기본 노드 목록 설정 완료:', availableNodes.value);
+    }
+    
+    // 초기 엘리먼트 설정
+    const initializeElements = () => {
+      elements.value = [
+        { 
+          id: 'start', 
+          type: 'start', 
+          position: { x: 100, y: 100 }, 
+          data: { label: '시작' } 
+        },
+        { 
+          id: 'end', 
+          type: 'end', 
+          position: { x: 500, y: 300 }, 
+          data: { label: '종료' } 
+        }
+      ]
+    }
+
+    // MSA4에서 이미지 데이터 받기 - 이벤트 리스너
+    onMounted(() => {
+      // 이벤트 리스너 등록 - MSA4에서 이미지 선택 시 호출
+      document.addEventListener('msa4-to-msa5-image', handleImageUpdate)
+      
+      // MSA1에서 이미지 선택 시 호출되는 이벤트 리스너 추가
+      document.addEventListener('msa1-to-msa5-image', handleImageUpdate)
+      
+      // 워크플로우 이벤트 리스너 등록 - MSA4에서 워크플로우 불러오기 선택 시 호출
+      document.addEventListener('msa4-to-msa5-workflow', handleWorkflowFromMSA4)
+      
+      // 노드 목록 로드
+      loadAvailableNodes()
+      
+      // 페이지 새로고침 시 MSA5 상태 초기화
+      sessionStorage.removeItem('msa5_end_image')
+      sessionStorage.removeItem('msa5_processing')
+      console.log('MSA5: 컴포넌트 마운트 시 상태 초기화됨')
+      
+      // 기본 워크플로우 로드
+      loadDefaultWorkflow()
+      
+      // 키보드 이벤트 리스너 추가
+      window.addEventListener('keydown', handleKeyDown)
+      
+      // 워크플로우 저장 목록 로드
+      loadSavedWorkflows()
+    })
+
+    // 노드 연결 이벤트 핸들러
+    const onConnect = (params) => {
+      // 유효한 연결인지 확인
+      if (!params.source || !params.target) {
+        console.warn('유효하지 않은 연결 파라미터:', params);
         return;
       }
       
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        inputImage.value = e.target.result;
+      // 변경 전 상태 저장 (실행 취소 지원)
+      saveToHistory();
+      
+      // 연결선 ID 생성
+      const id = `e_${params.source}_${params.target}_${Date.now()}`;
+      
+      // 새 연결 생성
+      const newEdge = {
+        id,
+        source: params.source,
+        target: params.target,
+        type: 'smoothstep',
+        sourceHandle: params.sourceHandle,
+        targetHandle: params.targetHandle
+      };
+      
+      // 연결선 추가
+      elements.value = [...elements.value, newEdge];
+      
+      // 연결 상태 업데이트
+      updateConnections();
+      
+      console.log(`연결 생성됨: ${params.source} -> ${params.target}`)
+    }
+    
+    // 기본 워크플로우 로드
+    const loadDefaultWorkflow = () => {
+      try {
+        // 로컬 스토리지에서 저장된 워크플로우 확인
+        const storedWorkflow = localStorage.getItem('msa5_last_workflow');
         
-        // 시작 이미지를 localStorage에 저장
-        localStorage.setItem('msa5_start_image', inputImage.value);
-        console.log('시작 이미지 저장됨 (업로드)');
-        
-        // 워크플로우 처리 완료 플래그 초기화
-        localStorage.removeItem('msa5_workflow_completed');
-        console.log('이미지 업로드: 워크플로우 처리 완료 플래그 초기화됨');
-        
-        // 현재 워크플로우 초기화 (시작 이미지만 설정)
-        processedImages.start = inputImage.value;
-        
-        // start 노드에 이미지 표시
-        const startNode = elements.value.find(el => el.type === 'start');
-        if (startNode) {
-          hasInput.value = true;
+        if (storedWorkflow) {
+          try {
+            // 저장된 워크플로우 파싱 및 로드
+            const workflow = JSON.parse(storedWorkflow);
+            if (workflow && Array.isArray(workflow.elements) && workflow.elements.length > 0) {
+              elements.value = workflow.elements;
+              console.log('마지막으로 저장된 워크플로우를 로드했습니다.');
+              return;
+            }
+          } catch (parseError) {
+            console.error('저장된 워크플로우 파싱 오류:', parseError);
+          }
         }
         
-        // 기존 종료 이미지 초기화
-        delete processedImages.end;
+        // 저장된 워크플로우가 없거나 로드 실패 시 기본 워크플로우 사용
+        console.log('기본 워크플로우를 초기화합니다.');
+        initializeElements();
+      } catch (error) {
+        console.error('워크플로우 로드 중 오류 발생:', error);
+        // 오류 발생 시 기본 요소로 초기화
+        initializeElements();
+      }
+    }
+    
+    // 저장된 워크플로우 목록 로드
+    const loadSavedWorkflows = async () => {
+      try {
+        console.log('워크플로우 저장 목록 초기화');
+        // Note: We're removing the API call to /api/msa5/get-workflows since it returns 404
+        // Instead, just initialize the savedWorkflows with an empty object
+        savedWorkflows.value = {};
+      } catch (error) {
+        console.error('저장된 워크플로우 목록 초기화 중 오류:', error);
+      }
+    }
+    
+    // 워크플로우 저장 취소
+    const cancelSaveWorkflow = () => {
+      showSaveWorkflowDialog.value = false;
+      workflowName.value = '';
+      workflowDescription.value = '';
+    }
+    
+    // 워크플로우 저장 확인
+    const confirmSaveWorkflow = async () => {
+      if (!workflowName.value) {
+        showStatusMessage.value = true;
+        statusMessage.value = '워크플로우 이름을 입력하세요.';
+        setTimeout(() => { showStatusMessage.value = false }, 3000);
         
-        // 로그 저장 - 이미지 업로드
-        LogService.logAction('upload_image', {
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type
+        // 입력 필드에 포커스
+        if (workflowNameInput.value) {
+          workflowNameInput.value.focus();
+        }
+        return;
+      }
+      
+      // 중복 이름 확인을 위해 API 호출
+      try {
+        // 중복 확인 API 호출
+        const checkResponse = await fetch('http://localhost:8000/api/external_storage/check-title', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ title: workflowName.value })
         });
-      };
-      reader.readAsDataURL(file);
-    };
-
-    // 1. showWorkflowError 함수를 추가합니다 (validateWorkflow 함수 아래에)
-    // 워크플로우 오류 표시 함수
-    const showWorkflowError = (title, message, details = '') => {
-      workflowErrorTitle.value = title;
-      workflowErrorMessage.value = message;
-      workflowErrorDetails.value = details;
-      showWorkflowErrorDialog.value = true;
-    };
-
-    // 워크플로우 파싱 함수 추가
-    const parseWorkflow = (elements) => {
-      console.log('워크플로우 파싱 시작');
-      
-      // 유효성 검증
-      const validation = validateWorkflow();
-      if (!validation.valid) {
-        console.error('워크플로우 유효성 검증 실패:', validation.message);
-        throw new Error(validation.message);
-      }
-      
-      // 노드와 엣지 분리
-      const nodes = elements.filter(el => el.type !== 'smoothstep');
-      const edges = elements.filter(el => el.type === 'smoothstep');
-      
-      // 그래프 구성
-      const graph = {};
-      nodes.forEach(node => {
-        graph[node.id] = {
-          id: node.id,
-          type: node.type,
-          data: node.data || {},
-          outgoing: [],
-          incoming: []
-        };
-      });
-      
-      // 엣지 정보 추가
-      edges.forEach(edge => {
-        if (graph[edge.source]) {
-          graph[edge.source].outgoing.push({
-            target: edge.target,
-            id: edge.id,
-            sourceHandle: edge.sourceHandle,
-            targetHandle: edge.targetHandle
-          });
+        
+        const checkResult = await checkResponse.json();
+        
+        // 중복된 이름이 있는 경우
+        if (checkResult.status === 'duplicate_name') {
+          showDuplicateNameWarning();
+          return;
         }
         
-        if (graph[edge.target]) {
-          graph[edge.target].incoming.push({
-            source: edge.source,
-            id: edge.id,
-            sourceHandle: edge.sourceHandle,
-            targetHandle: edge.targetHandle
-          });
-        }
-      });
-      
-      // 실행 경로 찾기
-      const path = findProcessingPath();
-      if (!path) {
-        throw new Error('워크플로우 처리 경로를 찾을 수 없습니다');
-      }
-      
-      console.log('워크플로우 파싱 완료:', {
-        nodeCount: nodes.length,
-        edgeCount: edges.length,
-        pathLength: path.length
-      });
-      
-      return {
-        nodes: graph,
-        path: path
-      };
-    };
-
-    // 워크플로우 실행 함수 추가
-    const runWorkflow = async (workflow) => {
-      console.log('워크플로우 실행 시작:', workflow);
-      
-      // 경로에 따라 노드 처리
-      for (const nodeId of workflow.path) {
-        console.log(`노드 처리 중: ${nodeId}`);
+        // 중복이 아닌 경우 저장 진행
+        showSaveWorkflowDialog.value = false;
         
-        const node = workflow.nodes[nodeId];
-        
-        if (nodeId === 'start') {
-          // 시작 노드는 이미 설정된 입력 이미지 사용
-          processedImages[nodeId] = inputImage.value;
-          console.log('시작 노드 처리 완료 (입력 이미지 설정)');
-          continue;
-        }
-        
-        if (nodeId === 'end') {
-          // 종료 노드는 직전 노드의 출력을 그대로 사용
-          const incomingEdge = node.incoming[0];
-          if (!incomingEdge) {
-            throw new Error('종료 노드에 연결된 입력이 없습니다');
+        try {
+          console.log('워크플로우 저장 시작...');
+          
+          // 입력 이미지 확인
+          if (!inputImage.value) {
+            showStatusMessage.value = true;
+            statusMessage.value = '저장 실패: 입력 이미지가 없습니다.';
+            setTimeout(() => { showStatusMessage.value = false }, 3000);
+            console.error('워크플로우 저장 실패: 입력 이미지 없음');
+            return;
           }
           
-          const sourceNodeId = incomingEdge.source;
-          const sourceImage = processedImages[sourceNodeId];
+          // 이미지 URL에서 파일명 추출
+          const getFilenameFromUrl = (url) => {
+            return url.split('/').pop() || `image_${Date.now()}.png`;
+          };
           
-          if (!sourceImage) {
-            throw new Error(`종료 노드의 입력 이미지가 없습니다 (소스: ${sourceNodeId})`);
+          const inputFilename = getFilenameFromUrl(inputImage.value);
+          let outputFilename = processedImages['end'] ? getFilenameFromUrl(processedImages['end']) : '';
+          
+          // 세션 ID 생성
+          const sessionId = `workflow_${Date.now()}`;
+          
+          // 저장할 워크플로우 데이터 구성 - 이미지 데이터는 포함하지 않음
+          const workflowData = {
+            session_id: sessionId,
+            input_image_filename: inputFilename,
+            output_image_filename: outputFilename,
+            elements: elements.value,
+            workflow_name: workflowName.value,
+            workflow_description: workflowDescription.value,
+            image_title: currentImageTitle.value || '', // 빈 값으로 설정하여 서버에서 자동 생성되도록 함
+            timestamp: new Date().toISOString()
           }
           
-          processedImages[nodeId] = sourceImage;
-          console.log('종료 노드 처리 완료 (이전 노드 이미지 사용)');
-          continue;
-        }
-        
-        // 일반 노드 또는 병합 노드 처리
-        if (node.type === 'merge' || (node.data && node.data.id === 'merge')) {
-          // 병합 노드 처리
-          const inputImages = [];
+          console.log('워크플로우 데이터 구성 완료. API 요청 시작...');
           
-          for (const incomingEdge of node.incoming) {
-            const sourceNodeId = incomingEdge.source;
-            const sourceImage = processedImages[sourceNodeId];
+          // 이미지와 워크플로우 정보를 external storage API로 저장
+          if (inputImage.value && processedImages['end']) {
+            try {
+              showStatusMessage.value = true;
+              statusMessage.value = '이미지 저장 중...';
+              
+              // API 요청 데이터 구성
+              const requestData = {
+                title: workflowName.value.replace(/ /g, '_'),  // 공백을 언더스코어(_)로 변경
+                description: workflowDescription.value || '',
+                before_image: inputImage.value,
+                after_image: processedImages['end'],
+                workflow_id: sessionId,
+                tags: ['lcnc', '이미지 처리']
+              };
+              
+              // 외부 이미지 저장 API 호출 - 이 API는 이제 파일만 저장하고 MongoDB에는 저장하지 않음
+              const extResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestData)
+              });
+              
+              if (extResponse.ok) {
+                const extResult = await extResponse.json();
+                console.log('이미지 저장 결과:', extResult);
+                
+                // 경고 메시지가 있으면 표시
+                if (extResult.warning) {
+                  showStatusMessage.value = true;
+                  statusMessage.value = extResult.warning;
+                  setTimeout(() => { showStatusMessage.value = false }, 4000);
+                }
+                
+                // 실제 저장된 이미지 URL 또는 파일명을 워크플로우 데이터에 추가
+                if (extResult.image_data) {
+                  workflowData.before_image_url = extResult.image_data.before_url;
+                  workflowData.after_image_url = extResult.image_data.after_url;
+                  
+                  // 파일명을 업데이트
+                  const beforeFilename = extResult.image_data.before_url.split('/').pop();
+                  const afterFilename = extResult.image_data.after_url.split('/').pop();
+                  
+                  if (beforeFilename) workflowData.input_image_filename = beforeFilename;
+                  if (afterFilename) workflowData.output_image_filename = afterFilename;
+                }
+              }
+            } catch (extError) {
+              console.error('이미지 저장 중 오류 발생:', extError);
+              // 이미지 저장 실패를 알리지만 워크플로우 저장은 계속 진행
+              showStatusMessage.value = true;
+              statusMessage.value = '이미지 저장 중 오류가 발생했지만 워크플로우 저장을 진행합니다.';
+            }
+          }
+          
+          // 워크플로우 데이터를 MongoDB의 lcnc_result 컬렉션에 저장
+          const response = await fetch('http://localhost:8000/api/msa5/save-workflow', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(workflowData)
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
             
-            if (!sourceImage) {
-              throw new Error(`병합 노드 입력 이미지가 없습니다 (소스: ${sourceNodeId})`);
+            // 409 Conflict 오류 처리 (중복 워크플로우 이름)
+            if (response.status === 409) {
+              try {
+                const errorData = JSON.parse(errorText);
+                if (errorData.status === 'duplicate') {
+                  console.log('중복된 워크플로우 이름 감지됨:', errorData);
+                  // 저장 대화상자를 다시 보여주지 않고 바로 중복 경고 대화상자 표시
+                  showDuplicateNameWarning();
+                  return;
+                }
+              } catch (jsonError) {
+                console.error('중복 오류 응답 파싱 실패:', jsonError);
+              }
             }
             
-            inputImages.push(sourceImage);
+            throw new Error(`워크플로우 저장 실패: ${response.status} ${response.statusText} - ${errorText}`);
           }
           
-          // 현재는 첫 번째 이미지만 사용 (실제로는 이미지 병합 로직 필요)
-          processedImages[nodeId] = inputImages[0];
-          console.log(`병합 노드 처리 완료 (${inputImages.length}개 이미지)`);
-        } else {
-          // 일반 노드 처리
-          const incomingEdge = node.incoming[0];
-          if (!incomingEdge) {
-            throw new Error(`노드에 연결된 입력이 없습니다 (노드: ${nodeId})`);
+          const result = await response.json();
+          console.log('API 응답 받음:', result);
+          
+          if (result.status === 'success') {
+            // 경고 메시지가 있는 경우 표시
+            if (result.warning) {
+              showStatusMessage.value = true;
+              statusMessage.value = result.warning;
+              setTimeout(() => { showStatusMessage.value = false }, 4000);
+            } else {
+              // 성공 메시지 표시
+              showStatusMessage.value = true;
+              statusMessage.value = '워크플로우가 성공적으로 저장되었습니다!';
+              setTimeout(() => {
+                showStatusMessage.value = false;
+              }, 3000);
+            }
+            
+            // 세션 ID를 localStorage에 저장 (측정 결과 저장 시 사용)
+            localStorage.setItem('current_workflow_session_id', workflowData.session_id);
+            
+            // 저장된 워크플로우 목록 업데이트
+            const imageHash = await calculateImageHash(inputImage.value);
+            savedWorkflows.value[imageHash] = {
+              session_id: workflowData.session_id,
+              workflow_name: workflowData.workflow_name,
+              image_title: currentImageTitle.value,
+              timestamp: workflowData.timestamp
+            }
+          } else {
+            throw new Error(result.message || '서버에서 저장 실패 응답을 반환했습니다.');
           }
           
-          const sourceNodeId = incomingEdge.source;
-          const sourceImage = processedImages[sourceNodeId];
-          
-          if (!sourceImage) {
-            throw new Error(`노드의 입력 이미지가 없습니다 (소스: ${sourceNodeId})`);
-          }
-          
-          // 시뮬레이션을 위해 지연 추가 (실제로는 백엔드 호출 등)
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // 이 예제에서는 입력 이미지를 그대로 출력으로 사용
-          processedImages[nodeId] = sourceImage;
-          console.log(`일반 노드 처리 완료 (${node.data?.id || '알 수 없는 타입'})`);
+        } catch (error) {
+          console.error('워크플로우 저장 중 오류 발생:', error);
+          showStatusMessage.value = true;
+          statusMessage.value = `워크플로우 저장 실패: ${error.message}`;
+          setTimeout(() => {
+            showStatusMessage.value = false;
+          }, 5000);
         }
+      } catch (error) {
+        console.error('중복 이름 확인 중 오류:', error);
+        showStatusMessage.value = true;
+        statusMessage.value = `중복 이름 확인 실패: ${error.message}`;
+        setTimeout(() => {
+          showStatusMessage.value = false;
+        }, 5000);
       }
+    }
+    
+    // 워크플로우 로드
+    const loadWorkflow = async (sessionId) => {
+      if (!sessionId) return;
       
-      console.log('워크플로우 실행 완료');
-      return processedImages['end'];
-    };
+      try {
+        const response = await fetch(`http://localhost:8000/api/msa5/get-workflow/${sessionId}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.status === 'success' && data.workflow && data.workflow.elements) {
+            // 워크플로우 데이터 로드
+            elements.value = JSON.parse(JSON.stringify(data.workflow.elements));
+            
+            // 기타 필요한 정보 업데이트
+            if (data.workflow.input_image_url) {
+              inputImage.value = data.workflow.input_image_url;
+            }
+            
+            if (data.workflow.workflow_name) {
+              workflowName.value = data.workflow.workflow_name;
+            }
+            
+            // 알림 표시
+            showStatusMessage.value = true;
+            statusMessage.value = '워크플로우를 불러왔습니다.';
+            setTimeout(() => { showStatusMessage.value = false }, 3000);
+          } else {
+            throw new Error(data.message || '워크플로우 데이터가 없습니다.');
+          }
+        } else {
+          throw new Error(`API 응답 오류: ${response.status}`);
+        }
+      } catch (error) {
+        console.error('워크플로우 로드 중 오류:', error);
+        showStatusMessage.value = true;
+        statusMessage.value = `워크플로우 로드 실패: ${error.message}`;
+        setTimeout(() => { showStatusMessage.value = false }, 3000);
+      }
+    }
+
+    // 캔버스 클릭 이벤트 핸들러 - 노드 선택 해제용
+    const handleCanvasClick = (event) => {
+      // 이벤트 타겟이 캔버스 자체인지 확인
+      const isCanvas = event.target.classList.contains('workflow-area') || 
+                       event.target.classList.contains('vue-flow__pane') ||
+                       event.target.classList.contains('vue-flow__transformationpane');
+      
+      if (isCanvas && selectedNode.value) {
+        console.log('캔버스 클릭 - 노드 선택 해제');
+        selectedNode.value = null;
+      }
+    }
 
     return {
       isMaximized,
@@ -2714,6 +2851,7 @@ export default {
       filteredNodes,
       mergeNode,
       containerRef,
+      workflowArea,  // 워크플로우 영역 DOM 참조 추가
       
       // 실행 취소/다시 실행 함수
       undo,
@@ -2721,6 +2859,7 @@ export default {
       deleteSelectedNode,
       deleteSelectedEdge,
       handleKeyDown,
+      handleCanvasClick,  // 캔버스 클릭 이벤트 핸들러 추가
       
       // 워크플로우 저장 관련 함수
       saveWorkflow,
@@ -2768,7 +2907,9 @@ export default {
       statusMessage,
       statusType,
       setStatusMessage,
-      handleImageUpload,
+      
+      // Add missing variable to fix the Vue warning
+      showStatusMessage,
     }
   }
 }

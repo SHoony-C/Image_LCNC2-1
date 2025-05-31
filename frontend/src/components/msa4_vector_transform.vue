@@ -161,24 +161,28 @@
                           <div class="node-tooltip">
                             <div class="tooltip-header">
                               <span class="node-type-badge">{{ node.type || 'custom' }}</span>
-                              <span class="node-id-badge" v-if="node.id">ID: {{ (node.id || '').substring(0, 8) }}</span>
+                              <span class="node-id-badge" v-if="node.name">{{ node.name }}</span>
                             </div>
                             <div class="tooltip-body">
                               <div class="property-list">
-                                <div class="property-item" v-if="node.id">
-                                  <div class="property-name">id:</div>
-                                  <div class="property-value">{{ node.id }}</div>
-                                </div>
-                                <div class="property-item">
-                                  <div class="property-name">icon:</div>
-                                  <div class="property-value">{{ getNodeIcon(node.type || 'custom') }}</div>
-                                </div>
+                                <!-- 전처리 옵션 표시 -->
                                 <template v-if="node.data && typeof node.data === 'object'">
-                                  <div class="property-item" v-for="entry in getFilteredNodeData(node.data)" :key="entry.key">
+                                  <div class="property-item" v-for="entry in getNodePreprocessingOptions(node.data)" :key="entry.key">
                                     <div class="property-name">{{ entry.key }}:</div>
-                                    <div class="property-value">{{ entry.value }}</div>
+                                    <div class="property-value" v-if="isJsonString(entry.value)">
+                                      <div class="json-formatted">
+                                        <div v-for="(param, idx) in formatJsonParams(entry.value)" :key="idx" class="json-param-item">
+                                          <span class="json-key">{{ param.key }}:</span>
+                                          <span class="json-value">{{ param.value }}</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div class="property-value" v-else>{{ entry.value }}</div>
                                   </div>
                                 </template>
+                                <div class="property-item" v-if="(!node.data || Object.keys(getNodePreprocessingOptions(node.data || {})).length === 0)">
+                                  <div class="property-value">전처리 옵션이 없습니다</div>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -404,12 +408,26 @@
   left: 120px;
   top: 50%;
   transform: translateY(-50%);
-  width: 240px;
+  width: auto;
+  min-width: 240px;
+  max-width: 400px;
   background: white;
   border-radius: 8px;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
   z-index: 10;
   overflow: hidden;
+}
+
+@media (min-width: 1200px) {
+  .node-tooltip {
+    max-width: 500px;
+  }
+}
+
+@media (min-width: 1600px) {
+  .node-tooltip {
+    max-width: 600px;
+  }
 }
 
 .tooltip-header {
@@ -437,7 +455,7 @@
 
 .tooltip-body {
   padding: 10px;
-  max-height: 200px;
+  max-height: 300px;
   overflow-y: auto;
 }
 
@@ -918,7 +936,7 @@
   border-radius: 8px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
   width: 90%;
-  max-width: 800px;
+  max-width: min(90vw, 1000px); /* Responsive sizing */
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -926,14 +944,15 @@
   animation: popup-fade-in 0.3s ease-out;
 }
 
-@keyframes popup-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
+@media (min-width: 1200px) {
+  .image-detail-popup {
+    max-width: min(85vw, 1200px);
   }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+}
+
+@media (min-width: 1600px) {
+  .image-detail-popup {
+    max-width: min(80vw, 1400px);
   }
 }
 
@@ -980,6 +999,26 @@
 @media (min-width: 768px) {
   .popup-content {
     flex-direction: row;
+  }
+  
+  .popup-image-container {
+    width: 35%;
+    margin-right: 20px;
+    margin-bottom: 0;
+  }
+  
+  .popup-details {
+    width: 65%;
+  }
+}
+
+@media (min-width: 1200px) {
+  .popup-image-container {
+    width: 30%;
+  }
+  
+  .popup-details {
+    width: 70%;
   }
 }
 
@@ -1309,6 +1348,36 @@
   gap: 8px !important;
 }
 
+/* JSON formatting styles */
+.json-formatted {
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  padding: 8px;
+  margin-top: 4px;
+  border-left: 3px solid #339af0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.json-param-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 2px;
+  padding: 2px 0;
+}
+
+.json-key {
+  color: #0c63e4;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+.json-value {
+  color: #333;
+  word-break: break-word;
+}
 
 </style>
 
@@ -2538,8 +2607,13 @@ export default {
       try {
         await Plotly.newPlot(container, this.plotlyData, this.plotLayout, this.plotConfig);
         
-        // 이벤트 리스너 등록
-        container.on('plotly_click', this.handlePlotClick);
+        // 이벤트 리스너 등록 - 화살표 함수로 변경하여 this 바인딩 유지
+        container.on('plotly_click', (eventData) => {
+          if (eventData && eventData.points && eventData.points.length > 0) {
+            const pointIndex = eventData.points[0].pointNumber;
+            this.selectImageByIndex(pointIndex);
+          }
+        });
       } catch (error) {
         console.error('Error initializing plot:', error);
       }
@@ -2695,15 +2769,8 @@ export default {
             }
             
             if (eventData && eventData.points && eventData.points.length > 0) {
-              const point = eventData.points[0];
-              const index = point.pointNumber;
-              
-              if (index >= 0 && index < self.labels.length) {
-                // 이벤트 루프 분리해서 처리
-                setTimeout(() => {
-                  self.selectImageByIndex(index);
-                }, 0);
-              }
+              const pointIndex = eventData.points[0].pointNumber;
+              self.selectImageByIndex(pointIndex);
             }
           });
           
@@ -3153,12 +3220,62 @@ export default {
       return cleanName.replace(/_before$|_after$/g, '');
     },
 
-    // Date formatting method
+    // Date formatting method - 수정
     formatDate(dateString) {
       if (!dateString) return 'N/A';
       
       try {
+        // 타임스탬프일 경우 숫자로 변환
+        if (typeof dateString === 'number') {
+          const date = new Date(dateString);
+          return date.toLocaleString('ko-KR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        }
+        
+        // ISO 문자열 또는 다른 날짜 형식
         const date = new Date(dateString);
+        
+        // 유효한 날짜인지 확인
+        if (isNaN(date.getTime())) {
+          // MongoDB ObjectId에서 타임스탬프 추출 시도
+          if (typeof dateString === 'string' && dateString.length === 24) {
+            const timestamp = parseInt(dateString.substring(0, 8), 16) * 1000;
+            const objectIdDate = new Date(timestamp);
+            if (!isNaN(objectIdDate.getTime())) {
+              return objectIdDate.toLocaleString('ko-KR', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+            }
+          }
+          
+          // 문자열에서 날짜 패턴 찾기 시도
+          const datePattern = /(\d{4})[-/](\d{1,2})[-/](\d{1,2})/;
+          const match = dateString.match(datePattern);
+          if (match) {
+            const parsedDate = new Date(match[1], parseInt(match[2])-1, match[3]);
+            return parsedDate.toLocaleString('ko-KR', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit'
+            });
+          }
+          
+          // 그 외의 경우 원본 문자열 반환
+          return dateString;
+        }
+        
+        // 유효한 날짜는 포맷팅하여 반환
         return date.toLocaleString('ko-KR', {
           year: 'numeric',
           month: '2-digit',
@@ -3167,11 +3284,13 @@ export default {
           minute: '2-digit'
         });
       } catch (e) {
-        return dateString;
+        console.error('Date formatting error:', e);
+        // 원본 문자열이 있으면 그대로 반환, 없으면 N/A
+        return dateString || 'N/A';
       }
     },
 
-    // 노드 데이터에서 중요 정보만 필터링
+    // 노드 데이터에서 중요 정보만 필터링 - 수정된 메서드
     getFilteredNodeData(data) {
       if (!data || typeof data !== 'object') return [];
       
@@ -3188,6 +3307,101 @@ export default {
         }));
     },
 
+    // 새로운 메서드: 노드 전처리 옵션 가져오기
+    getNodePreprocessingOptions(data) {
+      if (!data || typeof data !== 'object') return [];
+      
+      // 전처리 관련 키워드
+      const preprocessingKeywords = [
+        'threshold', 'scale', 'resize', 'rotate', 'flip', 'crop',
+        'blur', 'sharpen', 'brightness', 'contrast', 'saturation',
+        'hue', 'gamma', 'invert', 'grayscale', 'binarize',
+        'filter', 'edge', 'morphology', 'denoise', 'enhance',
+        'padding', 'normalize', 'pixel', 'channel', 'color',
+        'size', 'width', 'height', 'angle', 'sigma', 'kernel',
+        'radius', 'amount', 'parameter', 'option', 'value', 'type',
+        'mode', 'method', 'algorithm', 'operation', 'factor',
+        'iterations', 'strength', 'weight', 'level', 'intensity',
+        'quality', 'resolution', 'format', 'compression', 'params',
+        'parameters', 'config', 'configuration', 'settings', 'options'
+      ];
+      
+      return Object.entries(data)
+        .filter(([key, val]) => {
+          // 전처리 관련 키워드가 포함되어 있거나, 특정 키 제외
+          const isPreprocessingKey = preprocessingKeywords.some(keyword => 
+            key.toLowerCase().includes(keyword.toLowerCase())
+          );
+          const isExcludedKey = ['label', 'name', 'id', 'type', 'icon', 'position'].includes(key);
+          
+          return isPreprocessingKey || (!isExcludedKey && val !== undefined && val !== null);
+        })
+        .map(([key, val]) => ({
+          key,
+          value: this.formatValue(val)
+        }));
+    },
+    
+    // 새로운 메서드: 값 포맷팅 개선
+    formatValue(val) {
+      if (val === null || val === undefined) return '';
+      
+      if (typeof val === 'object') {
+        try {
+          return JSON.stringify(val, null, 2);
+        } catch (e) {
+          return String(val);
+        }
+      }
+      
+      return String(val);
+    },
+    
+    // 새로운 메서드: JSON 문자열인지 확인
+    isJsonString(str) {
+      if (typeof str !== 'string') return false;
+      
+      try {
+        const json = JSON.parse(str);
+        return typeof json === 'object' && json !== null;
+      } catch (e) {
+        return false;
+      }
+    },
+    
+    // 새로운 메서드: JSON 파라미터 포맷팅
+    formatJsonParams(jsonStr) {
+      try {
+        const json = JSON.parse(jsonStr);
+        
+        if (typeof json !== 'object' || json === null) {
+          return [{ key: 'value', value: jsonStr }];
+        }
+        
+        return Object.entries(json).map(([key, val]) => {
+          let formattedVal = val;
+          
+          // 중첩된 객체면 단순화
+          if (typeof val === 'object' && val !== null) {
+            formattedVal = JSON.stringify(val);
+          }
+          
+          // 긴 문자열은 적절히 자르기
+          if (typeof formattedVal === 'string' && formattedVal.length > 50) {
+            formattedVal = formattedVal.substring(0, 47) + '...';
+          }
+          
+          return {
+            key,
+            value: formattedVal
+          };
+        });
+      } catch (e) {
+        console.error('JSON 파싱 오류:', e);
+        return [{ key: 'value', value: jsonStr }];
+      }
+    },
+    
     // 노드 타입에 따른 아이콘 반환
     getNodeIcon(nodeType) {
       const iconMap = {

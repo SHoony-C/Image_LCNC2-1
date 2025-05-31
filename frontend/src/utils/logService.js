@@ -10,6 +10,12 @@ import axios from 'axios';
  * - 등등
  */
 class LogService {
+  // 최근 로깅된 액션을 추적하기 위한 캐시
+  static recentLogs = new Map();
+  
+  // 동일 액션 로깅 방지를 위한 쿨다운 시간 (밀리초)
+  static COOLDOWN_MS = 2000;
+
   /**
    * 사용자 액션을 로깅합니다
    * @param {string} action - 수행한 액션 (예: "page_visit", "button_click", "process_start")
@@ -17,6 +23,28 @@ class LogService {
    */
   static async logAction(action, details = {}) {
     try {
+      // 중복 로깅 방지 로직
+      const actionKey = this.getActionKey(action, details);
+      const now = Date.now();
+      
+      // 동일한 액션이 쿨다운 기간 내에 호출되었는지 확인
+      if (this.recentLogs.has(actionKey)) {
+        const lastLogTime = this.recentLogs.get(actionKey);
+        if (now - lastLogTime < this.COOLDOWN_MS) {
+          console.log(`[LogService] 중복 액션 감지, 무시됨: ${action}`, details);
+          return false; // 중복 요청 무시
+        }
+      }
+      
+      // 액션과 시간 기록
+      this.recentLogs.set(actionKey, now);
+      
+      // 맵 크기 관리 (최대 50개 항목 유지)
+      if (this.recentLogs.size > 50) {
+        const oldestKey = this.recentLogs.keys().next().value;
+        this.recentLogs.delete(oldestKey);
+      }
+      
       console.log(`[LogService] 액션 로깅 시작: ${action}`, details);
       
       // 로컬 스토리지에서 사용자 정보 가져오기
@@ -51,10 +79,12 @@ class LogService {
       };
       
       console.log('[LogService] API 요청 데이터:', requestData);
-      console.log('[LogService] API 엔드포인트: http://localhost:8000/api/users/log-action-noauth');
       
       // 로그 저장 API 호출 (인증 필요 없는 엔드포인트 사용)
-      const response = await axios.post('http://localhost:8000/api/users/log-action-noauth', requestData);
+      const response = await axios.post('http://localhost:8000/api/users/log-action-noauth', requestData, {
+        // 타임아웃 설정으로 응답 지연 시 요청 취소
+        timeout: 3000
+      });
       
       console.log('[LogService] API 응답:', response.data);
       
@@ -76,6 +106,33 @@ class LogService {
       }
       return false;
     }
+  }
+  
+  /**
+   * 액션과 세부 정보를 기반으로 고유한 키 생성
+   * @private
+   */
+  static getActionKey(action, details) {
+    // 단순한 액션인 경우 액션 자체를 키로 사용
+    if (!details || Object.keys(details).length === 0) {
+      return action;
+    }
+    
+    // 세부 정보가 있는 경우 주요 식별자 추출
+    let identifiers = [];
+    
+    // 일반적으로 사용되는 식별 필드 추출
+    if (details.id) identifiers.push(details.id);
+    if (details.page) identifiers.push(details.page);
+    if (details.component) identifiers.push(details.component);
+    if (details.process) identifiers.push(details.process);
+    
+    // 식별자가 없는 경우 전체 세부 정보 사용
+    if (identifiers.length === 0) {
+      identifiers.push(JSON.stringify(details));
+    }
+    
+    return `${action}:${identifiers.join(':')}`;
   }
   
   /**

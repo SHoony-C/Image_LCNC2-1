@@ -12,6 +12,7 @@ from msa3_imageanalysis import router as msa3_router
 from msa4_imagestorage import router as msa4_router
 from msa6_imageexport import router as msa6_router
 from msa5_imageLCNC import router as msa5_router
+from msa5_workLCNC import router as msa5_work_router
 
 # 사이드 모듈 라우터 임포트
 from side_2_analysis import router as side_2_router
@@ -134,6 +135,7 @@ app.include_router(msa2_router, prefix="/api/msa2", tags=["msa2"])
 app.include_router(msa3_router, prefix="/api/msa3", tags=["msa3"])
 app.include_router(msa4_router, prefix="/api/msa4", tags=["msa4"])
 app.include_router(msa5_router, prefix="/api/msa5", tags=["msa5"])
+app.include_router(msa5_work_router, prefix="/api/msa5/work", tags=["msa5_work"])
 app.include_router(msa6_router, prefix="/api/msa6", tags=["msa6"])
 
 # 사이드 모듈 라우터 등록

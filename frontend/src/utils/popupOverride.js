@@ -130,44 +130,17 @@ function removeExistingPopup() {
  * 팝업 요소 제거
  * @param {HTMLElement} popupElement 제거할 팝업 요소
  */
-export function removePopup(popupElement) {
+function removePopup(popupElement) {
   console.log('[popupOverride] 팝업 제거 시작');
   
-  // 특정 팝업 요소가 제공된 경우
   if (popupElement && popupElement.parentNode) {
     popupElement.parentNode.removeChild(popupElement);
-    console.log('[popupOverride] 지정된 팝업 요소가 DOM에서 제거됨');
+    console.log('[popupOverride] 팝업 요소가 DOM에서 제거됨');
   } else {
-    // 없으면 ID로 찾아서 제거
     removeExistingPopup();
   }
   
-  // 다른 모든 스케일바 관련 팝업도 찾아서 제거
-  try {
-    const popupElements = document.querySelectorAll('.scale-choice-popup, .super-overlay');
-    if (popupElements && popupElements.length > 0) {
-      console.log(`[popupOverride] 추가로 ${popupElements.length}개의 팝업 요소 발견, 모두 제거`);
-      
-      popupElements.forEach(element => {
-        if (element.parentNode) {
-          // 인라인 스타일로 강제 숨김 (우선 숨기고 삭제)
-          element.style.display = 'none';
-          element.style.visibility = 'hidden';
-          element.style.opacity = '0';
-          
-          // DOM에서 제거
-          element.parentNode.removeChild(element);
-        }
-      });
-    }
-  } catch (error) {
-    console.error('[popupOverride] 추가 팝업 제거 중 오류:', error);
-  }
-  
-  // 팝업 생성 상태 초기화
   popupCreated = false;
-  
-  return true;
 }
 
 /**
@@ -177,44 +150,10 @@ export function removePopup(popupElement) {
 export function showScaleDetectionFailurePopup(component) {
   console.log('[popupOverride] 스케일바 감지 실패 팝업 표시 함수 호출됨');
   
-  // 컴포넌트가 존재하고, 활성화되어 있는지 확인
-  if (!component) {
-    console.error('[popupOverride] 컴포넌트가 제공되지 않음, 팝업 표시 중단');
-    return;
-  }
-  
-  // showPopup 값이 false면 팝업이 현재 활성화되지 않은 상태
-  if (component.showPopup === false) {
-    console.log('[popupOverride] MSA6 컴포넌트가 활성화되지 않음, 강제 활성화 시도');
-    // 강제로 showPopup을 true로 설정
-    component.showPopup = true;
-  }
-  
-  // 이미 팝업이 생성되어 있는 경우에도 강제로 다시 생성
+  // 이미 팝업이 생성되어 있으면 중복 생성 방지
   if (popupCreated) {
-    console.log('[popupOverride] 이미 팝업이 생성되어 있음, 제거 후 재생성');
-    removeExistingPopup();
-  }
-  
-  // 기존 팝업 요소 삭제 (여러 개 있을 수 있음)
-  try {
-    const popupElements = document.querySelectorAll('.scale-choice-popup, .super-overlay');
-    if (popupElements && popupElements.length > 0) {
-      console.log(`[popupOverride] 기존 팝업 요소 ${popupElements.length}개 발견, 제거`);
-      popupElements.forEach(element => {
-        if (element.parentNode) {
-          element.parentNode.removeChild(element);
-        }
-      });
-    }
-  } catch (e) {
-    console.error('[popupOverride] 기존 팝업 제거 중 오류:', e);
-  }
-  
-  // 컴포넌트 상태 설정
-  if (component.showScaleChoicePopup !== undefined) {
-    component.showScaleChoicePopup = true;
-    console.log('[popupOverride] 컴포넌트의 showScaleChoicePopup 상태 설정:', component.showScaleChoicePopup);
+    console.log('[popupOverride] 이미 팝업이 생성되어 있음, 중복 생성 방지');
+    return;
   }
   
   // 콜백 함수 정의
@@ -247,34 +186,12 @@ export function showScaleDetectionFailurePopup(component) {
   };
   
   // 팝업 생성
-  const popupElement = createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect);
+  createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect);
   
   // 알림 메시지 표시 (컴포넌트 메소드 사용)
   if (component && typeof component.showNotification === 'function') {
     component.showNotification('스케일바 자동 감지에 실패했습니다. 측정 방식을 선택해주세요.', 'warning');
   }
-  
-  // 팝업이 제대로 표시되는지 확인
-  setTimeout(() => {
-    if (popupElement && document.body.contains(popupElement)) {
-      console.log('[popupOverride] 팝업이 제대로 표시되었는지 확인');
-      
-      // 스타일 확인 및 강제 적용
-      const computedStyle = window.getComputedStyle(popupElement);
-      if (computedStyle.display === 'none' || computedStyle.visibility === 'hidden') {
-        console.log('[popupOverride] 팝업이 숨겨져 있음, 강제 표시');
-        popupElement.style.display = 'flex';
-        popupElement.style.visibility = 'visible';
-        popupElement.style.zIndex = '9999999';
-        popupElement.style.opacity = '1';
-      }
-    } else {
-      console.error('[popupOverride] 팝업이 DOM에 존재하지 않음, 재생성 시도');
-      createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect);
-    }
-  }, 300);
-  
-  return popupElement;
 }
 
 /**
@@ -294,19 +211,12 @@ export function patchDetectScaleBar(component) {
   component.detectScaleBar = function() {
     console.log('[popupOverride] 패치된 detectScaleBar 함수 호출됨');
     
-    // 컴포넌트가 활성화되지 않았으면 스킵
-    if (this.showPopup === false) {
-      console.log('[popupOverride] MSA6 컴포넌트가 활성화되지 않음, 스케일바 감지 중단');
-      return;
-    }
-    
-    // 이미지 데이터가 없고 첫 번째 시도인 경우 팝업 표시
-    if (!this.imageData && this.isFirstDetectionAttempt && this.scaleMethod === 'scaleBar') {
+    // 이미지 데이터가 없는 경우 항상 팝업 표시
+    if (!this.imageData && this.scaleMethod === 'scaleBar') {
       console.log('[popupOverride] 이미지 데이터 없음, 감지 실패 팝업 표시');
       this.scaleBarDetected = false;
-      this.isFirstDetectionAttempt = false;
       
-      // 커스텀 팝업 표시
+      // 항상 커스텀 팝업 표시 (조건 체크 없이)
       showScaleDetectionFailurePopup(this);
       return;
     }
@@ -316,10 +226,9 @@ export function patchDetectScaleBar(component) {
       console.log('[popupOverride] 이미지 데이터 있음, 원본 함수 호출');
       const result = originalDetectScaleBar.apply(this);
       
-      // 첫 번째 시도에서 스케일바 감지 실패한 경우 팝업 표시
-      if (this.isFirstDetectionAttempt && !this.scaleBarDetected && this.scaleMethod === 'scaleBar') {
+      // 스케일바 감지 실패한 경우 항상 팝업 표시 (첫 번째 시도 조건 제거)
+      if (!this.scaleBarDetected && this.scaleMethod === 'scaleBar') {
         console.log('[popupOverride] 스케일바 감지 실패, 팝업 표시');
-        this.isFirstDetectionAttempt = false;
         
         // 커스텀 팝업 표시
         showScaleDetectionFailurePopup(this);

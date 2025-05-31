@@ -37,7 +37,7 @@ MONGODB_SETTINGS = {
     'HOST': 'localhost',
     'PORT': 27017,
     'DATABASE': 'lcnc',
-    'lcnc_COLLECTION': 'lcnc_result',    
+    'lcnc_COLLECTION': 'lcnc_store',    
 }
 
 # Available user roles

@@ -30,9 +30,12 @@
 
     <!-- 이미지 측정 팝업 -->
     <MSA6ImagePopup
+      ref="measurementPopup"
       v-show="showMeasurementPopup && finalImage"
       :imageUrl="finalImage"
+      :inputImageUrl="inputImage"
       :showPopup="showMeasurementPopup"
+      @update:showPopup="showMeasurementPopup = $event"
       @close="closeMeasurementPopup"
     />
   </div>
@@ -49,9 +52,11 @@ export default {
   data() {
     return {
       isMaximized: false,
-      finalImage: null,
+      finalImage: '',
       showResult: false,
-      showMeasurementPopup: false
+      showMeasurementPopup: false,
+      inputImage: null,
+      msa5ImageAvailable: false
     }
   },
   mounted() {
@@ -61,37 +66,95 @@ export default {
     // 측정 팝업 컴포넌트가 항상 존재하지만 처음에는 보이지 않게 설정
     this.showMeasurementPopup = false
     
-    // MSA5 이미지 처리 완료 여부 확인 (초기화)
-    const isWorkflowCompleted = localStorage.getItem('msa5_workflow_completed') === 'true';
-    console.log('MSA6: 워크플로우 처리 완료 여부:', isWorkflowCompleted);
+    // 새로고침 후 처음 로드 시 이미지 초기화 이벤트 리스너 추가
+    window.addEventListener('load', this.clearImageOnReload)
     
-    // 워크플로우가 완료된 경우에만 이미지 표시
-    if (isWorkflowCompleted && localStorage.getItem('msa6_final_image')) {
-      console.log('MSA6: 기존에 처리된 이미지 로드');
-      this.finalImage = localStorage.getItem('msa6_final_image')
-      this.showResult = true
-    } else {
-      // 워크플로우가 완료되지 않았으면 이미지 초기화
-      console.log('MSA6: 워크플로우가 완료되지 않아 이미지 표시하지 않음');
-      this.finalImage = null;
-      this.showResult = false;
-      // 저장된 이미지도 제거
-      localStorage.removeItem('msa6_final_image');
-      localStorage.removeItem('msa5_workflow_completed');
-    }
+    // 팝업 닫힘 이벤트 리스너 추가
+    window.addEventListener('msa6-popup-closed', () => {
+      console.log('MSA6: 팝업 닫힘 이벤트 수신')
+      this.showMeasurementPopup = false
+      this.$nextTick(() => this.closeMeasurementPopup())
+    })
+    
+    // 페이지 로드 시 MSA5 상태 확인 후 이미지 표시 여부 결정
+    this.checkMSA5StatusAndUpdateImage()
   },
   beforeUnmount() {
     window.removeEventListener('msa5-image-processed', this.handleMSA5ImageProcessed)
+    window.removeEventListener('load', this.clearImageOnReload)
+    window.removeEventListener('msa6-popup-closed', () => {})
   },
   methods: {
-    handleMSA5ImageProcessed(event) {
-      if (event.detail && event.detail.imageUrl) {
-        this.finalImage = event.detail.imageUrl
-        this.showResult = true
+    // MSA5 상태를 확인하고 이미지 표시 여부 결정하는 메소드 추가
+    checkMSA5StatusAndUpdateImage() {
+      // 페이지 새로고침 시에는 MSA5 end 노드에 이미지가 없기 때문에 MSA6도 초기화해야 함
+      const hasMSA5EndImage = sessionStorage.getItem('msa5_end_image')
+      console.log('MSA6: MSA5 이미지 상태 확인 - 종료 이미지 있음:', hasMSA5EndImage)
+      
+      if (hasMSA5EndImage === 'true') {
+        // MSA5에 종료 이미지가 있으면 MSA6도 이미지 표시
+        this.msa5ImageAvailable = true
         
-        // 이미지 URL을 localStorage에 저장하여 페이지 새로고침 시에도 유지
-        localStorage.setItem('msa6_final_image', event.detail.imageUrl)
+        // 로컬 스토리지에서 최종 이미지 가져오기
+        if (localStorage.getItem('msa6_final_image')) {
+          this.finalImage = localStorage.getItem('msa6_final_image')
+          this.showResult = true
+          console.log('MSA6: 로컬 스토리지에서 최종 이미지 로드됨')
+          
+          // MSA5 입력 이미지 URL 저장 (세션 스토리지에서 가져오기)
+          this.inputImage = sessionStorage.getItem('msa5_start_image_url')
+          console.log('MSA6: MSA5 입력 이미지 URL 로드됨:', this.inputImage ? '있음' : '없음')
+        } else {
+          console.log('MSA6: 로컬 스토리지에 저장된 이미지 없음')
+          this.showResult = false
+        }
+      } else {
+        // MSA5에 이미지가 없으면 MSA6도 이미지 표시하지 않음
+        this.msa5ImageAvailable = false
+        this.finalImage = ''
+        this.inputImage = null
+        this.showResult = false
+        console.log('MSA6: MSA5 이미지 없음, 결과 표시 안함')
       }
+    },
+    // 페이지 새로고침 시 이미지 초기화 메소드 추가
+    clearImageOnReload() {
+      console.log('MSA6: 페이지 새로고침 감지, 이미지 초기화 시작')
+      
+      // 세션 스토리지에 초기화 플래그 설정 (1초 후 자동 삭제)
+      sessionStorage.setItem('image_cleared', 'true')
+      setTimeout(() => {
+        sessionStorage.removeItem('image_cleared')
+      }, 1000)
+      
+      // MSA5 상태 확인 후 이미지 표시 여부 결정
+      this.checkMSA5StatusAndUpdateImage()
+      
+      // 측정 팝업 초기화
+      if (this.$refs.measurementPopup && typeof this.$refs.measurementPopup.clearImage === 'function') {
+        this.$refs.measurementPopup.clearImage()
+        console.log('MSA6: 측정 팝업 이미지 초기화 완료')
+      }
+    },
+    handleMSA5ImageProcessed(event) {
+      console.log('MSA5 이미지 처리 이벤트 수신')
+      const { imageUrl, timestamp } = event.detail
+      
+      // 최종 이미지 설정
+      this.finalImage = imageUrl
+      this.showResult = true
+      
+      // 로컬 스토리지에 저장
+      localStorage.setItem('msa6_final_image', imageUrl)
+      
+      // MSA5 입력 이미지 URL 저장 (세션 스토리지에서 가져오기)
+      this.inputImage = sessionStorage.getItem('msa5_start_image_url')
+      console.log('MSA6: MSA5 입력 이미지 URL 업데이트됨:', this.inputImage ? '있음' : '없음')
+      
+      // MSA5 이미지 사용 가능 플래그 설정
+      this.msa5ImageAvailable = true
+      
+      console.log('MSA6 최종 결과 이미지 업데이트 완료')
     },
     toggleMaximize() {
       this.isMaximized = !this.isMaximized
@@ -100,11 +163,52 @@ export default {
       if (this.finalImage) {
         console.log('Opening measurement popup with image:', this.finalImage)
         this.showMeasurementPopup = true
+        
+        // First make sure the container elements are visible
+        this.$nextTick(() => {
+          // 먼저 팝업 관련 요소들 표시 설정
+          const teleportElements = document.querySelectorAll('.msa6-image-popup-container');
+          teleportElements.forEach(element => {
+            element.style.display = 'block';
+            element.style.visibility = 'visible';
+          });
+          
+          const popupContainer = document.querySelector('.image-measurement-popup');
+          if (popupContainer) {
+            popupContainer.style.removeProperty('display');
+            popupContainer.style.removeProperty('visibility');
+          }
+          
+          console.log('MSA6: 팝업 컨테이너 표시 설정 완료');
+          
+          // Then call the component's method
+          if (this.$refs.measurementPopup && typeof this.$refs.measurementPopup.openPopup === 'function') {
+            this.$refs.measurementPopup.openPopup(this.finalImage);
+          }
+        });
       }
     },
     closeMeasurementPopup() {
       console.log('Closing measurement popup, data will be preserved')
       this.showMeasurementPopup = false
+      
+      // Force refresh the component state
+      this.$nextTick(() => {
+        // 모든 팝업 관련 요소 강제 숨김
+        const popupContainer = document.querySelector('.image-measurement-popup');
+        if (popupContainer) {
+          popupContainer.style.display = 'none';
+          popupContainer.style.visibility = 'hidden';
+        }
+        
+        const teleportElements = document.querySelectorAll('.msa6-image-popup-container');
+        teleportElements.forEach(element => {
+          element.style.display = 'none';
+          element.style.visibility = 'hidden';
+        });
+        
+        console.log('MSA6: 측정 팝업 DOM 요소 강제 숨김 처리 완료');
+      });
     }
   }
 }
