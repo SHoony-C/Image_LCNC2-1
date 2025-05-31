@@ -185,14 +185,36 @@ export function showScaleDetectionFailurePopup(component) {
   
   // showPopup 값이 false면 팝업이 현재 활성화되지 않은 상태
   if (component.showPopup === false) {
-    console.log('[popupOverride] MSA6 컴포넌트가 활성화되지 않음, 팝업 표시 중단');
-    return;
+    console.log('[popupOverride] MSA6 컴포넌트가 활성화되지 않음, 강제 활성화 시도');
+    // 강제로 showPopup을 true로 설정
+    component.showPopup = true;
   }
   
-  // 이미 팝업이 생성되어 있으면 중복 생성 방지
+  // 이미 팝업이 생성되어 있는 경우에도 강제로 다시 생성
   if (popupCreated) {
-    console.log('[popupOverride] 이미 팝업이 생성되어 있음, 중복 생성 방지');
-    return;
+    console.log('[popupOverride] 이미 팝업이 생성되어 있음, 제거 후 재생성');
+    removeExistingPopup();
+  }
+  
+  // 기존 팝업 요소 삭제 (여러 개 있을 수 있음)
+  try {
+    const popupElements = document.querySelectorAll('.scale-choice-popup, .super-overlay');
+    if (popupElements && popupElements.length > 0) {
+      console.log(`[popupOverride] 기존 팝업 요소 ${popupElements.length}개 발견, 제거`);
+      popupElements.forEach(element => {
+        if (element.parentNode) {
+          element.parentNode.removeChild(element);
+        }
+      });
+    }
+  } catch (e) {
+    console.error('[popupOverride] 기존 팝업 제거 중 오류:', e);
+  }
+  
+  // 컴포넌트 상태 설정
+  if (component.showScaleChoicePopup !== undefined) {
+    component.showScaleChoicePopup = true;
+    console.log('[popupOverride] 컴포넌트의 showScaleChoicePopup 상태 설정:', component.showScaleChoicePopup);
   }
   
   // 콜백 함수 정의
@@ -225,12 +247,34 @@ export function showScaleDetectionFailurePopup(component) {
   };
   
   // 팝업 생성
-  createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect);
+  const popupElement = createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect);
   
   // 알림 메시지 표시 (컴포넌트 메소드 사용)
   if (component && typeof component.showNotification === 'function') {
     component.showNotification('스케일바 자동 감지에 실패했습니다. 측정 방식을 선택해주세요.', 'warning');
   }
+  
+  // 팝업이 제대로 표시되는지 확인
+  setTimeout(() => {
+    if (popupElement && document.body.contains(popupElement)) {
+      console.log('[popupOverride] 팝업이 제대로 표시되었는지 확인');
+      
+      // 스타일 확인 및 강제 적용
+      const computedStyle = window.getComputedStyle(popupElement);
+      if (computedStyle.display === 'none' || computedStyle.visibility === 'hidden') {
+        console.log('[popupOverride] 팝업이 숨겨져 있음, 강제 표시');
+        popupElement.style.display = 'flex';
+        popupElement.style.visibility = 'visible';
+        popupElement.style.zIndex = '9999999';
+        popupElement.style.opacity = '1';
+      }
+    } else {
+      console.error('[popupOverride] 팝업이 DOM에 존재하지 않음, 재생성 시도');
+      createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect);
+    }
+  }, 300);
+  
+  return popupElement;
 }
 
 /**

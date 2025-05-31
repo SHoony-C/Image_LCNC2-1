@@ -449,53 +449,74 @@ export default {
     };
   },
   mounted() {
-    console.log('[mounted] 컴포넌트 마운트됨');
+    console.log('[mounted] 이미지 측정 컴포넌트 마운트됨');
     
-    // 이벤트 리스너 등록
-    window.addEventListener('resize', this.onWindowResize);
-    window.addEventListener('keydown', this.handleKeyDown);
+    // 캔버스 설정
+    this.canvas = this.$refs.canvas;
+    this.ctx = this.canvas.getContext('2d');
     
+    // 측정 상태 복원
+    this.restoreMeasurementState();
     
-    // 최초 로드 시에만 초기화 플래그 설정
-    if (!this.initialLoadDone) {
-      this.$_isInitialLoad = true;
-      this.isFirstDetectionAttempt = true;
-      console.log('[mounted] 최초 로드, 초기화 플래그 설정');
-    } else {
-      console.log('[mounted] 재마운트, 측정 데이터 유지');
-    }
+    // MSA5 이미지 로드
+    this.loadMSA5Images();
     
-    // 디버깅용 전역 변수 설정
-    window.imageMeasurement = this;
-    console.log('Component mounted. Use window.imageMeasurement to access component in console');
-    
-    // 플래그 초기값 로깅
-    console.log('[mounted] 초기 상태 - showScaleChoicePopup:', this.showScaleChoicePopup);
-    console.log('[mounted] 초기 상태 - isFirstDetectionAttempt:', this.isFirstDetectionAttempt);
-    console.log('[mounted] 초기 상태 - scaleMethod:', this.scaleMethod);
-    
-    // 디버깅 유틸리티 설정
-    window.popupDebug = PopupDebug;
-    console.log('팝업 디버깅 유틸리티가 콘솔에 window.popupDebug로 노출되었습니다.');
-    
-    // 팝업 오버라이드 함수 전역으로 노출
-    window.showScalePopup = () => showScaleDetectionFailurePopup(this);
+    // 이미지 로드
+    this.loadImage();
     
     // detectScaleBar 함수 패치
-    setTimeout(() => {
-      console.log('[mounted] 팝업 오버라이드 시스템 적용 시도');
-      const patchResult = patchDetectScaleBar(this);
-      console.log('[mounted] 패치 결과:', patchResult);
-      
-      // 스케일바 자동 감지 시도 (이미 이미지가 로드된 경우)
-      if (this.image && this.imageData && this.scaleMethod === 'scaleBar' && !this.initialLoadDone) {
-        console.log('[mounted] 이미지 로드됨, 스케일바 감지 시도');
-        this.detectScaleBar();
-      }
-    }, 500);
+    console.log('[mounted] detectScaleBar 함수 패치 시도');
+    const patchResult = patchDetectScaleBar(this);
+    console.log('[mounted] detectScaleBar 함수 패치 결과:', patchResult);
     
-    // MSA5에서 처리된 시작/종료 이미지 로드
-    this.loadMSA5Images();
+    // 초기 스케일바 감지 시도
+    if (this.scaleMethod === 'scaleBar') {
+      this.detectScaleBar();
+    }
+    
+    // ESC 키 이벤트 리스너 추가
+    window.addEventListener('keydown', this.handleKeyDown);
+    
+    // 전/후 이미지 URL 디버그 로깅
+    console.log('[mounted] 이미지 상태:', { 
+      beforeImageUrl: this.beforeImageUrl?.substring(0, 30) + '...',
+      afterImageUrl: this.afterImageUrl?.substring(0, 30) + '...',
+      imageUrl: this.imageUrl?.substring(0, 30) + '...'
+    });
+    
+    // 팝업 디버그 코드 추가
+    setTimeout(() => {
+      console.log('[mounted] 팝업 디버그 타임아웃 실행');
+      console.log('[mounted] showScaleChoicePopup 상태:', this.showScaleChoicePopup);
+      
+      // 스케일바 선택 팝업이 보이지 않는 경우 DOM에서 직접 확인
+      const popupElement = document.querySelector('.scale-choice-popup');
+      if (popupElement) {
+        console.log('[mounted] 팝업 요소 DOM에 존재함');
+        
+        // 팝업 요소 스타일 로깅
+        const computedStyle = window.getComputedStyle(popupElement);
+        console.log('[mounted] 팝업 스타일:');
+        console.log('- display:', computedStyle.display);
+        console.log('- visibility:', computedStyle.visibility);
+        console.log('- z-index:', computedStyle.zIndex);
+        
+        // 강제로 팝업 표시
+        if (computedStyle.display === 'none' || computedStyle.visibility === 'hidden') {
+          console.log('[mounted] 팝업이 숨겨져 있음, 강제 표시 시도');
+          popupElement.style.display = 'flex';
+          popupElement.style.visibility = 'visible';
+          popupElement.style.zIndex = '999999';
+        }
+      } else {
+        console.log('[mounted] 팝업 요소 DOM에 없음, 직접 팝업 생성 시도');
+        
+        // 팝업이 없으면 직접 생성
+        if (this.scaleMethod === 'scaleBar' && !this.scaleBarDetected) {
+          showScaleDetectionFailurePopup(this);
+        }
+      }
+    }, 1000);
   },
   beforeUnmount() {
     window.removeEventListener('resize', this.onWindowResize);
@@ -599,23 +620,76 @@ export default {
     }
   },
   methods: {
-    async loadImage() {
-      console.log('[loadImage] 이미지 로드 시작:', this.imageUrl);
+    // 이미지 로드 함수
+    loadImage() {
+      console.log('[loadImage] 이미지 로드 시작');
       
-      if (!this.imageUrl) {
-        console.error('[loadImage] 이미지 URL이 없습니다.');
+      // 이미지 요소 참조
+      const img = this.$refs.sourceImage;
+      
+      if (!img) {
+        console.error('[loadImage] 이미지 요소를 찾을 수 없음');
         return;
       }
       
-      // 이미지 로드 전에 현재 이미지 URL 저장
-      this.currentRenderingImage = this.imageUrl;
+      // 새 이미지 객체 생성 (캐시 방지)
+      this.image = new Image();
+      this.image.crossOrigin = 'anonymous';
       
-      // 이미지 로드 (handleImageLoad에서 이미지 처리 및 측정값 복원)
-      const img = this.$refs.sourceImage;
-      if (img) {
-        img.src = this.imageUrl;
-        // 이미지 로드 완료 이벤트는 handleImageLoad에서 처리
-      }
+      // 이미지 로드 시 처리
+      this.image.onload = () => {
+        console.log('[loadImage] 이미지 로드 완료, 크기:', this.image.width, 'x', this.image.height);
+        
+        // 이미지 데이터 처리
+        this.handleImageLoad();
+        
+        // 스케일바 자동 감지 시도 (스케일바 모드이고 아직 감지되지 않은 경우)
+        if (this.scaleMethod === 'scaleBar' && !this.scaleBarDetected) {
+          console.log('[loadImage] 스케일바 모드이고 감지되지 않음, 자동 감지 시도');
+          
+          // 지연 시간 후 스케일바 감지 실행
+          setTimeout(() => {
+            this.detectScaleBar();
+            
+            // 추가 확인: 팝업이 보이지 않으면 강제로 표시
+            this.$nextTick(() => {
+              if (!this.scaleBarDetected && !this.showScaleChoicePopup) {
+                console.log('[loadImage] 스케일바 감지 실패, 팝업 강제 표시');
+                this.showScaleChoicePopup = true;
+                
+                // DOM 팝업 요소 강제 표시
+                setTimeout(() => {
+                  const popupElement = document.querySelector('.scale-choice-popup');
+                  if (popupElement) {
+                    popupElement.style.display = 'flex';
+                    popupElement.style.visibility = 'visible';
+                    popupElement.style.zIndex = '999999';
+                    
+                    // 컨텐츠 요소도 강제 표시
+                    const contentElement = popupElement.querySelector('.scale-choice-content');
+                    if (contentElement) {
+                      contentElement.style.display = 'block';
+                    }
+                  } else {
+                    // 팝업이 없으면 오버라이드 함수 호출
+                    showScaleDetectionFailurePopup(this);
+                  }
+                }, 100);
+              }
+            });
+          }, 300);
+        }
+      };
+      
+      // 이미지 로드 에러 처리
+      this.image.onerror = (e) => {
+        console.error('[loadImage] 이미지 로드 실패:', e);
+        this.showNotification('이미지를 로드하는 데 실패했습니다.', 'error');
+      };
+      
+      // 이미지 URL 설정
+      this.image.src = this.imageUrl;
+      console.log('[loadImage] 이미지 로드 요청:', this.imageUrl?.substring(0, 30) + '...');
     },
     async handleImageLoad() {
       console.log('[handleImageLoad] 이미지 로드 완료, 이미지 변경 중:', this.isImageChanging);
@@ -629,9 +703,18 @@ export default {
         return;
       }
       
+      // 이미지가 없는 경우 이미지 객체에 소스 이미지 할당
+      if (!this.image || this.image.src !== img.src) {
+        console.log('[handleImageLoad] 이미지 객체 할당 또는 업데이트');
+        this.image = img;
+      }
+      
       // 이미지 크기에 맞게 캔버스 조정
       canvas.width = img.naturalWidth;
       canvas.height = img.naturalHeight;
+      
+      // 이미지 비율 저장
+      this.imageRatio = img.naturalWidth / img.naturalHeight;
       
       // 컨테이너 크기에 맞게 캔버스 크기 조정 (비율 유지)
       this.updateCanvasSize();
@@ -649,8 +732,32 @@ export default {
         this.isImageChanging = false;
       }
       
-      // 스케일바 자동 감지 (설정된 경우)
-      if (this.scaleMethod === 'scaleBar' && !this.isDrawingScaleBar) {
+      // 저장된 스케일바 정보가 있는 경우 캔버스 좌표 조정
+      if (this.scaleBarDetected && this.scaleBarMeasurement) {
+        // 이미지 크기 변화에 따른 스케일바 좌표 조정
+        console.log('[handleImageLoad] 저장된 스케일바 정보 업데이트');
+        
+        // 캔버스 크기 변화에 맞게 스케일바 좌표 조정
+        const widthRatio = canvas.width / this.prevWidth;
+        const heightRatio = canvas.height / this.prevHeight;
+        
+        if (isFinite(widthRatio) && isFinite(heightRatio) && widthRatio > 0 && heightRatio > 0) {
+          // 시작점과 끝점 조정
+          this.scaleBarMeasurement.start.x *= widthRatio;
+          this.scaleBarMeasurement.start.y *= heightRatio;
+          this.scaleBarMeasurement.end.x *= widthRatio;
+          this.scaleBarMeasurement.end.y *= heightRatio;
+          
+          console.log('[handleImageLoad] 스케일바 좌표 조정 완료');
+        }
+      } 
+      // 스케일바 팝업이 이미 표시되고 있으면 그대로 유지
+      else if (this.showScaleChoicePopup) {
+        console.log('[handleImageLoad] 스케일바 선택 팝업이 이미 표시됨, 유지');
+      }
+      // 자동 감지 시도 (설정된 경우)
+      else if (this.scaleMethod === 'scaleBar' && !this.isDrawingScaleBar && !this.scaleBarDetected && this.isFirstDetectionAttempt) {
+        console.log('[handleImageLoad] 스케일바 자동 감지 시도');
         this.detectScaleBar();
       }
       
@@ -662,6 +769,21 @@ export default {
       const img = this.$refs.sourceImage;
       const canvas = this.$refs.canvas;
       const container = this.$refs.container;
+      
+      if (!canvas || !container) {
+        console.error('[updateCanvasSize] Canvas 또는 Container 요소가 없습니다.');
+        return;
+      }
+      
+      if (!img || !img.complete) {
+        console.warn('[updateCanvasSize] 이미지가 아직 로드되지 않았습니다.');
+        return;
+      }
+      
+      // 이미지 비율이 설정되지 않았으면 계산
+      if (!this.imageRatio || this.imageRatio <= 0) {
+        this.imageRatio = img.naturalWidth / img.naturalHeight;
+      }
       
       const containerRatio = container.clientWidth / container.clientHeight;
       
@@ -679,7 +801,11 @@ export default {
       
       // 컨텍스트 재설정 및 이미지 다시 그리기
       this.ctx = canvas.getContext('2d');
-      this.ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      
+      // 이미지가 로드되었는지 확인 후 그리기
+      if (img.complete) {
+        this.ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      }
       
       // 기존 측정값들의 좌표 조정
       this.adjustMeasurements(canvasWidth / this.prevWidth, canvasHeight / this.prevHeight);
@@ -1515,7 +1641,15 @@ export default {
       
       // 캔버스 초기화 및 이미지 다시 그리기
       this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
-      this.ctx.drawImage(this.image, 0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+      
+      // 이미지 그리기 - this.image가 없는 경우 sourceImage 사용
+      if (this.image && this.image.complete) {
+        this.ctx.drawImage(this.image, 0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+      } else if (this.$refs.sourceImage && this.$refs.sourceImage.complete) {
+        this.ctx.drawImage(this.$refs.sourceImage, 0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+      } else {
+        console.warn('[render] 유효한 이미지가 없습니다.');
+      }
       
       // 감지된 스케일바 표시 (디버깅 용도)
       if (this.scaleBarDetected && this.scaleBarMeasurement && this.scaleMethod === 'scaleBar') {
@@ -1827,6 +1961,9 @@ export default {
           : this.filteredMeasurements.length
       });
       
+      // 현재 상태 저장 - 스케일바 정보 포함
+      this.saveMeasurementState();
+      
       // v-show 방식에서는 컴포넌트가 파괴되지 않으므로 데이터를 유지
       console.log('[closePopup] 팝업 닫기 - 측정 데이터 유지 (측정값:', this.measurements.length, '개)');
       
@@ -1835,6 +1972,107 @@ export default {
       
       // 팝업만 닫기
       this.$emit('close');
+    },
+    
+    // 측정 상태 저장 함수 추가
+    saveMeasurementState() {
+      try {
+        // 저장할 측정 상태 객체 생성
+        const stateData = {
+          // 측정값
+          measurements: this.measurements,
+          segmentedMeasurements: this.segmentedMeasurements,
+          defectMeasurements: this.defectMeasurements,
+          
+          // 기준선
+          referenceLines: this.referenceLines,
+          activeReferenceLine: this.activeReferenceLine,
+          
+          // 스케일바 정보
+          scaleMethod: this.scaleMethod,
+          scaleBarDetected: this.scaleBarDetected,
+          scaleBarMeasurement: this.scaleBarMeasurement,
+          scaleBarValue: this.scaleBarValue,
+          scaleBarUnit: this.scaleBarUnit,
+          
+          // ID 카운터
+          nextId: this.nextId,
+          brightSubIdCounter: this.brightSubIdCounter,
+          darkSubIdCounter: this.darkSubIdCounter,
+          
+          // 기타 상태
+          magnification: this.magnification,
+          measurementMode: this.measurementMode,
+          
+          // 타임스탬프
+          timestamp: new Date().getTime()
+        };
+        
+        // localStorage에 저장
+        localStorage.setItem('msa6_measurement_state', JSON.stringify(stateData));
+        console.log('[saveMeasurementState] 측정 상태 저장 완료 (스케일바 정보 포함)');
+      } catch (error) {
+        console.error('[saveMeasurementState] 데이터 저장 중 오류:', error);
+      }
+    },
+    
+    // 측정 상태 복원 함수 추가
+    restoreMeasurementState() {
+      try {
+        // localStorage에서 데이터 가져오기
+        const savedData = localStorage.getItem('msa6_measurement_state');
+        if (!savedData) {
+          console.log('[restoreMeasurementState] 저장된 측정 상태 없음');
+          return false;
+        }
+        
+        // 1시간(3,600,000ms) 이내의 데이터만 복원
+        const data = JSON.parse(savedData);
+        const now = new Date().getTime();
+        if (now - data.timestamp > 3600000) {
+          console.log('[restoreMeasurementState] 저장된 데이터가 너무 오래됨, 복원하지 않음');
+          localStorage.removeItem('msa6_measurement_state');
+          return false;
+        }
+        
+        // 현재 스케일바 팝업 상태 저장
+        const currentShowPopup = this.showScaleChoicePopup;
+        
+        // 데이터 복원
+        if (data.measurements) this.measurements = data.measurements;
+        if (data.segmentedMeasurements) this.segmentedMeasurements = data.segmentedMeasurements;
+        if (data.defectMeasurements) this.defectMeasurements = data.defectMeasurements;
+        
+        if (data.referenceLines) this.referenceLines = data.referenceLines;
+        if (data.activeReferenceLine) this.activeReferenceLine = data.activeReferenceLine;
+        
+        // 스케일바 정보 복원
+        if (data.scaleMethod) this.scaleMethod = data.scaleMethod;
+        if (data.scaleBarDetected !== undefined) this.scaleBarDetected = data.scaleBarDetected;
+        if (data.scaleBarMeasurement) this.scaleBarMeasurement = data.scaleBarMeasurement;
+        if (data.scaleBarValue) this.scaleBarValue = data.scaleBarValue;
+        if (data.scaleBarUnit) this.scaleBarUnit = data.scaleBarUnit;
+        
+        // ID 카운터 복원
+        if (data.nextId) this.nextId = data.nextId;
+        if (data.brightSubIdCounter) this.brightSubIdCounter = data.brightSubIdCounter;
+        if (data.darkSubIdCounter) this.darkSubIdCounter = data.darkSubIdCounter;
+        
+        // 기타 상태 복원
+        if (data.magnification) this.magnification = data.magnification;
+        if (data.measurementMode) this.measurementMode = data.measurementMode;
+        
+        // 팝업 상태 유지 (기존 팝업이 표시 중이면 계속 표시)
+        if (currentShowPopup) {
+          this.showScaleChoicePopup = true;
+        }
+        
+        console.log('[restoreMeasurementState] 측정 상태 복원 완료, 스케일바 팝업 상태:', this.showScaleChoicePopup);
+        return true;
+      } catch (error) {
+        console.error('[restoreMeasurementState] 데이터 복원 중 오류:', error);
+        return false;
+      }
     },
     applySelectedIds() {
       if (this.selectedRows.length === 0 || (!this.newItemId && !this.newSubId)) return;
@@ -2513,84 +2751,14 @@ export default {
         if (this.scaleMethod === 'scaleBar') {
           console.log('[detectScaleBar] 이미지 데이터 없음, 선택 팝업 표시');
           this.scaleBarDetected = false;
-          
-          // 글로벌 변수에 디버깅 정보 추가
-          window._popupDebug = {
-            attempt: 1,
-            stage: 'initial_call',
-            timestamp: new Date().toISOString()
-          };
-          
-          // 즉시 팝업 표시 - 지연 없이
-          console.log('[detectScaleBar] 즉시 팝업 표시 시도');
           this.showScaleChoicePopup = true;
-          console.log('[detectScaleBar] 팝업 표시 플래그 설정:', this.showScaleChoicePopup);
           
           // 알림 표시
           this.showNotification('스케일바 자동 감지에 실패했습니다. 측정 방식을 선택해주세요.', 'warning');
           
-          // DOM 업데이트 후 스타일 강제 적용
+          // DOM 업데이트 후 스타일 강제 적용 (Vue의 $nextTick 사용)
           this.$nextTick(() => {
-            try {
-              // 팝업 요소 직접 스타일 적용
-              const popupElement = document.querySelector('.scale-choice-popup');
-              if (popupElement) {
-                console.log('[detectScaleBar] 팝업 요소 발견, 스타일 강제 적용');
-                
-                // 인라인 스타일 최대한 강하게 적용
-                const inlineStyles = `
-                  position: fixed !important;
-                  top: 0 !important;
-                  left: 0 !important;
-                  right: 0 !important;
-                  bottom: 0 !important;
-                  width: 100vw !important;
-                  height: 100vh !important;
-                  display: flex !important;
-                  visibility: visible !important;
-                  z-index: 99999999 !important;
-                  background: rgba(0, 0, 0, 0.8) !important;
-                  justify-content: center !important;
-                  align-items: center !important;
-                  pointer-events: auto !important;
-                  opacity: 1 !important;
-                `;
-                
-                popupElement.setAttribute('style', inlineStyles);
-                
-                // 내용 요소에도 스타일 적용
-                const contentElement = popupElement.querySelector('.scale-choice-content');
-                if (contentElement) {
-                  contentElement.style.zIndex = '100000000';
-                  contentElement.style.position = 'relative';
-                  contentElement.style.boxShadow = '0 0 30px rgba(0, 0, 0, 0.8)';
-                  contentElement.style.opacity = '1';
-                  contentElement.style.visibility = 'visible';
-                  contentElement.style.display = 'block';
-                }
-                
-                console.log('[detectScaleBar] 스타일 적용 완료, 선택 버튼 스타일 확인');
-                
-                // 선택 버튼 스타일 확인
-                const buttons = popupElement.querySelectorAll('.choice-btn');
-                if (buttons.length > 0) {
-                  console.log(`[detectScaleBar] ${buttons.length}개 버튼 발견, 스타일 적용`);
-                  buttons.forEach(btn => {
-                    btn.style.opacity = '1';
-                    btn.style.visibility = 'visible';
-                    btn.style.display = 'flex';
-                  });
-                } else {
-                  console.warn('[detectScaleBar] 선택 버튼을 찾을 수 없음');
-                }
-              } else {
-                // 팝업이 없는 경우 강제로 생성
-                console.error('[detectScaleBar] 팝업 요소를 찾을 수 없음, 강제 생성 시도');
-                // 기존 코드는 유지
-              }
-            } catch (error) {
-              console.error('[detectScaleBar] 팝업 표시 중 오류:', error);
-            }
+            console.log('[detectScaleBar] 팝업 표시 플래그 설정 확인:', this.showScaleChoicePopup);
           });
         }
         return;
@@ -2598,6 +2766,7 @@ export default {
       
       console.log('[detectScaleBar] 스케일바 감지 시작, 초기 로드 상태:', this.$_isInitialLoad);
       
+      // 스케일바 감지 로직 실행
       const img = this.$refs.sourceImage;
       const width = img.naturalWidth;
       const height = img.naturalHeight;
@@ -2661,7 +2830,7 @@ export default {
           const gapStdDev = gapWidths.length ? Math.sqrt(gapWidths.reduce((sum, width) => sum + Math.pow(width - avgGapWidth, 2), 0) / gapWidths.length) : 0;
           
           // 표준편차가 낮으면 (균일하면) 스케일바로 간주
-          if (segmentStdDev / avgSegmentWidth < 0.3 && gapStdDev / avgGapWidth < 0.3) {
+          if (segmentStdDev / avgSegmentWidth < 0.3 && (gapWidths.length === 0 || gapStdDev / avgGapWidth < 0.3)) {
             scaleBarFound = true;
             scaleBarY = y;
             scaleBarStartX = whiteSegments[0].start;
@@ -2671,37 +2840,8 @@ export default {
         }
       }
       
-      if (scaleBarFound) {
-        console.log(`[detectScaleBar] 스케일바 감지 성공: y=${scaleBarY}, x=${scaleBarStartX}-${scaleBarEndX}`);
-        
-        // 캔버스 좌표로 변환
-        const canvas = this.$refs.canvas;
-        const scaleBarStartCanvas = {
-          x: (scaleBarStartX / width) * canvas.width,
-          y: (scaleBarY / height) * canvas.height
-        };
-        const scaleBarEndCanvas = {
-          x: (scaleBarEndX / width) * canvas.width,
-          y: (scaleBarY / height) * canvas.height
-        };
-        
-        // 스케일바 측정값 저장
-        this.scaleBarMeasurement = {
-          start: scaleBarStartCanvas,
-          end: scaleBarEndCanvas,
-          pixelLength: scaleBarEndX - scaleBarStartX,
-          unit: this.scaleBarUnit
-        };
-        
-        // 스케일바 감지 상태 업데이트
-        this.scaleBarDetected = true;
-        
-        // 모든 측정값 업데이트
-        this.updateAllMeasurements();
-        
-        // 스케일바 인식 성공 알림
-        this.showNotification('스케일바를 성공적으로 인식했습니다.', 'success');
-      } else {
+      // 감지 실패 시 팝업 표시
+      if (!scaleBarFound) {
         console.log('[detectScaleBar] 스케일바 감지 실패');
         this.scaleBarDetected = false;
         this.scaleBarMeasurement = null;
@@ -2709,7 +2849,7 @@ export default {
         // 항상 팝업 표시 (isFirstDetectionAttempt 조건 제거)
         if (this.scaleMethod === 'scaleBar') {
           console.log('[detectScaleBar] 감지 실패, 선택 팝업 표시');
-          
+        
           // 팝업 표시 및 DOM 조작 (지연 적용)
           setTimeout(() => {
             // 알림 표시
@@ -2733,6 +2873,10 @@ export default {
                   popupElement.style.left = '0';
                   popupElement.style.width = '100%';
                   popupElement.style.height = '100%';
+                  popupElement.style.display = 'flex';
+                  popupElement.style.justifyContent = 'center';
+                  popupElement.style.alignItems = 'center';
+                  popupElement.style.background = 'rgba(0, 0, 0, 0.8)';
                   
                   // 내용 요소에도 스타일 적용
                   const contentElement = popupElement.querySelector('.scale-choice-content');
@@ -2740,9 +2884,17 @@ export default {
                     contentElement.style.zIndex = '1000000';
                     contentElement.style.position = 'relative';
                     contentElement.style.boxShadow = '0 0 30px rgba(0, 0, 0, 0.8)';
+                    contentElement.style.visibility = 'visible';
+                    contentElement.style.display = 'block';
                   }
                 } else {
                   console.error('[detectScaleBar] 팝업 요소를 찾을 수 없음');
+                  
+                  // 직접 오버라이드 함수 호출
+                  if (typeof showScaleDetectionFailurePopup === 'function') {
+                    console.log('[detectScaleBar] showScaleDetectionFailurePopup 함수 직접 호출');
+                    showScaleDetectionFailurePopup(this);
+                  }
                 }
               } catch (e) {
                 console.error('[detectScaleBar] 팝업 스타일 적용 중 오류:', e);
@@ -2752,27 +2904,7 @@ export default {
         }
       }
       
-      this.render();
-    },
-    // 스케일바 값 입력 다이얼로그 표시 함수 수정
-    showScaleBarValueDialog() {
-      // 기본값 표시
-      const defaultValue = this.scaleBarUnit === 'μm' ? 1 : 500;
-      const value = prompt(`스케일바의 실제 길이를 입력하세요 (${this.scaleBarUnit}):`, defaultValue);
-      
-      if (value !== null) {
-        const numValue = parseFloat(value);
-        if (!isNaN(numValue) && numValue > 0) {
-          this.scaleBarValue = numValue;
-          this.updateAllMeasurements();
-          this.showNotification(`스케일바가 ${numValue} ${this.scaleBarUnit}로 설정되었습니다.`, 'success');
-          
-          // 스케일바 설정 완료 후 자동으로 선측정 모드로 전환
-          this.isDrawingScaleBar = false;
-          this.measurementMode = 'line';
-          
-          console.log('[showScaleBarValueDialog] 스케일바 설정 완료, 선측정 모드로 전환');
-        } else {
+      // 감지 성공 시 처리
           this.showNotification('유효한 숫자를 입력해주세요.', 'error');
           this.showScaleBarValueDialog(); // 다시 표시
         }
@@ -2795,13 +2927,12 @@ export default {
       this.showScaleChoicePopup = false;
       
       // DOM 요소도 직접 제어하여 확실하게 팝업 숨기기 (v-show 문제 해결)
-      this.$nextTick(() => {
-        const popupElement = document.querySelector('.scale-choice-popup');
-        if (popupElement) {
-          popupElement.style.display = 'none';
-          console.log('[selectScaleMethod] 팝업 요소 직접 숨김 처리');
-        }
-      });
+      const popupElement = document.querySelector('.scale-choice-popup');
+      if (popupElement) {
+        popupElement.style.display = 'none';
+        popupElement.style.visibility = 'hidden';
+        console.log('[selectScaleMethod] 팝업 요소 직접 숨김 처리 완료');
+      }
       
       // 사용자 선택에 따라 처리
       if (method === 'magnification') {
@@ -2821,6 +2952,10 @@ export default {
       // 첫 번째 감지 시도 플래그 해제
       this.isFirstDetectionAttempt = false;
       
+      // 상태 변경 저장
+      this.saveMeasurementState();
+      
+      // 다시 렌더링
       this.render();
       
       // 이벤트 발생 기록
@@ -2829,80 +2964,8 @@ export default {
         selected: method
       });
     },
-    // 측정 데이터 저장 메서드
-    saveMeasurementData() {
-      try {
-        // 저장할 측정 데이터 객체 생성
-        const measurementData = {
-          measurements: this.measurements,
-          segmentedMeasurements: this.segmentedMeasurements,
-          defectMeasurements: this.defectMeasurements,
-          referenceLines: this.referenceLines,
-          activeReferenceLine: this.activeReferenceLine,
-          nextId: this.nextId,
-          brightSubIdCounter: this.brightSubIdCounter,
-          darkSubIdCounter: this.darkSubIdCounter,
-          scaleMethod: this.scaleMethod,
-          magnification: this.magnification,
-          scaleBarValue: this.scaleBarValue,
-          scaleBarUnit: this.scaleBarUnit,
-          scaleBarDetected: this.scaleBarDetected,
-          measurementMode: this.measurementMode,
-          timestamp: new Date().getTime()
-        };
-        
-        // localStorage에 저장
-        localStorage.setItem('msa6_measurement_data', JSON.stringify(measurementData));
-        console.log('[saveMeasurementData] 측정 데이터 저장 완료');
-      } catch (error) {
-        console.error('[saveMeasurementData] 데이터 저장 중 오류:', error);
-      }
-    },
 
-    // 측정 데이터 복원 메서드
-    restoreMeasurementData() {
-      try {
-        // localStorage에서 데이터 가져오기
-        const savedData = localStorage.getItem('msa6_measurement_data');
-        if (!savedData) {
-          console.log('[restoreMeasurementData] 저장된 측정 데이터 없음');
-          return false;
-        }
-        
-        // 10분(600,000ms) 이내의 데이터만 복원
-        const data = JSON.parse(savedData);
-        const now = new Date().getTime();
-        if (now - data.timestamp > 600000) {
-          console.log('[restoreMeasurementData] 저장된 데이터가 너무 오래됨, 복원하지 않음');
-          localStorage.removeItem('msa6_measurement_data');
-          return false;
-        }
-        
-        // 데이터 복원
-        this.measurements = data.measurements || [];
-        this.segmentedMeasurements = data.segmentedMeasurements || [];
-        this.defectMeasurements = data.defectMeasurements || [];
-        this.referenceLines = data.referenceLines || [];
-        this.activeReferenceLine = data.activeReferenceLine || null;
-        this.nextId = data.nextId || 1;
-        this.brightSubIdCounter = data.brightSubIdCounter || 1;
-        this.darkSubIdCounter = data.darkSubIdCounter || 1;
-        this.scaleMethod = data.scaleMethod || 'magnification';
-        this.magnification = data.magnification || 500;
-        this.scaleBarValue = data.scaleBarValue || 500;
-        this.scaleBarUnit = data.scaleBarUnit || 'nm';
-        this.scaleBarDetected = data.scaleBarDetected || false;
-        this.measurementMode = data.measurementMode || 'line';
-        
-        console.log('[restoreMeasurementData] 측정 데이터 복원 완료');
-        this.showNotification('이전 측정 데이터가 복원되었습니다.', 'info');
-        return true;
-      } catch (error) {
-        console.error('[restoreMeasurementData] 데이터 복원 중 오류:', error);
-        return false;
-      }
-    },
-    // toggleScaleBarDrawing 메서드를 찾아서 수정하거나 없으면 새로 추가
+    // 스케일바 그리기 토글
     toggleScaleBarDrawing() {
       this.isDrawingScaleBar = !this.isDrawingScaleBar;
       
@@ -2931,6 +2994,8 @@ export default {
       
       this.render();
     },
+    
+    // 이미지 전환 함수
     toggleImage() {
       console.log('[toggleImage] 이미지 전환 시작, 현재:', this.isAfterImage ? '처리 후' : '처리 전');
       
@@ -2946,58 +3011,121 @@ export default {
       }
       
       // 현재 측정값 백업
-      this.measurementsBackup = JSON.parse(JSON.stringify(this.measurements));
-      this.isImageChanging = true;
+      if (this.measurements.length > 0) {
+        console.log('[toggleImage] 측정값 백업 - 개수:', this.measurements.length);
+        this.measurementsBackup = JSON.parse(JSON.stringify(this.measurements));
+        this.isImageChanging = true;
+      }
       
       // 이미지 전환
       this.isAfterImage = !this.isAfterImage;
       
-      // URL 설정
-      const newImageUrl = this.isAfterImage 
-        ? this.afterImageUrl 
-        : this.beforeImageUrl;
+      // 현재 이미지 URL 설정
+      if (this.isAfterImage) {
+        this.imageUrl = this.afterImageUrl;
+      } else {
+        this.imageUrl = this.beforeImageUrl;
+      }
       
-      console.log(`[toggleImage] 이미지 변경: ${this.isAfterImage ? '처리 후' : '처리 전'} 이미지로 전환`);
-      this.imageUrl = newImageUrl;
+      // 이미지 상태 로깅
+      console.log('[toggleImage] 이미지 전환:', {
+        새상태: this.isAfterImage ? '처리 후' : '처리 전',
+        현재URL: this.imageUrl?.substring(0, 30) + '...'
+      });
       
-      // 이미지 로드
-      this.loadImage();
+      // 이미지 로드 강제 재시도
+      this.$nextTick(() => {
+        this.loadImage();
+        
+        // 강제 리렌더링
+        setTimeout(() => {
+          if (this.canvas && this.ctx && this.image) {
+            this.render();
+            console.log('[toggleImage] 이미지 전환 완료 후 렌더링 수행');
+          }
+        }, 300);
+      });
     },
     // MSA5 이미지 로드 함수 추가
     loadMSA5Images() {
-      // 시작 이미지와 종료 이미지 URL 가져오기
+      // 시작 이미지와 종료 이미지 URL 가져오기 (로컬 스토리지에서)
       this.beforeImageUrl = localStorage.getItem('msa5_start_image') || null;
-      this.afterImageUrl = localStorage.getItem('msa6_final_image') || null;
+      this.afterImageUrl = localStorage.getItem('msa6_final_image') || this.imageUrl || null;
       
       console.log('[loadMSA5Images] 이미지 로드:', {
-        beforeImage: this.beforeImageUrl ? '있음' : '없음',
-        afterImage: this.afterImageUrl ? '있음' : '없음'
+        beforeImage: this.beforeImageUrl ? this.beforeImageUrl.substring(0, 50) + '...' : '없음',
+        afterImage: this.afterImageUrl ? this.afterImageUrl.substring(0, 50) + '...' : '없음',
+        currentImage: this.imageUrl ? this.imageUrl.substring(0, 50) + '...' : '없음'
       });
+      
+      // 이미지 URL이 없거나 현재 URL과 동일하면 저장
+      if (this.imageUrl && !this.afterImageUrl) {
+        console.log('[loadMSA5Images] 현재 이미지 URL을 처리 후 이미지로 설정');
+        this.afterImageUrl = this.imageUrl;
+        localStorage.setItem('msa6_final_image', this.imageUrl);
+      }
       
       // 현재 설정된 이미지 URL 확인
       if (!this.imageUrl && this.afterImageUrl) {
+        console.log('[loadMSA5Images] 처리 후 이미지 URL로 설정');
         this.imageUrl = this.afterImageUrl;
         this.isAfterImage = true;
       } else if (!this.imageUrl && this.beforeImageUrl) {
+        console.log('[loadMSA5Images] 처리 전 이미지 URL로 설정');
         this.imageUrl = this.beforeImageUrl;
         this.isAfterImage = false;
       }
       
       // 현재 렌더링 이미지 설정
       this.currentRenderingImage = this.imageUrl;
+      
+      // 토글 버튼 활성화 여부 설정 (시작/종료 이미지가 모두 있는 경우에만)
+      const hasToggle = !!(this.beforeImageUrl && this.afterImageUrl);
+      console.log('[loadMSA5Images] 이미지 전환 버튼 활성화:', hasToggle);
+      
+      return {
+        before: this.beforeImageUrl,
+        after: this.afterImageUrl,
+        current: this.imageUrl,
+        hasToggle
+      };
     },
     watchShowPopup(newVal) {
       console.log('[watchShowPopup] 팝업 표시 상태 변경:', newVal);
       
       if (newVal) {
-        // 팝업이 표시될 때 이미지 로드
+        // 팝업이 표시될 때 
         this.$nextTick(() => {
+          // 현재 스케일바 팝업 상태 확인
+          const currentPopupState = this.showScaleChoicePopup;
+          console.log('[watchShowPopup] 복원 전 스케일바 팝업 상태:', currentPopupState);
+          
+          // 저장된 측정 상태 복원 시도 (팝업 상태는 바꾸지 않음)
+          this.restoreMeasurementState();
+          
+          // 이미지 로드
           this.loadMSA5Images();
           this.loadImage();
+          
+          // 필요하면 팝업 상태 복원
+          if (currentPopupState) {
+            this.$nextTick(() => {
+              this.showScaleChoicePopup = true;
+              console.log('[watchShowPopup] 스케일바 팝업 상태 복원:', this.showScaleChoicePopup);
+            });
+          }
+          
+          // 스케일바 상태 로깅
+          console.log('[watchShowPopup] 스케일바 상태:', {
+            감지됨: this.scaleBarDetected,
+            측정방식: this.scaleMethod,
+            팝업표시: this.showScaleChoicePopup
+          });
         });
       } else {
         // 팝업이 닫힐 때 현재 이미지 상태 저장 (측정 데이터는 v-show로 유지됨)
         console.log('[watchShowPopup] 팝업 닫힘, 상태 저장');
+        this.saveMeasurementState();
       }
     }
   }
