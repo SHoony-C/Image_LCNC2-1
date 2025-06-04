@@ -138,7 +138,7 @@ export default {
     },
     handleMSA5ImageProcessed(event) {
       console.log('MSA5 이미지 처리 이벤트 수신')
-      const { imageUrl, timestamp } = event.detail
+      const { imageUrl, timestamp, noPopup } = event.detail
       
       // 최종 이미지 설정
       this.finalImage = imageUrl
@@ -155,6 +155,24 @@ export default {
       this.msa5ImageAvailable = true
       
       console.log('MSA6 최종 결과 이미지 업데이트 완료')
+      
+      // 자동 팝업 열림 방지 플래그 확인 및 설정
+      if (noPopup === true) {
+        console.log('MSA6: MSA5에서 noPopup 플래그가 전달됨. 팝업을 열지 않습니다.');
+        // 세션 스토리지에도 플래그 설정 (다른 컴포넌트에서 참조할 수 있도록)
+        sessionStorage.setItem('msa6_no_auto_popup', 'true');
+      } else {
+        // noPopup 플래그가 없는 경우, 세션 스토리지의 플래그 확인
+        const noAutoPopupFromStorage = sessionStorage.getItem('msa6_no_auto_popup') === 'true';
+        
+        if (noAutoPopupFromStorage) {
+          console.log('MSA6: 세션 스토리지에 자동 팝업 방지 플래그가 설정되어 있습니다.');
+          // 플래그는 유지 (필요한 경우 다른 컴포넌트에서 초기화)
+        } else {
+          console.log('MSA6: 자동 팝업 방지 플래그가 없습니다. 사용자가 이미지를 클릭하면 팝업이 열립니다.');
+          // 플래그가 없는 경우에는 아무 작업도 하지 않음 (기본적으로 팝업을 열지 않음)
+        }
+      }
     },
     toggleMaximize() {
       this.isMaximized = !this.isMaximized
@@ -163,6 +181,10 @@ export default {
       if (this.finalImage) {
         console.log('Opening measurement popup with image:', this.finalImage)
         this.showMeasurementPopup = true
+        
+        // 세션 스토리지 플래그 초기화 (팝업을 명시적으로 열었으므로 플래그 초기화)
+        sessionStorage.removeItem('msa6_no_auto_popup');
+        console.log('MSA6: 사용자가 수동으로 팝업을 열었습니다. 자동 팝업 방지 플래그를 초기화합니다.');
         
         // First make sure the container elements are visible
         this.$nextTick(() => {
@@ -181,11 +203,16 @@ export default {
           
           console.log('MSA6: 팝업 컨테이너 표시 설정 완료');
           
-          // Then call the component's method
+          // 이제 팝업 컴포넌트의 openPopup 메서드 호출
           if (this.$refs.measurementPopup && typeof this.$refs.measurementPopup.openPopup === 'function') {
             this.$refs.measurementPopup.openPopup(this.finalImage);
+            console.log('MSA6: 측정 팝업 openPopup 메서드 호출 완료');
+          } else {
+            console.error('MSA6: 측정 팝업 컴포넌트 참조 또는 openPopup 메서드를 찾을 수 없습니다.');
           }
         });
+      } else {
+        console.warn('MSA6: 표시할 이미지가 없어 측정 팝업을 열 수 없습니다.');
       }
     },
     closeMeasurementPopup() {
