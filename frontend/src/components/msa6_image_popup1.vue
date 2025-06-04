@@ -2,6 +2,42 @@
   <div class="msa6-image-popup-container">
   <Teleport to="body">
       <div class="image-measurement-popup" v-show="isVisible" @click.self="closePopup">
+      <!-- 도움말 단축키 오버레이 -->
+      <div class="shortcut-help-overlay" :class="{ show: showShortcutHelp }">
+        <div class="shortcut-help-content" :class="{ show: showShortcutHelp }">
+          <h2>단축키 도움말</h2>
+          <div class="shortcut-grid">
+            <div class="shortcut-item">
+              <div class="shortcut-key">F</div>
+              <div class="shortcut-desc">밝기값 보기 및 돋보기 활성화 (누르고 있는 동안)</div>
+            </div>
+            <div class="shortcut-item">
+              <div class="shortcut-key">A</div>
+              <div class="shortcut-desc">영역 선 측정 모드 (한번 더 누르면 수직/수평 방향 전환)</div>
+            </div>
+            <div class="shortcut-item">
+              <div class="shortcut-key">S</div>
+              <div class="shortcut-desc">단일 선 측정 모드 활성화</div>
+            </div>
+            <div class="shortcut-item">
+              <div class="shortcut-key">D</div>
+              <div class="shortcut-desc">선택된 측정 결과 삭제</div>
+            </div>
+            <div class="shortcut-item">
+              <div class="shortcut-key">H</div>
+              <div class="shortcut-desc">도움말 표시 (누르고 있는 동안)</div>
+            </div>
+            <div class="shortcut-item">
+              <div class="shortcut-key">Ctrl+Z</div>
+              <div class="shortcut-desc">측정 실행 취소</div>
+            </div>
+            <div class="shortcut-item">
+              <div class="shortcut-key">Ctrl+Y</div>
+              <div class="shortcut-desc">측정 다시 실행</div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div class="measurement-container" @click.stop>
         <div class="measurement-header">
           <div class="header-left">
@@ -152,7 +188,7 @@
             </div>
             
             <!-- 돋보기 추가 -->
-            <div class="magnifier-container" v-show="showBrightnessTooltip" :style="magnifierStyle">
+            <div class="magnifier-container" v-show="isFKeyPressed" :style="magnifierStyle">
               <canvas ref="magnifierCanvas" class="magnifier-canvas"></canvas>
               <div class="magnifier-crosshair"></div>
               <div class="magnifier-brightness">{{ currentBrightness }}</div>
@@ -488,6 +524,8 @@ export default {
       // 돋보기 관련 변수 추가
       magnifierSize: 150,
       magnifierZoom: 5,
+      // 단축키 도움말 표시 상태
+      showShortcutHelp: false,
     };
   },
   mounted() {
@@ -2331,17 +2369,53 @@ export default {
           this.deleteSegment(this.selectedSegment);
           this.selectedSegment = null;
         }
-      } else if (e.key.toLowerCase() === 'f') {
+      } else if (e.key && e.key.toLowerCase() === 'f') {
         this.isFKeyPressed = true;
         this.showBrightnessTooltip = true;
+        
+        console.log('키보드 이벤트 감지: f', this.isFKeyPressed);
+        console.log('키보드 이벤트 상세정보:', e);
+        
         // 마우스 위치에서 돋보기 초기화
         if (this.currentMousePos.x && this.currentMousePos.y) {
           const pos = this.getLocalPos({ 
             clientX: this.currentMousePos.x, 
             clientY: this.currentMousePos.y 
           });
-          this.updateMagnifier(pos);
+          
+          // 돋보기 즉시 업데이트
+          this.$nextTick(() => {
+            this.updateMagnifier(pos);
+            
+            // 돋보기가 보이도록 강제 설정
+            const magnifierContainer = document.querySelector('.magnifier-container');
+            if (magnifierContainer) {
+              magnifierContainer.style.display = 'block';
+            }
+          });
         }
+      } else if (e.key && e.key.toLowerCase() === 'a') {
+        // a키: 영역 선 측정 모드 토글 (수평 <-> 수직)
+        if (this.measurementMode === 'area-horizontal') {
+          this.setMode('area-vertical');
+        } else {
+          this.setMode('area-horizontal');
+        }
+      } else if (e.key && e.key.toLowerCase() === 's') {
+        // s키: 단일 선 측정 모드 활성화
+        this.setMode('line');
+      } else if (e.key && e.key.toLowerCase() === 'd') {
+        // d키: 선택된 측정 삭제
+        if (this.selectedSegment) {
+          this.deleteSegment(this.selectedSegment);
+          this.selectedSegment = null;
+        } else if (this.measurements.length > 0) {
+          // 선택된 세그먼트가 없으면 마지막 측정값 삭제
+          this.undoLastMeasurement();
+        }
+      } else if (e.key && e.key.toLowerCase() === 'h') {
+        // h키: 도움말 표시 (키를 누르고 있는 동안)
+        this.showShortcutHelp = true;
       }
     },
     undoLastMeasurement() {
@@ -2677,91 +2751,94 @@ export default {
      */
     async saveWithTableName(selectedTable) {
       try {
-        console.log('선택한 테이블:', selectedTable);
-        
-        if (!this.measurements || this.measurements.length === 0) {
-          this.showNotification('저장할 측정 결과가 없습니다.', 'error');
-          return;
-        }
-        
-        // SSO 로그인 아이디를 정확하게 가져오기
-        // localStorage의 모든 키-값 쌍 출력 (디버깅용)
         console.log('[saveWithTableName] localStorage 항목:');
-        for(let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if(key && !key.startsWith('_')) { // 개인정보가 아닌 키만 출력
-            console.log(`  ${key}: ${localStorage.getItem(key)}`);
-          }
-        }
         
-        // 사용자 정보가 포함될 수 있는 모든 가능한 키 확인
-        const userKeys = ['current_user', 'user', 'userName', 'username', 'ssoUsername', 
-                          'loggedInUser', 'loginId', 'userId', 'userInfo'];
+        // 사용자 정보 추출 시도
+        let userName = '측정사용자';
         
-        // 사용자 정보가 있는지 확인하고 JSON으로 파싱 시도
-        let userObject = null;
-        for(const key of userKeys) {
-          const value = localStorage.getItem(key);
-          if(value) {
-            try {
-              // JSON 객체인 경우 파싱 시도
-              const parsed = JSON.parse(value);
-              if(parsed && typeof parsed === 'object') {
-                userObject = parsed;
-                console.log(`[saveWithTableName] JSON 사용자 정보 발견: ${key}`, parsed);
-                break;
-              }
-            } catch(e) {
-              // JSON이 아닌 경우 문자열 그대로 사용
-              console.log(`[saveWithTableName] 문자열 사용자 정보 발견: ${key}=${value}`);
-            }
-          }
-        }
-        
-        // 사용자 이름 결정 로직
-        let userName = '측정사용자'; // 기본값
-        
-        // 1. userObject에서 사용자 이름 찾기 시도
-        if(userObject) {
+        // 객체에서 사용자 이름 추출하는 헬퍼 함수
+        const extractUserNameFromObject = (userObject) => {
           // 객체에서 이름 관련 필드 확인
           const nameFields = ['name', 'userName', 'username', 'loginId', 'id', 'email'];
           for(const field of nameFields) {
             if(userObject[field]) {
-              userName = userObject[field];
-              console.log(`[saveWithTableName] 사용자 객체에서 이름 찾음: ${field}=${userName}`);
-              break;
+              return userObject[field];
             }
           }
-        } 
-        // 2. localStorage에서 직접 값 찾기
-        else {
-          for(const key of userKeys) {
-            const value = localStorage.getItem(key);
-            if(value && value !== 'undefined' && value !== 'null') {
-              try {
-                // JSON이 아닌 단순 문자열인 경우
-                userName = value;
-                console.log(`[saveWithTableName] localStorage에서 직접 이름 찾음: ${key}=${userName}`);
+          return '측정사용자';
+        };
+        
+        // 1. localStorage에서 사용자 정보 찾기
+        const userKeys = ['userName', 'user_name', 'username', 'user', 'loginId', 'login_id', 'id', 'email'];
+        
+        for(const key of userKeys) {
+          const value = localStorage.getItem(key);
+          if(value && value !== 'undefined' && value !== 'null') {
+            try {
+              // JSON 데이터 파싱 시도
+              const parsed = JSON.parse(value);
+              
+              // 객체인 경우 필드 확인
+              if(typeof parsed === 'object' && parsed !== null) {
+                userName = extractUserNameFromObject(parsed);
+                console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
                 break;
-              } catch(e) {
-                // 오류 무시
+              } else if(typeof parsed === 'string') {
+                // 문자열인 경우 그대로 사용
+                userName = parsed;
+                console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
+                break;
+              }
+            } catch(e) {
+              // JSON 파싱 실패하면 문자열로 처리
+              if(typeof value === 'string') {
+                userName = value;
+                console.log(`[saveWithTableName] localStorage[${key}] 문자열로 사용자 이름 찾음: ${userName}`);
+                break;
               }
             }
           }
         }
         
-        // 3. 쿠키에서 사용자 정보 찾기 시도
+        // 2. document.cookie에서 사용자 정보 확인
         if(userName === '측정사용자' && document.cookie) {
           const cookies = document.cookie.split(';');
           for(const cookie of cookies) {
             const [name, value] = cookie.trim().split('=');
-            if(name && (name.includes('user') || name.includes('User') || name.includes('login') || name.includes('Login'))) {
+            if(['userName', 'user_name', 'username', 'user'].includes(name.toLowerCase())) {
               try {
                 userName = decodeURIComponent(value);
-                console.log(`[saveWithTableName] 쿠키에서 사용자 이름 찾음: ${name}=${userName}`);
+                console.log(`[saveWithTableName] 쿠키에서 사용자 이름 찾음: ${userName}`);
                 break;
               } catch(e) {
-                // 오류 무시
+                console.error(`[saveWithTableName] 쿠키 디코딩 오류:`, e);
+              }
+            }
+          }
+        }
+        
+        // 3. sessionStorage에서 사용자 정보 확인
+        if(userName === '측정사용자') {
+          for(const key of userKeys) {
+            const value = sessionStorage.getItem(key);
+            if(value && value !== 'undefined' && value !== 'null') {
+              try {
+                const parsed = JSON.parse(value);
+                if(typeof parsed === 'object' && parsed !== null) {
+                  userName = extractUserNameFromObject(parsed);
+                  console.log(`[saveWithTableName] sessionStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
+                  break;
+                } else if(typeof parsed === 'string') {
+                  userName = parsed;
+                  console.log(`[saveWithTableName] sessionStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
+                  break;
+                }
+              } catch(e) {
+                if(typeof value === 'string') {
+                  userName = value;
+                  console.log(`[saveWithTableName] sessionStorage[${key}] 문자열로 사용자 이름 찾음: ${userName}`);
+                  break;
+                }
               }
             }
           }
@@ -2783,11 +2860,142 @@ export default {
         
         console.log(`[saveWithTableName] 최종 결정된 사용자 이름: ${userName}`);
         
-        // lotId는 테이블 선택기에서 입력받은 값 사용
-        const lotId = selectedTable.lot_id || 
-                    (this.imageUrl ? this.imageUrl.split('/').pop().split('.')[0] : '');
+        // lot_wafer는 테이블 선택기에서 입력받은 값 사용
+        const lot_wafer = selectedTable.lot_wafer;
+        if(!lot_wafer) {
+          throw new Error('Lot Wafer 정보가 없습니다.');
+        }
         
-        console.log(`[saveWithTableName] 사용자 정보: ${userName}, Lot ID: ${lotId}`);
+        console.log(`[saveWithTableName] 사용할 lot_wafer 값: ${lot_wafer}`);
+        
+        // 1. 먼저 이미지 저장
+        if(this.imageUrl) {
+          try {
+            console.log('[saveWithTableName] 이미지 저장 시작');
+            console.log('[saveWithTableName] Before 이미지 URL:', this.inputImageUrl);
+            console.log('[saveWithTableName] After 이미지 URL:', this.imageUrl);
+            
+            // 이미지 URL이 유효한지 확인
+            if(!this.inputImageUrl || !this.imageUrl) {
+              console.warn('[saveWithTableName] 이미지 URL이 없습니다!');
+              console.log('[saveWithTableName] Before 이미지 상태:', this.inputImageUrl ? '있음' : '없음');
+              console.log('[saveWithTableName] After 이미지 상태:', this.imageUrl ? '있음' : '없음');
+            }
+            
+            // 이미지 저장 요청 데이터 구성
+            const requestData = {
+              title: `${selectedTable.table_name}_${lot_wafer}`,
+              description: `${selectedTable.table_name}에 저장된 ${lot_wafer} 측정 이미지`,
+              before_image: this.inputImageUrl,
+              after_image: this.imageUrl,
+              workflow_id: '',
+              tags: ['msa6', '측정'],
+              is_result: true,  // MSA6 결과 이미지임을 명시
+              table_name: selectedTable.table_name,
+              lot_wafer: lot_wafer
+            };
+            
+            console.log('[saveWithTableName] 이미지 저장 요청 데이터:', requestData);
+            
+            // 외부 이미지 저장 API 호출
+            const imageResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              body: JSON.stringify(requestData)
+            });
+            
+            if (!imageResponse.ok) {
+              const errorText = await imageResponse.text();
+              console.error('[saveWithTableName] 이미지 저장 API 오류:', imageResponse.status, errorText);
+              console.warn('[saveWithTableName] 이미지 저장에 실패했지만 측정 데이터 저장은 계속합니다.');
+              
+              // FormData 방식으로 재시도
+              try {
+                console.log('[saveWithTableName] FormData 방식으로 이미지 저장 재시도');
+                
+                // 이미지를 Blob으로 변환
+                const beforeBlob = await (async () => {
+                  if (this.inputImageUrl.startsWith('data:')) {
+                    const res = await fetch(this.inputImageUrl);
+                    return await res.blob();
+                  } else if (this.inputImageUrl.startsWith('blob:')) {
+                    const res = await fetch(this.inputImageUrl);
+                    return await res.blob();
+                  } else {
+                    const res = await fetch(this.inputImageUrl);
+                    return await res.blob();
+                  }
+                })();
+                
+                const afterBlob = await (async () => {
+                  if (this.imageUrl.startsWith('data:')) {
+                    const res = await fetch(this.imageUrl);
+                    return await res.blob();
+                  } else if (this.imageUrl.startsWith('blob:')) {
+                    const res = await fetch(this.imageUrl);
+                    return await res.blob();
+                  } else {
+                    const res = await fetch(this.imageUrl);
+                    return await res.blob();
+                  }
+                })();
+                
+                console.log('[saveWithTableName] Blob 변환 완료');
+                console.log('[saveWithTableName] Before Blob 타입:', beforeBlob.type, 'Size:', beforeBlob.size);
+                console.log('[saveWithTableName] After Blob 타입:', afterBlob.type, 'Size:', afterBlob.size);
+                
+                // FormData 구성
+                const formData = new FormData();
+                formData.append('title', requestData.title);
+                formData.append('description', requestData.description);
+                formData.append('before_file', beforeBlob, `before_${lot_wafer}.${beforeBlob.type.split('/')[1] || 'png'}`);
+                formData.append('file', afterBlob, `after_${lot_wafer}.${afterBlob.type.split('/')[1] || 'png'}`);
+                formData.append('workflow_id', '');
+                formData.append('tags', JSON.stringify(['msa6', '측정']));
+                formData.append('is_result', 'true');
+                formData.append('table_name', selectedTable.table_name);
+                formData.append('lot_wafer', lot_wafer);
+                
+                console.log('[saveWithTableName] FormData 구성 완료, API 요청 시작...');
+                
+                // FormData API 호출
+                const formResponse = await fetch('http://localhost:8000/api/external_storage/upload-file', {
+                  method: 'POST',
+                  body: formData
+                });
+                
+                if (!formResponse.ok) {
+                  const errorText = await formResponse.text();
+                  console.error('[saveWithTableName] FormData 방식 API 오류:', formResponse.status, errorText);
+                  console.warn('[saveWithTableName] FormData 방식 이미지 저장에도 실패했지만 측정 데이터 저장은 계속합니다.');
+                } else {
+                  const formResult = await formResponse.json();
+                  console.log('[saveWithTableName] FormData 방식 이미지 저장 성공:', formResult);
+                }
+              } catch (formError) {
+                console.error('[saveWithTableName] FormData 방식 이미지 저장 오류:', formError);
+                console.warn('[saveWithTableName] 모든 이미지 저장 방식이 실패했지만 측정 데이터 저장은 계속합니다.');
+              }
+            } else {
+              const imageResult = await imageResponse.json();
+              console.log('[saveWithTableName] 이미지 저장 성공:', imageResult);
+              
+              // 저장된 이미지 URL 로깅
+              if (imageResult.image_data) {
+                console.log('[saveWithTableName] 저장된 Before 이미지 URL:', imageResult.image_data.before_url);
+                console.log('[saveWithTableName] 저장된 After 이미지 URL:', imageResult.image_data.after_url);
+              }
+            }
+          } catch (imageError) {
+            console.error('[saveWithTableName] 이미지 저장 중 오류:', imageError);
+            console.warn('[saveWithTableName] 이미지 저장에 실패했지만 측정 데이터 저장은 계속합니다.');
+          }
+        }
+        
+        // 2. 측정 데이터 저장 (기존 로직)
         
         // 중요: 여기서 filteredMeasurements가 아닌 화면에 표시되는 데이터를 사용해야 함
         // 화면에 표시되는 측정 결과와 동일한 데이터 사용
@@ -2854,8 +3062,8 @@ export default {
           },
           body: JSON.stringify({
             table_name: selectedTable.table_name,
-            user_name: userName,
-            lot_id: lotId,
+            username: userName,
+            lot_wafer: lot_wafer,
             measurements: processedMeasurements
           })
         });
@@ -2876,6 +3084,19 @@ export default {
         }
         
         if (result.status !== 'success') {
+          // 권한 오류 메시지 특별 처리
+          if (result.message && result.message.includes('저장 권한이 없습니다')) {
+            this.showNotification(result.message, 'error');
+            console.error('[saveWithTableName] 권한 오류:', result.message);
+            // 로그 저장 - 권한 오류
+            LogService.logAction('save_measurements_permission_error', {
+              table_name: selectedTable.table_name,
+              username: userName,
+              error: result.message
+            });
+            this.isSaving = false;
+            return;
+          }
           throw new Error(result.detail || result.message || '저장 실패');
         }
         
@@ -3344,7 +3565,8 @@ export default {
         this.scaleMethod = 'scaleBar';
         this.isDrawingScaleBar = true;
         this.measurementMode = 'scaleBar';
-        this.showNotification('수동 스케일바 설정 모드를 선택했습니다. 이미지의 스케일바 위에 선을 그려주세요.', 'info');
+        // 알림 메시지 제거 - UI에 영향을 주지 않도록
+        // this.showNotification('수동 스케일바 설정 모드를 선택했습니다. 이미지의 스케일바 위에 선을 그려주세요.', 'info');
             
             // 스케일바 모드로 전환 시에는 manualScaleBarSet 상태를 바꾸지 않음
             // 사용자가 실제로 스케일바를 그리고 값을 입력할 때 true로 설정됨
@@ -3454,7 +3676,13 @@ export default {
       if (this.isFKeyPressed) {
         this.currentBrightness = this.calculateBrightness(pos.x, pos.y);
         this.updateMagnifier(pos);
+        
+        // 돋보기가 보이도록 강제 설정
+        const magnifierContainer = document.querySelector('.magnifier-container');
+        if (magnifierContainer) {
+          magnifierContainer.style.display = 'block';
         }
+      }
     },
     
     updateMagnifier(pos) {
@@ -3508,9 +3736,12 @@ export default {
     },
     // F키를 떼면 밝기 표시 숨기기
     handleKeyUp(e) {
-      if (e.key.toLowerCase() === 'f') {
+      if (e.key && e.key.toLowerCase() === 'f') {
         this.isFKeyPressed = false;
         this.showBrightnessTooltip = false;
+        // this.hideMagnifier() 호출 제거
+      } else if (e.key && e.key.toLowerCase() === 'h') {
+        this.showShortcutHelp = false;
       }
     },
     handleMSA5ImageProcessed(event) {
@@ -3781,74 +4012,6 @@ export default {
         console.log('[fetchMSA5Images] 전환 버튼 표시 불가 - 이미지 부족');
       }
     },
-    // 팝업 열기 함수 추가
-    openPopup() {
-      console.log('[openPopup] MSA6 이미지 팝업 열기');
-      
-      // 이미지 URL 확인
-      if (!this.imageUrl) {
-        console.error('[openPopup] 이미지 URL이 없어 팝업을 열 수 없음');
-        return;
-      }
-      
-      // 팝업 표시 상태 설정
-      this.isVisible = true;
-      this.$emit('update:showPopup', true);
-      
-      // 저장된 스케일바 설정 복원
-      const hasScaleBarSettings = this.restoreScaleBarSettings();
-      console.log('[openPopup] 저장된 스케일바 설정 복원 결과:', hasScaleBarSettings);
-      
-      // 수동 스케일바 설정 유효성 검증
-      const { hasValidManualScaleBar } = this.validateScaleBarSettings();
-      
-      console.log('[openPopup] 수동 스케일바 설정 상태:', {
-        manualScaleBarSet: this.manualScaleBarSet,
-        scaleBarValue: this.scaleBarValue,
-        scaleBarUnit: this.scaleBarUnit,
-        hasValidManualScaleBar
-      });
-        
-      // 유효한 수동 스케일바가 설정되어 있는 경우
-      if (hasValidManualScaleBar) {
-        console.log('[openPopup] 유효한 수동 스케일바가 이미 설정되어 있어 팝업 표시하지 않음');
-        this.scaleBarDetected = true; // 수동 스케일바 설정 시 감지 상태도 true로 설정
-        this.showScaleChoicePopup = false; // 선택 팝업 표시하지 않음
-      } 
-      // 수동 스케일바가 설정되어 있지 않은 경우에만 선택 팝업 표시
-      else {
-        console.log('[openPopup] 유효한 수동 스케일바가 설정되어 있지 않아 선택 팝업 표시');
-        this.scaleMethod = 'scaleBar'; // 기본 측정 방식을 스케일바로 설정
-        this.scaleBarDetected = false; // 감지 상태 초기화
-        this.showScaleChoicePopup = true; // 선택 팝업 표시
-      
-        // DOM에 팝업이 완전히 렌더링된 후 팝업 표시
-        this.$nextTick(() => {
-      setTimeout(() => {
-            console.log('[openPopup] 스케일바 선택 팝업 표시');
-            this.showScaleDetectionFailurePopup();
-            
-            // DOM에 직접 스타일 적용하여 확실하게 표시
-        try {
-          const popupElement = document.querySelector('.scale-choice-popup');
-          if (popupElement) {
-                console.log('[openPopup] 팝업 요소에 스타일 직접 적용');
-            popupElement.style.display = 'flex';
-            popupElement.style.zIndex = '999999';
-          } else {
-                console.error('[openPopup] 팝업 요소를 찾을 수 없음');
-          }
-        } catch (e) {
-              console.error('[openPopup] 팝업 스타일 적용 중 오류:', e);
-        }
-          }, 300);
-        });
-      }
-      
-      // 이미지 로드
-      this.loadImage(this.imageUrl);
-    },
-    
     // 수동 스케일바 설정이 유효한지 검증하는 도우미 함수
     validateScaleBarSettings() {
       // 수동 스케일바 설정 값 유효성 검증
@@ -3863,8 +4026,8 @@ export default {
       if (this.manualScaleBarSet && (!isValidScaleBar || !hasManualScaleBarObject)) {
         console.warn('[validateScaleBarSettings] 오류 상태 감지 및 수정:', {
           manualScaleBarSet: this.manualScaleBarSet,
-          scaleBarValue: this.scaleBarValue,
-          scaleBarUnit: this.scaleBarUnit,
+        scaleBarValue: this.scaleBarValue,
+        scaleBarUnit: this.scaleBarUnit,
           validValue: validScaleBarValue,
           validUnit: validScaleBarUnit,
           hasManualScaleBarObject: hasManualScaleBarObject,
@@ -3898,19 +4061,358 @@ export default {
       
       if (this.isDrawingScaleBar) {
         // 스케일바 그리기 모드 활성화 시 측정 모드도 변경
-        this.measurementMode = 'scaleBar';
-        this.showNotification('수동 스케일바 그리기 모드가 활성화되었습니다. 이미지의 스케일바 위에 선을 그려주세요.', 'info');
+            this.measurementMode = 'scaleBar';
+        // 알림 메시지 제거 - UI에 영향을 주지 않도록
+        // this.showNotification('수동 스케일바 그리기 모드가 활성화되었습니다. 이미지의 스케일바 위에 선을 그려주세요.', 'info');
         
         // 기존 설정 유지 (그리기 시작 전에 manualScaleBarSet을 변경하지 않음)
         console.log(`[toggleScaleBarDrawing] 그리기 모드 활성화 - 현재 manualScaleBarSet: ${this.manualScaleBarSet}`);
       } else {
         // 스케일바 그리기 모드 비활성화 시 일반 선 측정 모드로 전환
         this.measurementMode = 'line';
-        this.showNotification('수동 스케일바 그리기 모드가 비활성화되었습니다.', 'info');
+        // 알림 메시지 제거 - UI에 영향을 주지 않도록
+        // this.showNotification('수동 스케일바 그리기 모드가 비활성화되었습니다.', 'info');
       }
         
         // 캔버스 다시 그리기
         this.render();
+    },
+    // 돋보기 숨기는 함수 추가
+    hideMagnifier() {
+      // 돋보기를 숨기는 로직 구현
+      // 이미 showBrightnessTooltip = false로 설정되어 있어서 
+      // 돋보기는 자동으로 숨겨지므로 여기서는 추가 작업 필요 없음
+      console.log('돋보기 숨기기');
+    },
+    // 1. First, add the blobToBase64 helper function before the saveWithTableName method
+    /**
+     * Blob URL을 Base64 데이터 URL로 변환
+     */
+    async blobToBase64(blobUrl) {
+      try {
+        // 이미 data URL이면 변환하지 않음
+        if (blobUrl.startsWith('data:')) {
+          console.log('[blobToBase64] 이미 Data URL 형식입니다. 변환 불필요');
+          return blobUrl;
+        }
+        
+        console.log('[blobToBase64] Blob URL을 Base64로 변환 시작:', blobUrl.substring(0, 50) + '...');
+        const response = await fetch(blobUrl);
+        
+        if (!response.ok) {
+          throw new Error(`Blob URL 가져오기 실패: ${response.status}`);
+        }
+        
+        const blob = await response.blob();
+        console.log('[blobToBase64] Blob 정보:', {
+          type: blob.type,
+          size: blob.size + ' bytes',
+          lastModified: blob.lastModified ? new Date(blob.lastModified).toISOString() : 'N/A'
+        });
+        
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result;
+            console.log('[blobToBase64] Base64 변환 완료 (길이):', result.length);
+            resolve(result);
+          };
+          reader.onerror = (e) => {
+            console.error('[blobToBase64] FileReader 오류:', e);
+            reject(new Error('이미지 읽기 오류'));
+          };
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        console.error('[blobToBase64] Base64 변환 중 오류:', error);
+        // 오류 발생 시 원본 URL 반환 (API에서 처리 가능한지 시도)
+        return blobUrl;
+      }
+    },
+
+    // 2. Now update the saveWithTableName method to use base64 conversion
+    async saveWithTableName(selectedTable) {
+      try {
+        console.log('[saveWithTableName] localStorage 항목:');
+        
+        // 사용자 정보 추출 시도
+        let userName = '측정사용자';
+        
+        // 객체에서 사용자 이름 추출하는 헬퍼 함수
+        const extractUserNameFromObject = (userObject) => {
+          // 객체에서 이름 관련 필드 확인
+          const nameFields = ['name', 'userName', 'username', 'loginId', 'id', 'email'];
+          for(const field of nameFields) {
+            if(userObject[field]) {
+              return userObject[field];
+            }
+          }
+          return '측정사용자';
+        };
+        
+        // 1. localStorage에서 사용자 정보 찾기
+        const userKeys = ['userName', 'user_name', 'username', 'user', 'loginId', 'login_id', 'id', 'email'];
+        
+        for(const key of userKeys) {
+          const value = localStorage.getItem(key);
+          if(value && value !== 'undefined' && value !== 'null') {
+            try {
+              // JSON 데이터 파싱 시도
+              const parsed = JSON.parse(value);
+              
+              // 객체인 경우 필드 확인
+              if(typeof parsed === 'object' && parsed !== null) {
+                userName = extractUserNameFromObject(parsed);
+                console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
+                break;
+              } else if(typeof parsed === 'string') {
+                userName = parsed;
+                console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
+                break;
+              }
+            } catch(e) {
+              // JSON 파싱 실패하면 문자열로 처리
+              if(typeof value === 'string') {
+                userName = value;
+                console.log(`[saveWithTableName] localStorage[${key}] 문자열로 사용자 이름 찾음: ${userName}`);
+                break;
+              }
+            }
+          }
+        }
+        
+        // 2. document.cookie에서 사용자 정보 확인
+        if(userName === '측정사용자' && document.cookie) {
+          const cookies = document.cookie.split(';');
+          for(const cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if(['userName', 'user_name', 'username', 'user'].includes(name.toLowerCase())) {
+              try {
+                userName = decodeURIComponent(value);
+                console.log(`[saveWithTableName] 쿠키에서 사용자 이름 찾음: ${userName}`);
+                break;
+              } catch(e) {
+                console.error(`[saveWithTableName] 쿠키 디코딩 오류:`, e);
+              }
+            }
+          }
+        }
+        
+        // 3. sessionStorage에서 사용자 정보 확인
+        if(userName === '측정사용자') {
+          for(const key of userKeys) {
+            const value = sessionStorage.getItem(key);
+            if(value && value !== 'undefined' && value !== 'null') {
+              try {
+                const parsed = JSON.parse(value);
+                if(typeof parsed === 'object' && parsed !== null) {
+                  userName = extractUserNameFromObject(parsed);
+                  console.log(`[saveWithTableName] sessionStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
+                  break;
+                } else if(typeof parsed === 'string') {
+                  userName = parsed;
+                  console.log(`[saveWithTableName] sessionStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
+                  break;
+                }
+              } catch(e) {
+                if(typeof value === 'string') {
+                  userName = value;
+                  console.log(`[saveWithTableName] sessionStorage[${key}] 문자열로 사용자 이름 찾음: ${userName}`);
+                  break;
+                }
+              }
+            }
+          }
+        }
+        
+        // 4. 마지막 수단: window 객체에서 전역 사용자 정보 확인
+        if(userName === '측정사용자' && window.currentUser) {
+          userName = typeof window.currentUser === 'string' ? 
+                     window.currentUser : 
+                     (window.currentUser.name || window.currentUser.userName || window.currentUser.username || window.currentUser.id);
+          console.log(`[saveWithTableName] window 객체에서 사용자 이름 찾음: ${userName}`);
+        }
+        
+        // 5. 이름만 추출 (이메일 주소인 경우)
+        if(userName.includes('@')) {
+          userName = userName.split('@')[0];
+          console.log(`[saveWithTableName] 이메일에서 사용자 이름 추출: ${userName}`);
+        }
+        
+        console.log(`[saveWithTableName] 최종 결정된 사용자 이름: ${userName}`);
+        
+        // lot_wafer는 테이블 선택기에서 입력받은 값 사용
+        const lot_wafer = selectedTable.lot_wafer;
+        if(!lot_wafer) {
+          throw new Error('Lot Wafer 정보가 없습니다.');
+        }
+        
+        console.log(`[saveWithTableName] 사용할 lot_wafer 값: ${lot_wafer}`);
+        
+        // 1. 먼저 이미지 저장
+        if(this.imageUrl) {
+          try {
+            console.log('[saveWithTableName] 이미지 저장 시작');
+            console.log('[saveWithTableName] Before 이미지 URL:', this.inputImageUrl ? this.inputImageUrl.substring(0, 50) + '...' : 'none');
+            console.log('[saveWithTableName] After 이미지 URL:', this.imageUrl ? this.imageUrl.substring(0, 50) + '...' : 'none');
+            
+            // 이미지 URL이 유효한지 확인
+            if(!this.inputImageUrl || !this.imageUrl) {
+              console.warn('[saveWithTableName] 이미지 URL이 없습니다!');
+              console.log('[saveWithTableName] Before 이미지 상태:', this.inputImageUrl ? '있음' : '없음');
+              console.log('[saveWithTableName] After 이미지 상태:', this.imageUrl ? '있음' : '없음');
+            }
+            
+            // *** MSA5 방식과 동일하게 Base64로 변환 ***
+            console.log('[saveWithTableName] 이미지를 Base64로 변환 시작');
+            const beforeImageBase64 = await this.blobToBase64(this.inputImageUrl || '');
+            const afterImageBase64 = await this.blobToBase64(this.imageUrl);
+            
+            console.log('[saveWithTableName] 이미지 변환 완료');
+            console.log('[saveWithTableName] Before 이미지 타입:', beforeImageBase64.startsWith('data:') ? beforeImageBase64.substring(0, 30) + '...' : '일반 URL');
+            console.log('[saveWithTableName] After 이미지 타입:', afterImageBase64.startsWith('data:') ? afterImageBase64.substring(0, 30) + '...' : '일반 URL');
+            
+            // 이미지 저장 요청 데이터 구성
+            const requestData = {
+              title: `${selectedTable.table_name}_${lot_wafer}`,
+              description: `${selectedTable.table_name}에 저장된 ${lot_wafer} 측정 이미지`,
+              before_image: beforeImageBase64,
+              after_image: afterImageBase64,
+              workflow_id: '',
+              tags: ['msa6', '측정'],
+              is_result: true,  // MSA6 결과 이미지임을 명시
+              table_name: selectedTable.table_name,
+              lot_wafer: lot_wafer
+            };
+            
+            console.log('[saveWithTableName] 이미지 저장 요청 데이터 준비 완료');
+            
+            // 외부 이미지 저장 API 호출
+            const imageResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              body: JSON.stringify(requestData)
+            });
+            
+            if (!imageResponse.ok) {
+              const errorText = await imageResponse.text();
+              console.error('[saveWithTableName] 이미지 저장 API 오류:', imageResponse.status, errorText);
+              console.warn('[saveWithTableName] 이미지 저장에 실패했지만 측정 데이터 저장은 계속합니다.');
+              
+              // FormData 방식으로 재시도
+              try {
+                console.log('[saveWithTableName] FormData 방식으로 이미지 저장 재시도');
+                
+                // 이미지를 Blob으로 변환
+                const beforeBlob = await (async () => {
+                  if (this.inputImageUrl && this.inputImageUrl.startsWith('data:')) {
+                    const res = await fetch(this.inputImageUrl);
+                    return await res.blob();
+                  } else if (this.inputImageUrl && this.inputImageUrl.startsWith('blob:')) {
+                    const res = await fetch(this.inputImageUrl);
+                    return await res.blob();
+                  } else if (this.inputImageUrl) {
+                    const res = await fetch(this.inputImageUrl);
+                    return await res.blob();
+                  } else {
+                    // Before 이미지가 없는 경우 빈 Blob 생성
+                    return new Blob([''], { type: 'image/png' });
+                  }
+                })();
+                
+                const afterBlob = await (async () => {
+                  if (this.imageUrl.startsWith('data:')) {
+                    const res = await fetch(this.imageUrl);
+                    return await res.blob();
+                  } else if (this.imageUrl.startsWith('blob:')) {
+                    const res = await fetch(this.imageUrl);
+                    return await res.blob();
+                  } else {
+                    const res = await fetch(this.imageUrl);
+                    return await res.blob();
+                  }
+                })();
+                
+                console.log('[saveWithTableName] Blob 변환 완료');
+                console.log('[saveWithTableName] Before Blob 타입:', beforeBlob.type, 'Size:', beforeBlob.size);
+                console.log('[saveWithTableName] After Blob 타입:', afterBlob.type, 'Size:', afterBlob.size);
+                
+                // FormData 구성
+                const formData = new FormData();
+                formData.append('title', requestData.title);
+                formData.append('description', requestData.description);
+                
+                // Before 이미지가 있는 경우에만 추가
+                if (this.inputImageUrl) {
+                  formData.append('before_file', beforeBlob, `before_${lot_wafer}.${beforeBlob.type.split('/')[1] || 'png'}`);
+                }
+                
+                // After 이미지 항상 추가 (필수)
+                formData.append('file', afterBlob, `after_${lot_wafer}.${afterBlob.type.split('/')[1] || 'png'}`);
+                formData.append('workflow_id', '');
+                formData.append('tags', JSON.stringify(['msa6', '측정']));
+                formData.append('is_result', 'true');
+                formData.append('table_name', selectedTable.table_name);
+                formData.append('lot_wafer', lot_wafer);
+                
+                console.log('[saveWithTableName] FormData 구성 완료, API 요청 시작...');
+                
+                // FormData API 호출
+                const formResponse = await fetch('http://localhost:8000/api/external_storage/upload-file', {
+                  method: 'POST',
+                  body: formData
+                });
+                
+                if (!formResponse.ok) {
+                  const errorText = await formResponse.text();
+                  console.error('[saveWithTableName] FormData 방식 API 오류:', formResponse.status, errorText);
+                  console.warn('[saveWithTableName] FormData 방식 이미지 저장에도 실패했지만 측정 데이터 저장은 계속합니다.');
+                } else {
+                  const formResult = await formResponse.json();
+                  console.log('[saveWithTableName] FormData 방식 이미지 저장 성공:', formResult);
+                  
+                  // 저장된 이미지 URL 로깅
+                  if (formResult.image_data) {
+                    console.log('[saveWithTableName] 저장된 Before 이미지 URL:', formResult.image_data.before_url || 'none');
+                    console.log('[saveWithTableName] 저장된 After 이미지 URL:', formResult.image_data.after_url || 'none');
+                  }
+                }
+              } catch (formError) {
+                console.error('[saveWithTableName] FormData 방식 이미지 저장 오류:', formError);
+                console.warn('[saveWithTableName] 모든 이미지 저장 방식이 실패했지만 측정 데이터 저장은 계속합니다.');
+              }
+            } else {
+              const imageResult = await imageResponse.json();
+              console.log('[saveWithTableName] 이미지 저장 성공:', imageResult);
+              
+              // 저장된 이미지 URL 로깅
+              if (imageResult.image_data) {
+                console.log('[saveWithTableName] 저장된 Before 이미지 URL:', imageResult.image_data.before_url || 'none');
+                console.log('[saveWithTableName] 저장된 After 이미지 URL:', imageResult.image_data.after_url || 'none');
+              }
+            }
+          } catch (imageError) {
+            console.error('[saveWithTableName] 이미지 저장 중 오류:', imageError);
+            console.warn('[saveWithTableName] 이미지 저장에 실패했지만 측정 데이터 저장은 계속합니다.');
+          }
+        }
+        
+        // 2. 측정 데이터 저장 (기존 로직)
+        // ... existing code ...
+      } catch (error) {
+        console.error('[saveWithTableName] 측정 결과 저장 중 오류:', error);
+        this.showNotification(`측정 결과 저장 중 오류: ${error.message}`, 'error');
+        
+        // 로그 저장 - 측정 결과 저장 실패
+        LogService.logAction('save_measurements_error', {
+          error: error.message || '저장 실패'
+        });
+      } finally {
+        this.isSaving = false;
+      }
     },
   },
   created() {
@@ -4126,6 +4628,11 @@ export default {
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* 고정 너비 설정 - 스크롤바 너비(17px) 포함 */
+  min-width: 400px;
+  max-width: 400px;
+  flex-shrink: 0; /* 사이드바 크기 고정 */
+  overflow: hidden; /* 내부 콘텐츠 오버플로우 숨김 처리 */
 }
 
 .results-panel {
@@ -4133,6 +4640,7 @@ export default {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden; /* 내부 컨텐츠가 넘칠 경우 숨김 처리 */
 }
 
 .results-table-container {
@@ -4141,6 +4649,9 @@ export default {
   overflow: auto;
   height: 600px;
   max-height: 65vh;
+  /* 스크롤바 너비를 고려한 width 설정 */
+  width: calc(100% - 2px); /* 테두리 고려 */
+  box-sizing: border-box; /* 테두리와 패딩을 너비에 포함 */
 }
 
 .results-bottom-bar {
@@ -4700,846 +5211,194 @@ export default {
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.color-option:hover {
-  transform: scale(1.1);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  border-color: #adb5bd;
-}
-
-@media (max-width: 1200px) {
-  .measurement-container {
-    width: 100vw;
-    height: 100vh;
-    border-radius: 0;
-  }
-
-  .measurement-content {
-    flex-direction: column;
-  }
-
-  .right-panel {
-    width: 100%;
-    height: auto;
-    min-height: 200px;
-  }
-
-  .image-container {
-    height: 50vh;
-  }
-
-  .results-table-container {
-    max-height: 30vh;
-  }
-
-  .measurement-controls {
-    bottom: 0;
+/* 단축키 도움말 관련 스타일 */
+.shortcut-help-overlay {
+  position: fixed;
+  top: 0;
     left: 0;
-    width: 100%;
-    max-width: 100%;
-    border-radius: 0;
-  }
-
-  .control-group {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 4px;
-  }
-
-  .threshold-slider {
-    width: 150px;
-  }
-}
-
-@media (max-width: 768px) {
-  .measurement-header {
-    padding: 0.75rem;
-    height: auto;
-  }
-
-  .header-controls {
-    flex-wrap: wrap;
-    gap: 0.75rem;
-  }
-
-  .control-input {
-    width: 60px;
-  }
-
-  .measurement-options {
-    margin-right: 0;
-  }
-
-  .option-btn {
-    width: 32px;
-    height: 32px;
-  }
-
-  .option-btn i {
-    font-size: 1rem;
-  }
-
-  .results-table th,
-  .results-table td {
-    padding: 0.5rem;
-    font-size: 0.8rem;
-  }
-
-  .measurement-controls {
+  right: 0;
     bottom: 0;
-    left: 0;
-    width: 100%;
-    max-width: 100%;
-    border-radius: 0;
-    padding: 1rem;
-  }
-
-  .control-group {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding: 0.5rem;
-    gap: 0.75rem;
-  }
-
-  .threshold-slider {
-    width: 150px;
-  }
-
-  .measurement-controls .option-btn {
-    padding: 8px 16px;
-    min-width: 100px;
-    font-size: 0.9rem;
-  }
-
-  .measurement-controls .option-btn i {
-    font-size: 1rem;
-  }
-
-  .send-api-btn {
-    padding: 8px 16px;
-    font-size: 0.9rem;
-    min-width: 120px;
-  }
-  
-  .send-api-btn i {
-    font-size: 1rem;
-  }
-}
-
-.measurement-footer {
-  display: flex;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 9999;
+  display: none;
   justify-content: center;
-  padding: 12px;
-  border-top: 1px solid #eee;
-  margin-top: 10px;
+  align-items: center;
 }
 
-.save-results-btn {
+.shortcut-help-overlay.show {
+  display: flex;
+}
+
+.shortcut-help-content {
+  background-color: #fff;
+  border-radius: 12px;
+  padding: 30px;
+  max-width: 600px;
+  width: 90%;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  transform: translateY(50px);
+    opacity: 0;
+  transition: transform 0.3s, opacity 0.3s;
+  pointer-events: none;
+  }
+
+.shortcut-help-content.show {
+  transform: translateY(0);
+    opacity: 1;
+  pointer-events: auto;
+}
+
+.shortcut-help-content h2 {
+  color: #7950f2;
+  margin-top: 0;
+  margin-bottom: 20px;
+  text-align: center;
+  font-size: 1.5rem;
+}
+
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 15px;
+}
+
+.shortcut-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background-color: #4c6ef5;
+  gap: 15px;
+  padding: 10px;
+  border-radius: 8px;
+  background-color: #f8f0ff;
+}
+
+.shortcut-key {
+  background-color: #7950f2;
   color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-weight: bold;
+  min-width: 40px;
+  text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.save-results-btn:hover {
-  background-color: #3b5bdb;
+.shortcut-desc {
+  color: #495057;
+  font-size: 0.9rem;
 }
 
+/* 알림 메시지 스타일 개선 */
 .notification {
   position: fixed;
-  bottom: 20px;
+  top: 20px;
   left: 50%;
   transform: translateX(-50%);
   padding: 12px 20px;
-  border-radius: 4px;
+  border-radius: 6px;
   color: white;
-  font-size: 14px;
-  z-index: 9999;
-  animation: fadeIn 0.3s;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.notification.info {
-  background-color: #4c6ef5;
-}
-
-.notification.success {
-  background-color: #40c057;
-}
-
-.notification.error {
-  background-color: #fa5252;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 10px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-}
-
-.scale-method-selector {
-  display: flex;
-  gap: 5px;
-}
-
-.scale-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 100px;
-  padding: 0 12px;
-  height: 36px;
-  transition: all 0.2s ease;
-}
-
-.scale-btn i {
-  font-size: 1.1rem;
-}
-
-.scale-btn .btn-text {
-  font-size: 0.9rem;
   font-weight: 500;
-  white-space: nowrap;
-}
-
-.scale-option-group {
-  min-width: 220px;
-}
-
-.measurement-options {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 0.75rem;
-  border-radius: 8px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-}
-
-.option-group {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.5rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.2);
-  white-space: nowrap;
-}
-
-.unit-selector {
-  width: 50px;
-  background-color: #f0f0f0;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 2px 5px;
-  font-size: 0.85rem;
-}
-
-.notification {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  border-radius: 4px;
-  color: white;
-  font-size: 14px;
-  z-index: 9999;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: all 0.3s ease;
-  max-width: 400px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+  z-index: 10000;
+  max-width: 90%;
+  text-align: center;
+  pointer-events: none;
+  animation: fadeInOut 3s ease-in-out;
 }
 
 .notification.info {
-  background-color: #2196F3;
+  background-color: rgba(25, 118, 210, 0.9);
 }
 
 .notification.success {
-  background-color: #4CAF50;
+  background-color: rgba(46, 125, 50, 0.9);
 }
 
 .notification.warning {
-  background-color: #FF9800;
+  background-color: rgba(237, 108, 2, 0.9);
 }
 
 .notification.error {
-  background-color: #F44336;
+  background-color: rgba(211, 47, 47, 0.9);
 }
 
-/* 반응형 미디어 쿼리 - 1.5배 크게 설정 */
-@media (max-width: 2100px) {
-  .scale-btn {
-    min-width: 90px;
-    padding: 0 10px;
-  }
-  
-  .scale-option-group {
-    min-width: 200px;
-  }
-  
-  .option-group {
-    padding: 0.25rem 0.4rem;
-    gap: 0.4rem;
-  }
+@keyframes fadeInOut {
+  0%, 100% { opacity: 0; }
+  10%, 90% { opacity: 1; }
 }
 
-@media (max-width: 1800px) {
-  .scale-btn {
-    min-width: 36px;
-    padding: 0;
-  }
-  
-  .scale-btn .btn-text {
-    display: none;
-  }
-  
-  .scale-option-group {
-    min-width: auto;
-  }
-  
-  .option-group {
-    padding: 0.25rem;
-    gap: 0.25rem;
-  }
-  
-  .option-group-label {
-    font-size: 0.85rem;
-    margin-right: 0.25rem;
-  }
-  
-  .measurement-options {
-    padding: 0.5rem;
-    gap: 0.75rem;
-  }
-}
-
-@media (max-width: 1500px) {
-  .measurement-options {
-    padding: 0.4rem;
-    gap: 0.5rem;
-  }
-  
-  .option-group {
-    padding: 0.2rem;
-    gap: 0.2rem;
-    border-right: none;
-  }
-  
-  .option-group-label {
-    font-size: 0.75rem;
-  }
-  
-  .option-btn {
-    width: 32px;
-    height: 32px;
-  }
-  
-  .header-input {
-    width: 50px;
-  }
-}
-
-@media (max-width: 1200px) {
-  .measurement-header {
-    padding: 0.75rem;
-  }
-  
-  .measurement-options {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    padding: 0.3rem;
-    gap: 0.3rem;
-    max-width: calc(100vw - 180px);
-  }
-  
-  .option-group {
-    margin-bottom: 0.2rem;
-    flex-shrink: 0;
-  }
-  
-  .header-right {
-    flex-wrap: wrap;
-  }
-  
-  .option-btn {
-    width: 30px;
-    height: 30px;
-  }
-  
-  .option-btn i {
-    font-size: 1rem;
-  }
-}
-
-@media (max-width: 900px) {
-  .measurement-header {
-    flex-direction: column;
-    padding: 0.5rem;
-    gap: 0.5rem;
-    align-items: flex-start;
-  }
-  
-  .header-right {
-    width: 100%;
-    justify-content: space-between;
-  }
-  
-  .measurement-options {
-    width: 100%;
-    max-width: 100%;
-    overflow-x: auto;
-    justify-content: flex-start;
-    padding: 0.25rem;
-    margin-bottom: 0.5rem;
-  }
-  
-  .option-group {
-    flex-shrink: 0;
-    margin-bottom: 0.25rem;
-  }
-  
-  .option-group-label {
-    font-size: 0.7rem;
-  }
-  
-  .option-btn {
-    width: 28px;
-    height: 28px;
-  }
-  
-  .option-btn i {
-    font-size: 0.9rem;
-  }
-  
-  .scale-btn {
-    min-width: 28px;
-  }
-  
-  .reset-btn, .close-btn {
-    margin-top: 0.5rem;
-  }
-}
-
-@media (max-width: 576px) {
-  .option-btn {
-    width: 26px;
-    height: 26px;
-  }
-  
-  .option-btn i {
-    font-size: 0.8rem;
-  }
-  
-  .option-group-label {
-    font-size: 0.65rem;
-  }
-  
-  .header-input {
-    width: 40px;
-    font-size: 0.8rem;
-  }
-  
-  .unit-selector {
-    width: 40px;
-    font-size: 0.75rem;
-  }
-  
-  .measurement-options {
-    padding: 0.2rem;
-    gap: 0.2rem;
-  }
-  
-  .option-group {
-    padding: 0.15rem;
-    gap: 0.15rem;
-  }
-}
-
-/* 스케일바 감지 실패 시 선택 팝업 스타일 */
-.scale-choice-popup {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
-  background: rgba(0, 0, 0, 0.8) !important;
-  display: flex !important;
-  justify-content: center !important;
-  align-items: center !important;
-  z-index: 9999999 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  transform: none !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-.super-overlay {
-  position: fixed !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100vw !important;
-  height: 100vh !important;
-  z-index: 9999999 !important;
-  background-color: rgba(0, 0, 0, 0.8) !important;
-  transform: none !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-.scale-choice-content {
-  background: #fff !important;
-  border-radius: 16px !important;
-  padding: 2.5rem !important;
-  width: 90% !important;
-  max-width: 500px !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
-  text-align: center !important;
-  position: relative !important;
-  z-index: 10000000 !important;
-  transform: none !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-}
-
-.scale-choice-content h3 {
-  color: #7950f2 !important;
-  margin: 0 0 1rem 0 !important;
-  font-size: 1.8rem !important;
-  font-weight: 700 !important;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) !important;
-}
-
-.scale-choice-content p {
-  color: #495057 !important;
-  margin-bottom: 0.75rem !important;
-  font-size: 1.1rem !important;
-  line-height: 1.5 !important;
-}
-
-.scale-choice-content p:last-of-type {
-  margin-bottom: 2rem !important;
-}
-
-.scale-choice-buttons {
-  display: flex !important;
-  justify-content: center !important;
-  gap: 1.5rem !important;
-}
-
-.choice-btn {
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 1.8rem !important;
-  border-radius: 12px !important;
-  border: none !important;
-  background: #f8f0ff !important;
-  color: #7950f2 !important;
-  font-size: 1.1rem !important;
-  font-weight: 600 !important;
-  cursor: pointer !important;
-  transition: all 0.3s ease !important;
-  flex: 1 !important;
-  max-width: 200px !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-}
-
-.choice-btn i {
-  font-size: 2.5rem !important;
-  margin-bottom: 0.8rem !important;
-}
-
-.choice-btn span {
-  margin-bottom: 0.5rem !important;
-}
-
-.choice-btn small {
-  font-size: 0.85rem !important;
-  font-weight: 400 !important;
-  color: rgba(0, 0, 0, 0.6) !important;
-  line-height: 1.3 !important;
-}
-
-.choice-btn:hover {
-  background: #7950f2 !important;
-  color: #fff !important;
-  transform: translateY(-5px) !important;
-  box-shadow: 0 8px 20px rgba(121, 80, 242, 0.4) !important;
-}
-
-.choice-btn:hover small {
-  color: rgba(255, 255, 255, 0.8) !important;
-}
-
-.magnification-btn {
-  background: #e7f5ff !important;
-  color: #228be6 !important;
-}
-
-.magnification-btn:hover {
-  background: #228be6 !important;
-  color: #fff !important;
-  box-shadow: 0 8px 20px rgba(34, 139, 230, 0.4) !important;
-}
-
-.scalebar-btn {
-  background: #fff4e6 !important;
-  color: #fd7e14 !important;
-}
-
-.scalebar-btn:hover {
-  background: #fd7e14 !important;
-  color: #fff !important;
-  box-shadow: 0 8px 20px rgba(253, 126, 20, 0.4) !important;
-}
-
-@media (max-width: 576px) {
-  .scale-choice-buttons {
-    flex-direction: column !important;
-    align-items: center !important;
-  }
-  
-  .choice-btn {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-}
-
-.msa6-image-popup-container {
-  /* 컨테이너에 스타일 추가하지 않음 - 기존 스타일 유지 */
-}
-
-/* 스타일 섹션 끝부분에 다음 CSS 추가 */
-
-/* 반응형 디자인을 위한 미디어 쿼리 */
-@media (max-width: 1200px) {
-  .measurement-header {
-    flex-direction: column;
-    padding: 0.5rem;
-    gap: 0.5rem;
-  }
-  
-  .header-left {
-    width: 100%;
-    justify-content: center;
-  }
-  
-  .header-title {
-    font-size: 1.2rem;
-    margin: 0.25rem 0;
-  }
-  
-  .option-group-label {
-    display: none;
-  }
-  
-  .btn-text {
-    display: none;
-  }
-  
-  .option-group {
-    padding: 0.25rem;
-    margin-right: 0.25rem;
-  }
-  
-  .header-input {
-    width: 3rem;
-  }
-  
-  .measurement-options {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-}
-
-@media (max-width: 768px) {
-  .option-btn {
-    width: 2rem;
-    height: 2rem;
-    padding: 0.25rem;
-  }
-  
-  .reset-btn, .close-btn {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.8rem;
-  }
-  
-  .measurement-container {
-    width: 95%;
-    height: 95%;
-  }
-  
-  .measurement-content {
-    flex-direction: column;
-  }
-  
-  .right-panel {
-    width: 100%;
-    max-height: 40vh;
-  }
-  
-  .image-container {
-    width: 100%;
-    height: 60vh;
-  }
-}
-
-/* option-btn 클래스 뒤에 hover와 active 상태 스타일 추가 */
-
-.option-btn:hover {
-  background: #f1f3f5;
-  border-color: #adb5bd;
-}
-
-.option-btn.active {
-  background: #4c6ef5;
-  color: white;
-  border-color: #4c6ef5;
-}
-
-/* reset-btn 및 close-btn hover 상태 추가 */
-.reset-btn:hover {
-  background: #e9ecef;
-  border-color: #adb5bd;
-}
-
-.close-btn:hover {
-  background: #ff6b6b;
-}
-
-/* 이미지 전/후 전환 버튼 스타일 추가 */
-.image-toggle-controls {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  z-index: 1000;
-}
-
-.toggle-image-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(0, 0, 0, 0.7);
-  color: white;
-  border: none;
-  border-radius: 30px;
-  padding: 10px 20px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
-}
-
-.toggle-image-btn:hover {
-  background-color: #7950f2;
-  color: white;
-}
-
-.toggle-image-btn i {
-  font-size: 16px;
-}
-
-@media (max-width: 768px) {
-  .toggle-image-btn span {
-    display: none;
-  }
-  
-  .toggle-image-btn {
-    padding: 10px;
-  }
-}
-
+/* 돋보기 관련 스타일 */
 .brightness-tooltip {
-  position: fixed;
-  background-color: rgba(0, 0, 0, 0.7);
+  position: absolute;
+  background-color: rgba(0, 0, 0, 0.8);
   color: white;
-  padding: 3px 6px;
-  border-radius: 3px;
+  padding: 5px 10px;
+  border-radius: 4px;
   font-size: 12px;
-  pointer-events: none;
   z-index: 1000;
+  pointer-events: none;
 }
 
 .magnifier-container {
-  position: fixed;
+  position: absolute;
+  z-index: 1001;
   border: 2px solid #ff9900;
   border-radius: 50%;
   overflow: hidden;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
   pointer-events: none;
-  z-index: 999;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+  background-color: white;
 }
 
 .magnifier-canvas {
-  width: 100%;
+    width: 100%;
   height: 100%;
-  border-radius: 50%;
 }
 
 .magnifier-crosshair {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 10px;
-  height: 10px;
+  width: 20px;
+  height: 20px;
   transform: translate(-50%, -50%);
-  border: 1px solid red;
-  border-radius: 50%;
   pointer-events: none;
+}
+
+.magnifier-crosshair::before,
+.magnifier-crosshair::after {
+  content: '';
+  position: absolute;
+  background-color: rgba(255, 0, 0, 0.7);
+}
+
+.magnifier-crosshair::before {
+  top: 50%;
+  left: 0;
+    width: 100%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.magnifier-crosshair::after {
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 100%;
+  transform: translateX(-50%);
 }
 
 .magnifier-brightness {
   position: absolute;
-  bottom: 10px;
+  bottom: 5px;
   left: 50%;
   transform: translateX(-50%);
   background-color: rgba(0, 0, 0, 0.7);
   color: white;
-  padding: 2px 5px;
-  border-radius: 3px;
-  font-size: 12px;
-  text-align: center;
-}
-
-/* 다운로드 버튼 스타일 */
-.download-image-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 12px;
-  margin-top: 8px;
-  background-color: #228be6;
-  color: white;
-  border: none;
+  padding: 2px 6px;
   border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: bold;
 }
 
-.download-image-btn i {
-  margin-right: 8px;
-}
-
-.download-image-btn:hover {
-  background-color: #1971c2;
-  transform: translateY(-2px);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-}
 </style>
+

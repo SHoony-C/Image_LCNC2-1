@@ -150,10 +150,10 @@ async def save_measurement_to_lcnc(measurement_data: Dict[str, Any] = Body(...))
                     # SQL 삽입 쿼리 생성
                     query = text("""
                     INSERT INTO """ + target_table + """ (
-                        table_name, user_name, lot_id, 
+                        table_name, username, lot_wafer, 
                         item_id, subitem_id, value, create_time
                     ) VALUES (
-                        :table_name, :user_name, :lot_id,
+                        :table_name, :username, :lot_wafer,
                         :item_id, :subitem_id, :value, :create_time
                     )
                     """)
@@ -161,8 +161,8 @@ async def save_measurement_to_lcnc(measurement_data: Dict[str, Any] = Body(...))
                     print(f"[save_measurement_to_lcnc] 일반 측정 결과 저장: ID={measurement.get('itemId', '')}, SubID={measurement.get('subItemId', '')}, 값={measurement.get('value', 0)}")
                     conn.execute(query, {
                         "table_name": f"측정테이블_{measurement_mode}",
-                        "user_name": "측정사용자",
-                        "lot_id": session_id,
+                        "username": "측정사용자",
+                        "lot_wafer": session_id,
                         "item_id": measurement.get('itemId', ''),
                         "subitem_id": measurement.get('subItemId', ''),
                         "value": measurement.get('value', 0),
@@ -242,10 +242,10 @@ async def transfer_table_names():
                 # 기본 샘플 데이터 생성
                 query_insert = text("""
                 INSERT INTO msa6_result_cd (
-                    table_name, user_name, lot_id, 
+                    table_name, username, lot_wafer, 
                     item_id, subitem_id, value, create_time
                 ) VALUES (
-                    :table_name, :user_name, :lot_id,
+                    :table_name, :username, :lot_wafer,
                     :item_id, :subitem_id, :value, :create_time
                 )
                 """)
@@ -253,8 +253,8 @@ async def transfer_table_names():
                 print(f"[transfer_table_names] '{table_name}' 데이터 삽입 중...")
                 conn.execute(query_insert, {
                     "table_name": table_name,
-                    "user_name": f"User_{department}" if department else "Default_User",
-                    "lot_id": f"LOT_{idx}",
+                    "username": f"User_{department}" if department else "Default_User",
+                    "lot_wafer": f"LOT_{idx}",
                     "item_id": f"ITEM_{idx}",
                     "subitem_id": f"SUB_{idx}",
                     "value": float(idx) * 1.5,  # 샘플 값
@@ -441,8 +441,8 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
         
         # 요청 데이터 확인
         table_name = data.get("table_name")
-        user_name = data.get("user_name", "측정사용자")
-        lot_id = data.get("lot_id", "")
+        username = data.get("username", "측정사용자")
+        lot_wafer = data.get("lot_wafer", "")
         measurements = data.get("measurements", [])
         
         # 단일 측정값인 경우 리스트로 변환
@@ -456,6 +456,33 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
             raise HTTPException(status_code=400, detail="측정 데이터가 필요합니다")
         
         print(f"[save_with_table_name] 저장할 데이터: 테이블={table_name}, 측정값 수={len(measurements)}")
+        
+        # 권한 확인: 사용자가 해당 테이블에 저장할 권한이 있는지 확인
+        try:
+            auth_conn = lcnc_sql["engine"].connect()
+            auth_query = text("""
+            SELECT COUNT(*) FROM table_user 
+            WHERE table_name = :table_name AND username = :username
+            """)
+            
+            print(f"[save_with_table_name] 사용자 권한 확인: 테이블={table_name}, 사용자={username}")
+            result = auth_conn.execute(auth_query, {"table_name": table_name, "username": username})
+            has_permission = result.scalar() > 0
+            
+            auth_conn.close()
+            
+            if not has_permission:
+                print(f"[save_with_table_name] 권한 없음: 테이블={table_name}, 사용자={username}")
+                return {
+                    "status": "error",
+                    "message": f"저장 권한이 없습니다. 테이블 '{table_name}'에 대한 접근 권한이 필요합니다."
+                }
+            
+            print(f"[save_with_table_name] 권한 확인 완료: 저장 권한 있음")
+            
+        except Exception as auth_error:
+            print(f"[save_with_table_name] 권한 확인 중 오류: {str(auth_error)}")
+            raise HTTPException(status_code=500, detail=f"사용자 권한 확인 중 오류 발생: {str(auth_error)}")
         
         # 테이블 구조 조회용 별도 연결 사용
         try:
@@ -484,10 +511,10 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
         # 측정 데이터 삽입 쿼리 미리 정의
         query_str = """
         INSERT INTO msa6_result_cd (
-            table_name, user_name, lot_id, 
+            table_name, username, lot_wafer, 
             item_id, subitem_id, value, create_time
         ) VALUES (
-            :table_name, :user_name, :lot_id,
+            :table_name, :username, :lot_wafer,
             :item_id, :subitem_id, :value, :create_time
         )
         """
@@ -542,8 +569,8 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                     # 파라미터 준비
                     params = {
                         "table_name": str(table_name)[:45] if table_name else "",  # varchar(45) 제한
-                        "user_name": str(user_name)[:45] if user_name else "측정사용자",  # varchar(45) 제한
-                        "lot_id": str(lot_id)[:45] if lot_id else "",              # varchar(45) 제한
+                        "username": str(username)[:45] if username else "측정사용자",  # varchar(45) 제한
+                        "lot_wafer": str(lot_wafer)[:45] if lot_wafer else "",              # varchar(45) 제한
                         "item_id": str(item_id)[:45] if item_id else "",           # varchar(45) 제한
                         "subitem_id": str(subitem_id)[:45] if subitem_id else "",  # varchar(45) 제한
                         "value": float_value,                                      # double 타입

@@ -2027,7 +2027,8 @@ export default {
                 before_image: inputImage.value,
                 after_image: processedImages['end'],
                 workflow_id: sessionId,
-                tags: ['lcnc', '이미지 처리']
+                tags: ['lcnc', '이미지 처리'],
+                is_result: false  // MSA5는 workflow_images에 저장하도록 지정
               };
               
                 // 외부 이미지 저장 API 호출
@@ -2666,7 +2667,15 @@ export default {
                 },
             mode: 'cors',
             credentials: 'include',
-                body: JSON.stringify(requestData)
+                body: JSON.stringify({
+                  title: workflowName.value.replace(/ /g, '_'),
+                  description: workflowDescription.value || '',
+                  before_image: beforeImageBase64,
+                  after_image: afterImageBase64,
+                  workflow_id: sessionId,
+                  tags: ['lcnc', '이미지 처리'],
+                  is_result: false  // MSA5는 workflow_images에 저장하도록 지정
+                })
               });
               
           if (!response.ok) {
@@ -2750,6 +2759,7 @@ export default {
             formData.append('file', afterBlob, `${afterFilename}.${afterBlob.type.split('/')[1] || 'png'}`);
             formData.append('workflow_id', sessionId);
             formData.append('tags', JSON.stringify(['lcnc', '이미지 처리']));
+            formData.append('is_result', 'false');  // MSA5는 workflow_images에 저장하도록 지정
             
             console.log('FormData 구성 완료, API 요청 시작...');
             

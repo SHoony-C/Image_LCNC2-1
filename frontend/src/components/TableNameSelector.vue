@@ -1,5 +1,5 @@
 <template>
-  <div class="table-selector-overlay" v-if="show" @click.self="close">
+  <div class="table-selector-overlay" v-if="show">
     <div class="table-selector-container">
       <div class="selector-header">
         <h3>테이블 선택</h3>
@@ -43,14 +43,19 @@
         </div>
         
         <div class="lot-id-container">
-          <label for="lot-id">Lot ID</label>
+          <label for="lot-id">Lot Wafer</label>
           <input 
             type="text" 
             id="lot-id" 
-            v-model="lotId" 
-            placeholder="Lot ID 입력 (필수)"
+            v-model="lot_wafer" 
+            placeholder="Lot Wafer 입력 (필수)"
             class="lot-id-input"
+            @blur="checkLotWaferDuplicate"
+            @input="resetLotWaferError"
           />
+          <div v-if="lotWaferMessage" class="lot-id-message" :class="{'error': lotWaferError}">
+            {{ lotWaferMessage }}
+          </div>
         </div>
       </div>
       
@@ -63,7 +68,7 @@
         </button>
         <button 
           class="select-btn" 
-          :disabled="!selectedTable || !lotId"
+          :disabled="!selectedTable || !lot_wafer || lotWaferError"
           @click="confirmSelection"
         >
           선택 완료
@@ -89,13 +94,25 @@ export default {
       selectedTable: null,
       searchQuery: '',
       isLoading: false,
-      lotId: ''
+      lot_wafer: '',
+      lotWaferError: false,
+      lotWaferMessage: ''
     }
   },
   watch: {
     show(newVal) {
       if (newVal) {
         this.loadTables();
+      }
+    },
+    selectedTable() {
+      // 테이블 변경 시 lot_wafer 중복 체크 초기화
+      this.lotWaferError = false;
+      this.lotWaferMessage = '';
+      
+      // 만약 lot_wafer가 입력되어 있다면 다시 체크
+      if (this.lot_wafer && this.selectedTable) {
+        this.checkLotWaferDuplicate();
       }
     }
   },
@@ -136,31 +153,93 @@ export default {
       this.selectedTable = table;
     },
     
+    async checkLotWaferDuplicate() {
+      // lot_wafer와 테이블이 모두 선택된 경우에만 체크
+      if (!this.lot_wafer || !this.selectedTable) {
+        this.lotWaferError = false;
+        this.lotWaferMessage = '';
+        return;
+      }
+      
+      try {
+        // 중복 체크 API 호출
+        const response = await fetch('http://localhost:8000/api/external_storage/check-lot-wafer', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            lot_wafer: this.lot_wafer,
+            table_name: this.selectedTable.table_name
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'duplicate') {
+          // 중복된 lot_wafer 경고
+          this.lotWaferError = true;
+          this.lotWaferMessage = result.message || '이미 존재하는 Lot Wafer입니다.';
+        } else if (result.status === 'available') {
+          // 사용 가능한 lot_wafer
+          this.lotWaferError = false;
+          this.lotWaferMessage = '';
+        } else {
+          // 오류 발생
+          this.lotWaferError = false;
+          this.lotWaferMessage = '';
+          console.error('Lot Wafer 중복 체크 오류:', result);
+        }
+      } catch (error) {
+        console.error('Lot Wafer 중복 체크 중 오류 발생:', error);
+        this.lotWaferError = false;
+        this.lotWaferMessage = '';
+      }
+    },
+    
+    // Lot Wafer 입력값 변경 시 에러 상태 초기화
+    resetLotWaferError() {
+      if (this.lotWaferError) {
+        this.lotWaferError = false;
+        this.lotWaferMessage = '';
+      }
+    },
+    
     confirmSelection() {
       if (!this.selectedTable) {
         alert('테이블을 선택해주세요.');
         return;
       }
       
-      if (!this.lotId) {
-        alert('Lot ID를 입력해주세요.');
+      if (!this.lot_wafer) {
+        alert('Lot Wafer를 입력해주세요.');
+        return;
+      }
+      
+      if (this.lotWaferError) {
+        alert('이미 존재하는 Lot Wafer입니다. 다른 ID를 입력해주세요.');
         return;
       }
       
       this.$emit('select', {
         ...this.selectedTable,
-        lot_id: this.lotId
+        lot_wafer: this.lot_wafer,
+        is_result: true  // MSA6 결과 이미지임을 명시
       });
       
       this.selectedTable = null;
       this.searchQuery = '';
-      this.lotId = '';
+      this.lot_wafer = '';
+      this.lotWaferError = false;
+      this.lotWaferMessage = '';
     },
     
     close() {
       this.selectedTable = null;
       this.searchQuery = '';
-      this.lotId = '';
+      this.lot_wafer = '';
+      this.lotWaferError = false;
+      this.lotWaferMessage = '';
       this.$emit('close');
     }
   }
@@ -343,6 +422,16 @@ export default {
   border-color: #7950f2;
   outline: none;
   box-shadow: 0 0 0 3px rgba(121, 80, 242, 0.1);
+}
+
+.lot-id-message {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #2b8a3e;
+}
+
+.lot-id-message.error {
+  color: #e03131;
 }
 
 .selector-footer {

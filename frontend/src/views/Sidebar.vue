@@ -215,11 +215,22 @@ export default {
 @media (max-width: 1200px) {
   .sidebar {
     transform: translateX(-100%);
+    box-shadow: none;
   }
 
   .sidebar.collapsed {
     transform: translateX(0);
     width: 250px;
+    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+  }
+  
+  .sidebar.collapsed .logo-container {
+    display: flex;
+  }
+  
+  .sidebar.collapsed .sidebar-header {
+    justify-content: space-between;
+    padding: 0 1rem;
   }
 }
 </style> 

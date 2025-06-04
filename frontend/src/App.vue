@@ -22,9 +22,12 @@
       </div>
     </div>
     <AppSidebar @sidebar-toggle="handleSidebarToggle" />
-    <main class="main-content">
-      <router-view />
-    </main>
+    <div class="main-wrapper">
+      <main class="main-content">
+        <router-view />
+      </main>
+      <MainFooter />
+    </div>
     
     <!-- Login Modal -->
     <LoginModal 
@@ -37,17 +40,19 @@
 </template>
 
 <script>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, provide } from 'vue'
 import { useStore } from 'vuex'
 import { useRouter, useRoute } from 'vue-router'
 import AppSidebar from '@/views/Sidebar.vue'
 import LoginModal from '@/components/login_modal.vue'
+import MainFooter from '@/views/m0_footer.vue'
 
 export default {
   name: 'App',
   components: {
     AppSidebar,
-    LoginModal
+    LoginModal,
+    MainFooter
   },
   setup() {
     const store = useStore()
@@ -84,6 +89,9 @@ export default {
     const handleSidebarToggle = (isCollapsed) => {
       isSidebarCollapsed.value = isCollapsed
     }
+    
+    // 사이드바 상태를 provide로 제공
+    provide('isSidebarCollapsed', isSidebarCollapsed)
     
     // Check for URL parameters from OAuth redirects
     const checkForAuthRedirect = async () => {
@@ -204,12 +212,24 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: var(--gray-100);
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+}
+
+html {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
 }
 
 #app {
   min-height: 100vh;
   display: flex;
-  width: 100vw;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  position: relative;
 }
 
 .loading-screen {
@@ -546,17 +566,30 @@ body {
   color: var(--primary-600);
 }
 
-.main-content {
-  flex: 1;
-  margin-left: 250px;
-  min-height: 100vh;
+.main-wrapper {
   display: flex;
   flex-direction: column;
-  transition: margin-left 0.3s ease;
+  width: calc(100% - 250px);
+  max-width: calc(100% - 250px);
+  margin-left: 250px;
+  transition: width 0.3s, max-width 0.3s, margin-left 0.3s;
+  min-height: 100vh;
+  position: relative;
 }
 
-.sidebar-collapsed .main-content {
+.sidebar-collapsed .main-wrapper {
+  width: calc(100% - 70px);
+  max-width: calc(100% - 70px);
   margin-left: 70px;
+}
+
+.main-content {
+  flex: 1;
+  padding: 0;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .top-nav {
@@ -574,12 +607,31 @@ body {
 }
 
 @media (max-width: 1200px) {
-  .main-content {
+  .main-wrapper {
     margin-left: 0;
+    width: 100%;
+    max-width: 100%;
+    transition: margin-left 0.3s ease;
   }
   
-  .sidebar-collapsed .main-content {
+  .sidebar-collapsed .main-wrapper {
     margin-left: 250px;
+    width: calc(100% - 250px);
+    max-width: calc(100% - 250px);
+  }
+}
+
+@media (max-width: 768px) {
+  .main-wrapper {
+    margin-left: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  .sidebar-collapsed .main-wrapper {
+    margin-left: 0;
+    width: 100%;
+    max-width: 100%;
   }
 }
 </style> 

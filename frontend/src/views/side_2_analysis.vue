@@ -3,6 +3,53 @@
     <!-- AppHeader 컴포넌트 추가 -->
     <AppHeader pageTitle="Analysis" />
     
+    <!-- 데이터 로드 컨트롤 섹션 -->
+    <div class="control-section">
+      <div class="control-group">
+        <label for="table-select">테이블 선택:</label>
+        <select 
+          id="table-select"
+          v-model="selectedTable" 
+          class="table-select"
+          :disabled="isLoading"
+        >
+          <option value="">테이블을 선택하세요</option>
+          <option v-for="table in authorizedTables" 
+                  :key="table" 
+                  :value="table">
+            {{ table }}
+          </option>
+        </select>
+      </div>
+      
+      <div class="control-group">
+        <label>날짜 범위:</label>
+        <div class="date-range">
+          <input 
+            type="date" 
+            v-model="dateFrom" 
+            class="date-input"
+            :disabled="isLoading"
+          />
+          <span class="date-separator">~</span>
+          <input 
+            type="date" 
+            v-model="dateTo" 
+            class="date-input"
+            :disabled="isLoading"
+          />
+        </div>
+      </div>
+      
+      <button 
+        class="load-btn" 
+        @click="loadData" 
+        :disabled="!canLoadData || isLoading"
+      >
+        {{ isLoading ? '로딩 중...' : 'Data Load' }}
+      </button>
+    </div>
+
     <div class="chart-container">
       <div class="chart-card">
         <div class="chart-header">
@@ -16,7 +63,7 @@
             </button>
           </div>
         </div>
-        <div class="chart-content" ref="chartContainer" style="height: 400px; position: relative;">
+        <div class="chart-content" ref="chartContainer">
           <!-- 계측 차트 -->
           <svg v-if="chartType === 'measurement' && chartData && chartData.points && chartData.points.length > 0" 
               :width="width" :height="height" class="chart">
@@ -135,9 +182,6 @@
             <template v-else-if="chartType === 'defect' && (!defectChartData || !defectChartData.points || defectChartData.points.length === 0)">
               불량 감지 데이터 로딩 중...
             </template>
-            <template v-else>
-              표시할 데이터가 없습니다.
-            </template>
           </div>
         </div>
       </div>
@@ -145,6 +189,7 @@
     
     <!-- 계측 데이터 테이블 -->
     <div v-if="chartType === 'measurement'" class="data-container">
+      <h3>계측 데이터</h3>
       <div class="table-section">
         <table class="data-table">
           <thead>
@@ -188,6 +233,7 @@
 
     <!-- 불량 감지 데이터 테이블 -->
     <div v-if="chartType === 'defect'" class="data-container">
+      <h3>불량 감지 데이터</h3>
       <div class="table-section">
         <table class="data-table">
           <thead>
@@ -261,15 +307,11 @@
         </div>
       </div>
     </div>
-
-    <div class="image-container">
-      <img :src="'http://localhost:8091/images/' + currentImage" alt="현재 이미지" />
-    </div>
   </div>
 </template>
 
 <script>
-import { ref, onMounted, computed, watch, reactive } from 'vue'
+import { ref, onMounted, computed, watch, reactive, onUnmounted } from 'vue'
 import axios from 'axios'
 import AppHeader from '@/components/AppHeader.vue'
 
@@ -293,7 +335,6 @@ export default {
     const defectChartData = ref(null)
     const selectedPoint = ref(null)
     const defectData = ref([])
-    const currentImage = ref(null)
     const measurementData = ref([])
     const images = ref([])
 
@@ -575,10 +616,8 @@ export default {
       });
     })
 
-    const onMouseover = (point) => {
-      currentImage.value = images.value.find(img => 
-        img.filename.includes(point.item_id)
-      );
+    const onMouseover = () => {
+      // 함수 내용 제거 (이미지 관련 기능 제거)
     }
 
     const groupDataByImage = computed(() => {
@@ -737,11 +776,28 @@ export default {
       if (chartContainer.value) {
         const rect = chartContainer.value.getBoundingClientRect();
         width.value = rect.width;
-        height.value = 400;
+        height.value = Math.min(400, window.innerHeight * 0.4); // 화면 높이에 맞게 차트 높이 조정
         console.log(`차트 컨테이너 크기: ${width.value} x ${height.value}`);
       }
       fetchData();
+      
+      // 창 크기 변경 시 차트 크기 조정
+      window.addEventListener('resize', handleResize);
     });
+
+    // 컴포넌트 언마운트 시 이벤트 리스너 제거
+    onUnmounted(() => {
+      window.removeEventListener('resize', handleResize);
+    });
+
+    // 창 크기 변경 핸들러
+    const handleResize = () => {
+      if (chartContainer.value) {
+        const rect = chartContainer.value.getBoundingClientRect();
+        width.value = rect.width;
+        height.value = Math.min(400, window.innerHeight * 0.4);
+      }
+    };
 
     // 로깅 추가
     watch(() => chartData.value, (newVal) => {
@@ -781,160 +837,205 @@ export default {
       handleDrop,
       handleMouseOut,
       defectData,
-      currentImage,
       measurementData,
       images,
       onMouseover,
       getVisibleDefectPoints,
-      groupDefectDataByImage
+      groupDefectDataByImage,
+      handleResize
     }
   }
 }
 </script>
 
 <style scoped>
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 .analysis-container {
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 15px;
-  color: #4a4a4a;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #f6f3ff;
+  min-height: 100vh;
+  padding: 0 2rem;
+  margin: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding-bottom: 3.5rem; /* 푸터 높이만큼 하단 여백 추가 */
 }
 
 .chart-container {
-  margin-bottom: 20px;
+  margin: 0 1.5rem 1.5rem;
+  padding: 0;
+  width: calc(100% - 3rem);
+  max-width: calc(100% - 3rem);
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .chart-card {
-  background: #ffffff;
+  background-color: white;
   border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 12px rgba(147, 112, 219, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  margin: 0.5rem 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .chart-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--gray-200);
 }
 
 .chart-header h3 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--primary-700);
   margin: 0;
-  color: #4a4a4a;
-  font-size: 1.25rem;
+}
+
+.chart-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .btn-chart-type {
-  background: transparent;
-  border: 1px solid #9370db;
-  color: #9370db;
-  padding: 8px;
+  background-color: #f0eaff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--primary-600);
   cursor: pointer;
-  border-radius: 4px;
-  transition: all 0.3s ease;
+  transition: all 0.2s;
 }
 
-.btn-chart-type:hover,
+.btn-chart-type:hover {
+  background-color: #e5dcff;
+}
+
 .btn-chart-type.active {
-  color: #ffffff;
-  background: #9370db;
+  background-color: var(--primary-600);
+  color: white;
 }
 
 .chart-content {
+  width: 100%;
+  max-width: 100%;
   position: relative;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.loading-chart {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1.2em;
-  color: #666;
+  box-sizing: border-box;
+  overflow: hidden;
+  height: auto;
 }
 
 .data-container {
-  background: #ffffff;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(147, 112, 219, 0.1);
-  height: calc(100vh - 500px);
-  min-height: 400px;
-  overflow: hidden;
+  width: calc(100% - 3rem);
+  overflow: hidden; /* 가로 스크롤만 허용하던 것을 모든 방향 스크롤 방지로 변경 */
+  margin: 0 1.5rem 1rem;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 .table-section {
-  height: 100%;
-  overflow: auto;
+  overflow-x: auto; /* 테이블 내용이 넘칠 경우 가로 스크롤만 허용 */
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 1rem;
 }
 
 .data-table {
   width: 100%;
   border-collapse: collapse;
+  font-size: 0.9rem;
   table-layout: fixed;
+  margin: 0.5rem 0;
 }
 
 .data-table th {
-  position: sticky;
-  top: 0;
-  background: #ffffff;
-  z-index: 1;
-  color: #4a4a4a;
-  padding: 12px;
+  font-weight: 600;
+  color: var(--primary-700);
+  background-color: #f9f7ff;
+  padding: 1rem;
   text-align: left;
-  border-bottom: 2px solid #9370db;
-}
-
-.image-header {
-  width: 50%;
+  border-bottom: 2px solid var(--primary-200);
 }
 
 .data-table td {
-  padding: 12px;
-  color: #666666;
-  border-bottom: 1px solid rgba(147, 112, 219, 0.1);
+  padding: 0.8rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
-.group-start {
-  border-top: 2px solid rgba(147, 112, 219, 0.2);
-}
-
-/* 이미지 셀 스타일 */
 .image-cell {
-  width: 50%;
+  width: 120px;
+  vertical-align: middle;
   text-align: center;
-  background: #f8f9fa;
-  border-left: 1px solid rgba(147, 112, 219, 0.1);
-  padding: 10px;
-  position: sticky;
-  top: 40px; /* 헤더 높이 고려 */
-  z-index: 2;
-  height: 300px;
-  vertical-align: top;
+  padding: 0.5rem;
+}
+
+.image-header {
+  width: 120px;
 }
 
 .table-image {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  max-width: 110px;
+  max-height: 110px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid var(--gray-200);
 }
 
-.table-image:hover {
-  transform: scale(1.02);
-}
-
-tr.hovered {
-  background-color: rgba(147, 112, 219, 0.05);
-}
-
-tr.hovered + tr {
-  background-color: rgba(147, 112, 219, 0.05);
+/* 반응형 스타일 */
+@media (max-width: 768px) {
+  .analysis-container {
+    padding: 0 1rem;
+  }
+  
+  .chart-card, 
+  .data-container {
+    padding: 1rem;
+  }
+  
+  .chart-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  
+  .data-table th,
+  .data-table td {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.8rem;
+  }
+  
+  .table-image {
+    max-width: 80px;
+    max-height: 80px;
+  }
 }
 
 .image-popup {
@@ -943,115 +1044,207 @@ tr.hovered + tr {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(255, 255, 255, 0.95);
+  background-color: rgba(0, 0, 0, 0.8);
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   z-index: 1000;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
 .popup-content {
   position: relative;
+  background-color: white;
+  padding: 1.25rem;
+  border-radius: 12px;
   max-width: 90%;
   max-height: 90%;
-  background: #ffffff;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 20px rgba(147, 112, 219, 0.15);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.popup-content img {
+  max-width: 100%;
+  max-height: 70vh;
+  margin-bottom: 1rem;
+  box-sizing: border-box;
+}
+
+.popup-info {
+  margin-top: 1rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .close-btn {
   position: absolute;
   top: 10px;
   right: 10px;
-  background: #ffffff;
+  background: none;
   border: none;
-  color: #4a4a4a;
-  font-size: 24px;
+  font-size: 1.5rem;
   cursor: pointer;
-  z-index: 1;
-  width: 32px;
-  height: 32px;
-  border-radius: 16px;
+  color: var(--primary-600);
+  z-index: 10;
+}
+
+.loading-chart {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(147, 112, 219, 0.1);
-}
-
-.measurement-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
-  padding: 20px;
-}
-
-.measurement-item {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 12px;
-  background: rgba(147, 112, 219, 0.1);
-  border-radius: 4px;
-  color: #4a4a4a;
-  margin-bottom: 8px;
-}
-
-.measurement-item > div {
-  text-align: right;
-}
-
-.measurement-item > div > div {
-  margin-bottom: 4px;
-}
-
-.image-container {
-  margin-top: 20px;
-  text-align: center;
-}
-
-.pass {
-  color: green;
-}
-
-.fail {
-  color: red;
-}
-
-.chart {
-  width: 100%;
-  height: 100%;
-  overflow: visible;
-}
-
-.group-row {
-  background-color: transparent;
-  transition: background-color 0.2s ease;
-}
-
-.group-row.group-start {
-  border-top: 2px solid rgba(147, 112, 219, 0.3);
-}
-
-.group-row.hovered {
-  background-color: rgba(147, 112, 219, 0.05);
-}
-
-.image-cell {
-  width: 50%;
-  padding: 10px;
-  background: #f8f9fa;
-  border-left: 1px solid rgba(147, 112, 219, 0.1);
-}
-
-.table-image {
-  max-width: 100%;
   height: auto;
-  border-radius: 8px;
-  transition: transform 0.2s ease;
+  min-height: 100px;
+  color: var(--gray-500);
+  font-style: italic;
 }
 
 .table-image:hover {
   transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.group-row.hovered {
+  background-color: #f9f7ff;
+}
+
+.group-row.group-start {
+  border-top: 1px solid var(--primary-100);
+}
+
+.pass {
+  color: #28a745;
+  font-weight: 600;
+}
+
+.fail {
+  color: #dc3545;
+  font-weight: 600;
+}
+
+/* 테이블 헤더 스타일 */
+.data-container {
+  margin-top: 2rem;
+}
+
+.data-container h3 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--primary-700);
+  margin: 0 0 1rem 0;
+  padding-left: 0.5rem;
+}
+
+/* 컨트롤 섹션 스타일 */
+.control-section {
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 1.5rem;
+  margin: 1.5rem;
+  display: flex;
+  gap: 2rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 200px;
+}
+
+.control-group label {
+  font-weight: 600;
+  color: var(--primary-700);
+  font-size: 0.9rem;
+}
+
+.table-select {
+  padding: 0.6rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background-color: white;
+  min-width: 200px;
+}
+
+.table-select:disabled {
+  background-color: var(--gray-100);
+  cursor: not-allowed;
+}
+
+.date-range {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.date-input {
+  padding: 0.6rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background-color: white;
+  min-width: 150px;
+}
+
+.date-input:disabled {
+  background-color: var(--gray-100);
+  cursor: not-allowed;
+}
+
+.date-separator {
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
+.load-btn {
+  background-color: var(--primary-600);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem 1.5rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 120px;
+  height: 40px;
+}
+
+.load-btn:hover:not(:disabled) {
+  background-color: var(--primary-700);
+}
+
+.load-btn:disabled {
+  background-color: var(--gray-400);
+  cursor: not-allowed;
+}
+
+/* 반응형 스타일 */
+@media (max-width: 768px) {
+  .control-section {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+    margin: 1rem;
+  }
+  
+  .control-group {
+    width: 100%;
+  }
+  
+  .table-select,
+  .date-input {
+    width: 100%;
+  }
+  
+  .load-btn {
+    width: 100%;
+  }
 }
 </style> 

@@ -140,14 +140,18 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  margin: 1.5rem 2.5rem 2rem;
   position: relative;
-  width: 100%;
+  width: calc(100% - 5rem);
+  max-width: calc(100% - 5rem);
+  padding: 0.5rem 0;
+  box-sizing: border-box;
 }
 
 .page-title {
   display: flex;
   flex-direction: column;
+  padding-left: 1rem;
 }
 
 .page-title h1 {
@@ -165,9 +169,8 @@ export default {
 }
 
 .user-auth-section {
-  position: absolute;
-  top: 0;
-  right: 0;
+  position: relative;
+  margin-right: 1.5rem;
 }
 
 .user-icon-container {
@@ -175,8 +178,8 @@ export default {
 }
 
 .user-avatar-circle {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   background: var(--primary-600);
   color: white;
@@ -185,10 +188,13 @@ export default {
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .user-avatar-circle:hover {
   background: var(--primary-700);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .user-dropdown {
@@ -277,5 +283,22 @@ export default {
 
 .logout-item i {
   color: #ef4444;
+}
+
+/* 반응형 디자인 추가 */
+@media (max-width: 768px) {
+  .app-header {
+    margin: 1rem 1.5rem 1.5rem;
+    width: calc(100% - 3rem);
+    max-width: calc(100% - 3rem);
+  }
+  
+  .page-title {
+    padding-left: 0.5rem;
+  }
+  
+  .user-auth-section {
+    margin-right: 0.5rem;
+  }
 }
 </style> 

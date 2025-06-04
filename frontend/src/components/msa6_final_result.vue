@@ -205,10 +205,18 @@ export default {
           
           // 이제 팝업 컴포넌트의 openPopup 메서드 호출
           if (this.$refs.measurementPopup && typeof this.$refs.measurementPopup.openPopup === 'function') {
-            this.$refs.measurementPopup.openPopup(this.finalImage);
-            console.log('MSA6: 측정 팝업 openPopup 메서드 호출 완료');
+            try {
+              this.$refs.measurementPopup.openPopup(this.finalImage);
+              console.log('MSA6: 측정 팝업 openPopup 메서드 호출 완료');
+            } catch (error) {
+              console.error('MSA6: openPopup 메서드 호출 중 오류 발생:', error);
+            }
           } else {
-            console.error('MSA6: 측정 팝업 컴포넌트 참조 또는 openPopup 메서드를 찾을 수 없습니다.');
+            console.error('MSA6: 측정 팝업 컴포넌트 참조 또는 openPopup 메서드를 찾을 수 없습니다.', {
+              hasRef: !!this.$refs.measurementPopup,
+              refType: this.$refs.measurementPopup ? typeof this.$refs.measurementPopup : 'undefined',
+              hasMethod: this.$refs.measurementPopup ? typeof this.$refs.measurementPopup.openPopup : 'N/A'
+            });
           }
         });
       } else {

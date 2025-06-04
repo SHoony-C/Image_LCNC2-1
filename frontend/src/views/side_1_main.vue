@@ -40,7 +40,6 @@
           </div>
         </div>
       </div>
-      <MainFooter />
       <div class="sidebar-overlay" v-if="isSidebarOpen" @click="toggleSidebar"></div>
       
       <!-- 로그인 모달 추가 -->
@@ -60,7 +59,6 @@ import MSA3LLMAnalysis2 from '@/components/msa3_llm_analysis2.vue'
 import MSA4VectorTransform from '@/components/msa4_vector_transform.vue'
 import MSA5ImageLCNC from '@/components/msa5_image_lcnc.vue'
 import MSA6FinalResult from '@/components/msa6_final_result.vue'
-import MainFooter from '@/views/m0_footer.vue'
 import LoginModal from '@/components/login_modal.vue'
 import ServerConnectionError from '@/components/ServerConnectionError.vue'
 import AppHeader from '@/components/AppHeader.vue'
@@ -90,7 +88,6 @@ export default {
     MSA4VectorTransform,
     MSA5ImageLCNC,
     MSA6FinalResult,
-    MainFooter,
     LoginModal,
     ServerConnectionError,
     AppHeader
@@ -284,15 +281,30 @@ export default {
 </script>
 
 <style scoped>
-.main-view {
-  padding: clamp(1.5rem, 3vw, 2.5rem);
-  background: var(--primary-50);
-  min-height: 100vh;
+html, body {
+  overflow-x: hidden;
   width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.main-view {
+  position: relative;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  position: relative;
+  background-color: #f6f3ff; /* 연보라톤 배경 */
+  padding: 0;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  flex: 1;
 }
 
 .page-title {
@@ -319,48 +331,60 @@ export default {
 }
 
 .content {
-  margin-top: 1rem;
+  margin: 0;
+  padding: 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   flex: 1;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  padding-bottom: 3.5rem; /* 푸터 높이만큼 하단 여백 추가 */
 }
 
 .msa-grid {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  padding: 0.75rem;
+  padding: 0.5rem;
   width: 100%;
+  max-width: 100%;
   height: 100%;
   flex: 1;
-  margin-bottom: 1rem;
+  margin: 0 0 1rem 0;
+  overflow: hidden !important;
+  position: relative;
+  box-sizing: border-box;
+  padding-bottom: 1rem; /* 추가 여백 */
+}
+
+.top-row,
+.bottom-row {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  display: grid;
+  gap: 0.5rem;
   overflow: hidden !important;
   position: relative;
 }
 
 .top-row {
-  display: grid;
   grid-template-columns: 1.2fr 2fr 2fr;
-  gap: 0.5rem;
-  width: 100%;
   height: 35% !important;
   min-height: 200px;
   max-height: 35% !important;
-  overflow: hidden !important;
-  position: relative;
 }
 
 .bottom-row {
-  display: grid;
   grid-template-columns: 1.5fr 3.5fr 1fr;
-  gap: 0.5rem;
-  width: 100%;
   height: 65% !important;
   min-height: 200px;
   max-height: 65% !important;
-  overflow: hidden !important;
-  position: relative;
 }
 
 .msa-card {
@@ -372,10 +396,11 @@ export default {
   display: flex;
   flex-direction: column;
   overflow: hidden !important;
-  height: [MSA4] No vector data available, creating dummy visualization
-  !important;
+  height: 100% !important;
   width: 100% !important;
   position: relative;
+  box-sizing: border-box;
+  margin: 0;
 }
 
 .msa1, .msa2, .msa3, .msa4, .msa5, .msa6 {
@@ -402,41 +427,33 @@ export default {
 @media (max-width: 1400px) {
   .top-row {
     grid-template-columns: 1fr 1fr 1fr;
-    height: 35% !important;
-  }
-
-  .bottom-row {
-    height: 65% !important;
   }
 }
 
 @media (max-width: 1200px) {
   .content {
     height: auto;
+    padding: 0 0.5rem;
   }
 
-  .top-row {
-    grid-template-columns: 1fr;
-    height: auto;
-  }
-  
+  .top-row,
   .bottom-row {
     grid-template-columns: 1fr;
-    height: auto;
+    height: auto !important;
+    max-height: none !important;
   }
 
   .msa1, .msa2, .msa3, .msa4, .msa5, .msa6 {
     min-height: 300px;
     height: auto;
-  }
-
-  .msa5-6-container {
-    grid-template-columns: 1fr;
-    gap: 1rem;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .msa-card {
     margin-bottom: 1rem;
+    width: 100%;
+    box-sizing: border-box;
   }
 
   .mobile-header {

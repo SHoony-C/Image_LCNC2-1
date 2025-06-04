@@ -62,7 +62,7 @@ export default {
         
         // 사용자 정보
         const userName = localStorage.getItem('userName') || '사용자';
-        const lotId = this.currentFile ? this.currentFile.name.split('.')[0] : '';
+        const lot_wafer = this.currentFile ? this.currentFile.name.split('.')[0] : '';
         
         // 측정 결과 저장 API 호출
         for (const measurement of this.measurements) {
@@ -73,8 +73,8 @@ export default {
             },
             body: JSON.stringify({
               table_name: selectedTable.table_name,
-              user_name: userName,
-              lot_id: lotId,
+              username: userName,
+              lot_wafer: lot_wafer,
               measurement: {
                 itemId: measurement.label || 'measurement',
                 subItemId: measurement.type || 'distance',
@@ -86,6 +86,12 @@ export default {
           const result = await response.json();
           
           if (result.status !== 'success') {
+            // 권한 오류 메시지 특별 처리
+            if (result.message && result.message.includes('저장 권한이 없습니다')) {
+              this.showNotification(result.message, 'error');
+              console.error('[saveWithTableName] 권한 오류:', result.message);
+              return;
+            }
             throw new Error(result.message || '저장 실패');
           }
         }
