@@ -36,9 +36,42 @@ def encode_image_to_bytes(image, format=None):
             # 기본값은 PNG
             format = "PNG"
     
-    # 이미지 저장 - 감지된 또는 지정된 형식 사용
-    image.save(buffered, format=format)
-    return buffered.getvalue()
+    # 형식 문자열을 대문자로 표준화
+    format = format.upper() if isinstance(format, str) else format
+    
+    # JPEG 포맷의 특별 처리 - PIL에서는 'JPEG'로 저장되지만 파일 확장자는 'jpg'
+    if format == "JPG":
+        format = "JPEG"
+    
+    # 지원되는 형식 확인
+    supported_formats = ["JPEG", "PNG", "GIF", "WEBP", "BMP", "TIFF"]
+    if format not in supported_formats:
+        print(f"지원되지 않는 이미지 형식: {format}, PNG로 대체합니다.")
+        format = "PNG"
+    
+    try:
+        # 이미지 저장 - 감지된 또는 지정된 형식 사용
+        if format == "JPEG":
+            # JPEG의 경우 RGB 모드로 변환 (RGBA는 지원하지 않음)
+            if image.mode == 'RGBA':
+                # 배경색을 흰색으로 설정하여 변환
+                background = Image.new('RGB', image.size, (255, 255, 255))
+                background.paste(image, mask=image.split()[3])  # 알파 채널을 마스크로 사용
+                image = background
+            image.save(buffered, format=format, quality=95)
+        else:
+            image.save(buffered, format=format)
+        
+        # 로그 추가
+        print(f"이미지 인코딩 완료: 형식={format}, 크기={buffered.getbuffer().nbytes} 바이트")
+        
+        return buffered.getvalue(), format
+    except Exception as e:
+        print(f"이미지 인코딩 오류: {str(e)}, PNG로 대체합니다.")
+        # 오류 발생 시 PNG로 대체
+        buffered = io.BytesIO()
+        image.save(buffered, format="PNG")
+        return buffered.getvalue(), "PNG"
 
 def pil_to_cv2(pil_image):
     """PIL 이미지를 OpenCV 형식으로 변환"""
@@ -124,8 +157,8 @@ async def process_object_detection(image: UploadFile = File(...), params: str = 
         print(f"객체 감지 결과: {len(objects)} 객체 감지됨")
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img)
-        return Response(content=img_bytes, media_type="image/png", 
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=format_used)
+        return Response(content=img_bytes, media_type=f"image/{format_used.lower()}", 
                         headers={"X-Process-Status": "success", "X-Detected-Objects": json.dumps(objects)})
     except Exception as e:
         print(f"객체 감지 오류: {str(e)}")
@@ -226,17 +259,10 @@ async def process_style_transfer(image: UploadFile = File(...), style_image: Upl
         result_img.format = original_format  # 원본 형식 정보 설정
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{format_used.lower()}" if format_used != "JPEG" else "image/jpeg"
         
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
@@ -296,17 +322,10 @@ async def process_resize(image: UploadFile = File(...), params: str = Form(...))
         print(f"이미지 크기 조정: {width}x{height}, 모드: {mode}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -348,17 +367,10 @@ async def process_crop(image: UploadFile = File(...), params: str = Form(...)):
         print(f"이미지 자르기: x={x}, y={y}, 너비={width}, 높이={height}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -391,17 +403,10 @@ async def process_rotate(image: UploadFile = File(...), params: str = Form(...))
         print(f"이미지 회전: 각도={angle}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -438,17 +443,10 @@ async def process_flip(image: UploadFile = File(...), params: str = Form(...)):
         print(f"이미지 뒤집기: 방향={direction}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -464,37 +462,28 @@ async def process_brightness(image: UploadFile = File(...), params: str = Form(.
     params = json.loads(params)
     
     try:
+        # 이미지 데이터 읽기
         image_data = await image.read()
         img = decode_image(image_data)
         original_format = img.format  # 원본 이미지 형식 저장
         
-        factor = params.get("factor", 1.0)
+        # 파라미터 추출
+        factor = float(params.get("factor", 1.0))
         
         # 밝기 조정
         enhancer = ImageEnhance.Brightness(img)
         result_img = enhancer.enhance(factor)
-        
-        # 원본 이미지 형식 유지
-        result_img.format = original_format
-        
-        # 처리 정보 로깅
-        print(f"밝기 조정: 계수={factor}, 형식: {original_format}")
-        
-        # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        result_img.format = original_format  # 원본 형식 정보 보존
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
-        return Response(content=img_bytes, media_type=mime_type, 
-                        headers={"X-Process-Status": "success"})
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
+        
+        # 적절한 미디어 타입 결정
+        media_type = f"image/{format_used.lower()}" if format_used != "JPEG" else "image/jpeg"
+        
+        return Response(content=img_bytes, media_type=media_type)
     except Exception as e:
+        print(f"밝기 조정 오류: {str(e)}")
         return JSONResponse(
             status_code=400,
             content={"status": "error", "message": str(e)}
@@ -524,17 +513,10 @@ async def process_contrast(image: UploadFile = File(...), params: str = Form(...
         print(f"대비 조정: 계수={factor}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -566,17 +548,10 @@ async def process_blur(image: UploadFile = File(...), params: str = Form(...)):
         print(f"블러 효과: 반경={radius}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -607,17 +582,10 @@ async def process_sharpen(image: UploadFile = File(...), params: str = Form(...)
         print(f"선명도 조정: 반경={params.get('radius', 2)}, 강도={params.get('percent', 150)}%, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -647,17 +615,10 @@ async def process_grayscale(image: UploadFile = File(...), params: str = Form(..
         print(f"흑백 변환 적용, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -689,17 +650,10 @@ async def process_threshold(image: UploadFile = File(...), params: str = Form(..
         print(f"이진화: 임계값={threshold_value}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -767,17 +721,10 @@ async def process_edge(image: UploadFile = File(...), params: str = Form(...)):
         print(f"엣지 검출: 방법={method}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -819,17 +766,10 @@ async def process_hue(image: UploadFile = File(...), params: str = Form(...)):
         print(f"색상 조정: 색상 계수={hue_factor}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type, 
                         headers={"X-Process-Status": "success"})
     except Exception as e:
@@ -874,17 +814,10 @@ async def process_gamma(image: UploadFile = File(...), params: str = Form(...)):
         print(f"감마 보정: 감마값={gamma_value}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type)
     except Exception as e:
         print(f"감마 보정 처리 오류: {str(e)}")
@@ -910,18 +843,11 @@ async def process_histogram_equalization(image: UploadFile = File(...), params: 
         
         if not enabled:
             # 처리하지 않고 원본 반환
-            img_bytes = encode_image_to_bytes(img, format=original_format)
+            img_bytes, format_used = encode_image_to_bytes(img, format=original_format)
             
             # 적절한 MIME 타입 설정
-            mime_type = "image/png"  # 기본값
-            if original_format:
-                if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                    mime_type = "image/jpeg"
-                elif original_format.lower() == "gif":
-                    mime_type = "image/gif"
-                elif original_format.lower() == "webp":
-                    mime_type = "image/webp"
-                    
+            mime_type = f"image/{format_used.lower()}" if format_used != "JPEG" else "image/jpeg"
+            
             return Response(content=img_bytes, media_type=mime_type)
         
         # PIL 이미지를 OpenCV로 변환
@@ -951,17 +877,10 @@ async def process_histogram_equalization(image: UploadFile = File(...), params: 
         print(f"히스토그램 평활화 적용, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type)
     except Exception as e:
         print(f"히스토그램 평활화 처리 오류: {str(e)}")
@@ -1016,17 +935,10 @@ async def process_clahe(image: UploadFile = File(...), params: str = Form(...)):
         print(f"CLAHE 처리: clip_limit={clip_limit}, tile_grid_size={tile_grid_size}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type)
     except Exception as e:
         print(f"CLAHE 처리 오류: {str(e)}")
@@ -1071,17 +983,10 @@ async def process_gaussian_blur(image: UploadFile = File(...), params: str = For
         print(f"가우시안 블러: 커널크기={kernel_size}, 시그마={sigma}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type)
     except Exception as e:
         print(f"가우시안 블러 처리 오류: {str(e)}")
@@ -1125,17 +1030,10 @@ async def process_median_filter(image: UploadFile = File(...), params: str = For
         print(f"미디언 필터: 커널크기={kernel_size}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type)
     except Exception as e:
         print(f"미디언 필터 처리 오류: {str(e)}")
@@ -1224,17 +1122,10 @@ async def process_anisotropic_diffusion(image: UploadFile = File(...), params: s
         print(f"비등방성 확산: 반복={num_iter}, kappa={kappa}, gamma={gamma}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type)
     except Exception as e:
         print(f"비등방성 확산 필터 처리 오류: {str(e)}")
@@ -1289,17 +1180,10 @@ async def process_normalize(image: UploadFile = File(...), params: str = Form(..
         print(f"정규화: min={min_value}, max={max_value}, 형식: {original_format}")
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if original_format:
-            if original_format.lower() == "jpeg" or original_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif original_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif original_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=original_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
         return Response(content=img_bytes, media_type=mime_type)
     except Exception as e:
         print(f"정규화 처리 오류: {str(e)}")
@@ -1315,21 +1199,48 @@ async def process_merge(images: List[UploadFile] = File(...), params: str = Form
     params = json.loads(params)
     
     try:
-        # 형식 지정이 없으면 기본 PNG 사용
-        output_format = format or "PNG"
-        print(f"병합 요청 - 이미지 수: {len(images)}, 출력 형식: {output_format}")
+        # 모든 이미지를 로드하여 형식 확인
+        loaded_images = []
+        formats = []
         
-        if len(images) < 2:
+        for img_file in images:
+            img_data = await img_file.read()
+            img = decode_image(img_data)
+            loaded_images.append(img)
+            
+            # 이미지 형식 수집
+            if hasattr(img, 'format') and img.format:
+                formats.append(img.format)
+        
+        # 형식 결정 순서:
+        # 1. 명시적으로 지정된 format 매개변수
+        # 2. 첫 번째 이미지의 형식
+        # 3. 가장 많이 사용된 형식
+        # 4. 기본값(PNG)
+        output_format = None
+        
+        if format:
+            output_format = format.upper()
+        elif len(formats) > 0:
+            # 첫 번째 이미지 형식 사용
+            output_format = formats[0]
+            
+            # 또는 가장 많이 사용된 형식 사용
+            # from collections import Counter
+            # format_counter = Counter(formats)
+            # output_format = format_counter.most_common(1)[0][0]
+        
+        # 기본값 설정
+        if not output_format:
+            output_format = "PNG"
+        
+        print(f"병합 요청 - 이미지 수: {len(images)}, 감지된 형식: {formats}, 출력 형식: {output_format}")
+        
+        if len(loaded_images) < 2:
             raise ValueError("병합에는 최소 2개의 이미지가 필요합니다.")
         
         # 첫 번째 이미지를 기본으로 사용
-        base_image_data = await images[0].read()
-        base_img = decode_image(base_image_data)
-        
-        # 저장된 원본 형식 확인
-        original_format = base_img.format
-        if not output_format and original_format:
-            output_format = original_format
+        base_img = loaded_images[0]
         
         # 병합 방식 확인
         mode = params.get("mode", "overlay")
@@ -1337,65 +1248,49 @@ async def process_merge(images: List[UploadFile] = File(...), params: str = Form
         # 모드에 따른 병합 처리
         if mode == "horizontal":
             # 가로로 나열
-            total_width = sum(img.width for img in [base_img] + [decode_image(await img.read()) for img in images[1:]])
-            max_height = max(img.height for img in [base_img] + [decode_image(await img.read()) for img in images[1:]])
+            total_width = sum(img.width for img in loaded_images)
+            max_height = max(img.height for img in loaded_images)
             
             # 새 이미지 생성
             result_img = Image.new('RGB', (total_width, max_height))
             
             # 이미지 나열
             x_offset = 0
-            result_img.paste(base_img, (x_offset, 0))
-            x_offset += base_img.width
-            
-            for img_file in images[1:]:
-                img_data = await img_file.read()
-                img = decode_image(img_data)
+            for img in loaded_images:
                 result_img.paste(img, (x_offset, 0))
                 x_offset += img.width
         
         elif mode == "vertical":
             # 세로로 나열
-            max_width = max(img.width for img in [base_img] + [decode_image(await img.read()) for img in images[1:]])
-            total_height = sum(img.height for img in [base_img] + [decode_image(await img.read()) for img in images[1:]])
+            max_width = max(img.width for img in loaded_images)
+            total_height = sum(img.height for img in loaded_images)
             
             # 새 이미지 생성
             result_img = Image.new('RGB', (max_width, total_height))
             
             # 이미지 나열
             y_offset = 0
-            result_img.paste(base_img, (0, y_offset))
-            y_offset += base_img.height
-            
-            for img_file in images[1:]:
-                img_data = await img_file.read()
-                img = decode_image(img_data)
+            for img in loaded_images:
                 result_img.paste(img, (0, y_offset))
                 y_offset += img.height
         
         elif mode == "grid":
             # 그리드 형태로 배치
-            grid_size = int(math.ceil(math.sqrt(len(images) + 1)))
-            
-            # 모든 이미지 로드
-            all_images = [base_img]
-            for img_file in images[1:]:
-                img_data = await img_file.read()
-                all_images.append(decode_image(img_data))
+            grid_size = int(math.ceil(math.sqrt(len(loaded_images))))
             
             # 각 이미지의 최대 크기 계산
-            max_width = max(img.width for img in all_images)
-            max_height = max(img.height for img in all_images)
+            max_width = max(img.width for img in loaded_images)
+            max_height = max(img.height for img in loaded_images)
             
             # 결과 이미지 크기
             result_width = max_width * grid_size
-            result_height = max_height * ((len(all_images) + grid_size - 1) // grid_size)
+            result_height = max_height * ((len(loaded_images) + grid_size - 1) // grid_size)
             
             # 새 이미지 생성
             result_img = Image.new('RGB', (result_width, result_height), color=(255, 255, 255))
             
             # 이미지 배치
-            for i, img in enumerate(all_images):
+            for i, img in enumerate(loaded_images):
                 x = (i % grid_size) * max_width
                 y = (i // grid_size) * max_height
                 result_img.paste(img, (x, y))
@@ -1407,50 +1302,45 @@ async def process_merge(images: List[UploadFile] = File(...), params: str = Form
             # 투명도 파라미터
             opacity = params.get("opacity", 0.5)
             
-            for img_file in images[1:]:
-                img_data = await img_file.read()
-                overlay_img = decode_image(img_data)
-                
+            for img in loaded_images[1:]:
                 # 크기 조정 (첫 번째 이미지에 맞춤)
-                if overlay_img.size != result_img.size:
-                    overlay_img = overlay_img.resize(result_img.size, Image.LANCZOS)
+                if img.size != result_img.size:
+                    img = img.resize(result_img.size, Image.LANCZOS)
                 
                 # 이미지가 RGBA 모드가 아니면 변환
-                if overlay_img.mode != 'RGBA':
-                    overlay_img = overlay_img.convert('RGBA')
+                if img.mode != 'RGBA':
+                    img = img.convert('RGBA')
                 
                 # 투명도 적용
-                overlay_array = np.array(overlay_img)
+                overlay_array = np.array(img)
                 overlay_array[:, :, 3] = (overlay_array[:, :, 3] * opacity).astype(np.uint8)
-                overlay_img = Image.fromarray(overlay_array)
+                img = Image.fromarray(overlay_array)
                 
                 # 이미지 합성
                 if result_img.mode != 'RGBA':
                     result_img = result_img.convert('RGBA')
                 
-                result_img = Image.alpha_composite(result_img, overlay_img)
+                result_img = Image.alpha_composite(result_img, img)
         
         # 결과 이미지에 원본 형식 설정
         result_img.format = output_format
         
         # 처리 정보 로깅
-        print(f"이미지 병합 완료: 모드={mode}, 이미지 수={len(images)}, 출력 형식={output_format}")
+        print(f"이미지 병합 완료: 모드={mode}, 이미지 수={len(loaded_images)}, 출력 형식={output_format}")
         
         # 이미지를 바이너리로 변환하여 반환
-        img_bytes = encode_image_to_bytes(result_img, format=output_format)
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=output_format)
         
         # 적절한 MIME 타입 설정
-        mime_type = "image/png"  # 기본값
-        if output_format:
-            if output_format.lower() == "jpeg" or output_format.lower() == "jpg":
-                mime_type = "image/jpeg"
-            elif output_format.lower() == "gif":
-                mime_type = "image/gif"
-            elif output_format.lower() == "webp":
-                mime_type = "image/webp"
+        mime_type = f"image/{format_used.lower()}" if format_used != "JPEG" else "image/jpeg"
         
-        return Response(content=img_bytes, media_type=mime_type, 
-                        headers={"X-Process-Status": "success"})
+        # 응답 헤더에 형식 정보 추가
+        headers = {
+            "X-Process-Status": "success",
+            "X-Image-Format": format_used
+        }
+        
+        return Response(content=img_bytes, media_type=mime_type, headers=headers)
     except Exception as e:
         print(f"이미지 병합 오류: {str(e)}")
         return JSONResponse(

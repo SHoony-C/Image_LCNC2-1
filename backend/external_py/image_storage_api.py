@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, File, Form, UploadFile
 from typing import Dict, Any, Optional
 from datetime import datetime
 import os
@@ -12,6 +12,8 @@ from pymongo import MongoClient
 from bson import ObjectId
 from config import MONGODB_SETTINGS
 from PIL import Image
+import json
+import time
 
 # 라우터 설정
 router = APIRouter()
@@ -50,11 +52,11 @@ def log_debug(message):
 
 # 파일명에 사용할 수 없는 문자 제거 함수
 def sanitize_filename(filename):
-    """파일명에서 사용할 수 없는 문자를 제거하고 공백을 언더스코어로 변환"""
-    # 윈도우에서 사용할 수 없는 문자 제거: \ / : * ? " < > |
-    sanitized = re.sub(r'[\\/*?:"<>|]', "", filename)
-    # 공백을 언더스코어로 변환
-    sanitized = sanitized.replace(' ', '_')
+    """파일명에 사용할 수 없는 문자를 제거하고 안전한 파일명 생성"""
+    # 파일명에 사용할 수 없는 문자 제거
+    sanitized = re.sub(r'[^\w\s-]', '', filename).strip().replace(' ', '_')
+    if not sanitized:
+        sanitized = f"image_{int(time.time())}"
     return sanitized
 
 # noname_숫자 패턴의 다음 번호 생성 함수
@@ -82,210 +84,182 @@ def get_next_noname_number():
         print(f"번호 생성 중 오류: {str(e)}")
         return 1
 
-# 제목이 없을 때 고유한 이름 생성
-def generate_unique_title(provided_title=None):
-    """이미지 제목이 없거나 기본값일 때 고유한 이름 생성"""
-    if not provided_title or provided_title == "이미지 제목 없음":
-        next_num = get_next_noname_number()
-        return f"noname_{next_num}"
-    
-    # 제공된 제목에 공백이 있으면 언더스코어로 변환
-    sanitized_title = provided_title.replace(" ", "_")
-    
-    # 이미 동일한 제목이 있는지 확인
-    existing = lcnc_results.find_one({"title": sanitized_title})
-    if existing:
-        # 중복된 경우 처리 방식 변경 - 자동 변경이 아닌 중복 응답 제공
-        return {"is_duplicate": True, "title": sanitized_title}
-    
-    return sanitized_title
+# 고유한 제목 생성 함수
+def generate_unique_title():
+    """타임스탬프 기반의 고유한 제목 생성"""
+    return f"image_{int(time.time())}"
 
 @router.post("/save-images")
 async def save_images(data: Dict[str, Any] = Body(...)):
     """
-    Before/After 이미지를 저장하는 API
+    외부 저장소에 이미지 저장 API
     
-    요청 데이터:
-    - title: 이미지 제목 (필수)
-    - before_image: 이미지 URL 또는 Base64 이미지 (필수)
-    - after_image: 이미지 URL 또는 Base64 이미지 (필수)
-    - description: 이미지 설명 (선택)
-    - workflow_id: 관련 워크플로우 ID (선택)
-    - tags: 이미지 태그 목록 (선택)
+    시작 이미지(before_image)와 결과 이미지(after_image)를 
+    외부 저장소에 저장하고 결과를 반환합니다.
+    
+    이미지는 Base64 인코딩된 데이터 URL 또는 HTTP URL 형태로 제공될 수 있습니다.
     """
-    try:
-        # 필드 검증
-        title = data.get("title")
-        before_image = data.get("before_image")
-        after_image = data.get("after_image")
-        
-        # 제목 필수 검증
-        if not title:
-            raise HTTPException(status_code=400, detail="이미지 제목은 필수 항목입니다.")
-        
-        # 이름에 공백이 있는지 확인
-        if title and " " in title:
-            # 오류 대신 자동 변환하고 경고 메시지 포함
-            original_title = title
-            title = title.replace(" ", "_")
-            warning_message = f"제목에 공백이 포함되어 있어 '{original_title}'에서 '{title}'로 자동 변환되었습니다."
-        else:
-            warning_message = None
-        
-        # 이미지 제목이 없으면 고유한 이름 생성
-        title_result = generate_unique_title(title)
-        
-        # 중복 체크 결과가 딕셔너리로 반환된 경우
-        if isinstance(title_result, dict) and title_result.get("is_duplicate"):
-            return {
-                "status": "duplicate_name",
-                "message": f"이미 사용 중인 이름입니다: {title_result['title']}",
-                "duplicate_title": title_result["title"]
-            }
-        
-        # 중복이 아니면 제목 사용
-        title = title_result
-        
-        if not before_image or not after_image:
-            raise HTTPException(status_code=400, detail="처리 전/후 이미지는 필수 항목입니다.")
-        
-        # 파일명 생성 및 정리
-        sanitized_title = title
-        
-        # 이미지 확장자 결정 - 기본은 png이지만 Base64인 경우 데이터에서 확장자 추출 시도
-        before_ext = "png"
-        after_ext = "png"
-        
-        # Base64 데이터에서 확장자 추출 시도
-        if not before_image.startswith(('http://', 'https://', '/')):
-            if "," in before_image:
-                mime_part = before_image.split(",")[0]
-                if "image/jpeg" in mime_part:
-                    before_ext = "jpg"
-                elif "image/png" in mime_part:
-                    before_ext = "png"
-                elif "image/gif" in mime_part:
-                    before_ext = "gif"
-                elif "image/webp" in mime_part:
-                    before_ext = "webp"
-        
-        if not after_image.startswith(('http://', 'https://', '/')):
-            if "," in after_image:
-                mime_part = after_image.split(",")[0]
-                if "image/jpeg" in mime_part:
-                    after_ext = "jpg"
-                elif "image/png" in mime_part:
-                    after_ext = "png"
-                elif "image/gif" in mime_part:
-                    after_ext = "gif"
-                elif "image/webp" in mime_part:
-                    after_ext = "webp"
-                    
-        # URL에서 파일 확장자 추출 시도
-        elif after_image.startswith(('http://', 'https://')):
-            try:
-                path = urlparse(after_image).path
-                ext = os.path.splitext(path)[1].lower()
-                if ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
-                    after_ext = ext.lstrip('.')
-            except:
-                # 확장자 추출 실패 시 기본값 유지
-                pass
+    # 요청 데이터 로깅
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_debug(f"이미지 저장 요청 수신 - {timestamp}")
+    
+    # 필수 필드 확인
+    required_fields = ["title", "before_image", "after_image"]
+    for field in required_fields:
+        if field not in data:
+            raise HTTPException(status_code=400, detail=f"필수 필드 누락: {field}")
+    
+    title = data.get("title", "").strip()
+    description = data.get("description", "").strip()
+    before_image = data.get("before_image", "")
+    after_image = data.get("after_image", "")
+    workflow_id = data.get("workflow_id", "")
+    tags = data.get("tags", [])
+    
+    # 이미지 형식 정보 (명시적으로 전달된 경우 사용)
+    image_format = data.get("image_format", "").lower()
+    if image_format:
+        log_debug(f"클라이언트에서 전달된 이미지 형식: {image_format}")
+    
+    # 제목 길이 및 형식 검증
+    if not title:
+        raise HTTPException(status_code=400, detail="제목이 비어있습니다.")
+    
+    if len(title) > 100:
+        raise HTTPException(status_code=400, detail="제목이 너무 깁니다 (최대 100자).")
+    
+    # 설명 길이 검증
+    if len(description) > 500:
+        raise HTTPException(status_code=400, detail="설명이 너무 깁니다 (최대 500자).")
+    
+    # 이미지 URL 검증
+    if not before_image:
+        raise HTTPException(status_code=400, detail="시작 이미지 URL이 비어있습니다.")
+    
+    if not after_image:
+        raise HTTPException(status_code=400, detail="결과 이미지 URL이 비어있습니다.")
+    
+    # 파일 이름에 사용할 안전한 제목 생성
+    sanitized_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
+    if not sanitized_title:
+        sanitized_title = f"image_{timestamp.replace(' ', '_').replace(':', '-')}"
+    
+    # 이미지 저장 디렉토리 확인
+    if not os.path.exists(IMAGE_STORE_PATH):
+        os.makedirs(IMAGE_STORE_PATH, exist_ok=True)
+    
+    # 동일한 제목의 이미지가 이미 존재하는지 확인
+    existing_images = []
+    for filename in os.listdir(IMAGE_STORE_PATH):
+        if filename.startswith(f"{sanitized_title}_"):
+            existing_images.append(filename)
+    
+    is_update = len(existing_images) > 0
+    
+    log_debug(f"저장 모드: {'업데이트' if is_update else '신규 생성'}")
+    
+    # 이미지 형식 결정
+    before_ext = "png"  # 기본값
+    after_ext = "png"   # 기본값
+    
+    # 명시적으로 전달된 이미지 형식 사용
+    if image_format:
+        after_ext = image_format
+        log_debug(f"클라이언트에서 전달된 형식 사용: {after_ext}")
+    
+    # 데이터 URL에서 이미지 형식 추출
+    if before_image.startswith('data:image/'):
+        mime_part = before_image.split(",")[0]
+        if "image/jpeg" in mime_part:
+            before_ext = "jpg"
+        elif "image/png" in mime_part:
+            before_ext = "png"
+        elif "image/gif" in mime_part:
+            before_ext = "gif"
+        elif "image/webp" in mime_part:
+            before_ext = "webp"
+        # 추가 이미지 형식 지원
+        elif "image/bmp" in mime_part:
+            before_ext = "bmp"
+        elif "image/tiff" in mime_part:
+            before_ext = "tiff"
+    
+    # after_image URL에서 형식 정보 추출 (명시적 형식이 없는 경우만)
+    if not image_format and after_image.startswith('data:image/'):
+        mime_part = after_image.split(",")[0]
+        if "image/jpeg" in mime_part:
+            after_ext = "jpg"
+        elif "image/png" in mime_part:
+            after_ext = "png"
+        elif "image/gif" in mime_part:
+            after_ext = "gif"
+        elif "image/webp" in mime_part:
+            after_ext = "webp"
+        # 추가 이미지 형식 지원
+        elif "image/bmp" in mime_part:
+            after_ext = "bmp"
+        elif "image/tiff" in mime_part:
+            after_ext = "tiff"
+            
+    # URL에서 파일 확장자 추출 시도
+    elif after_image.startswith(('http://', 'https://')):
+        try:
+            path = urlparse(after_image).path
+            ext = os.path.splitext(path)[1].lower()
+            if ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+                after_ext = ext.lstrip('.')
+        except:
+            # 확장자 추출 실패 시 기본값 유지
+            pass
                 
-        log_debug(f"결정된 이미지 확장자 - 시작: {before_ext}, 종료: {after_ext}")
-        
-        before_filename = f"{sanitized_title}_before.{before_ext}"
-        after_filename = f"{sanitized_title}_after.{after_ext}"
-        
-        # 이미지 저장 경로
-        before_path = os.path.join(IMAGE_STORE_PATH, before_filename)
-        after_path = os.path.join(IMAGE_STORE_PATH, after_filename)
-        
-        # URL 또는 Base64 이미지를 파일로 저장하는 함수
-        def save_image(image_data, file_path):
-            log_debug(f"이미지 저장 시작: {file_path}")
-            # URL인지 Base64인지 확인
-            if image_data.startswith(('http://', 'https://', '/')):
-                # URL에서 이미지 다운로드
-                try:
-                    if image_data.startswith('/'):
-                        log_debug(f"로컬 경로에서 이미지 복사: {image_data} -> {file_path}")
-                        # 절대 경로인 경우 로컬 파일 복사
-                        if os.path.exists(image_data):
-                            # 폴더가 존재하는지 확인
-                            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                            
-                            # 원본 이미지 확장자 가져오기
-                            original_ext = os.path.splitext(image_data)[1].lower()
-                            adjusted_file_path = file_path
-                            
-                            # 확장자가 다른 경우 조정
-                            if original_ext and os.path.splitext(file_path)[1].lower() != original_ext:
-                                adjusted_file_path = os.path.splitext(file_path)[0] + original_ext
-                                log_debug(f"로컬 파일 확장자 불일치. 경로 조정: {adjusted_file_path}")
-                            
-                            # 파일 확장자 확인을 위해 이미지 형식 검사
-                            try:
-                                with Image.open(image_data) as img:
-                                    detected_format = img.format
-                                    if detected_format:
-                                        # 실제 형식에 맞는 확장자 얻기
-                                        format_ext = f".{detected_format.lower()}"
-                                        if format_ext == ".jpeg":
-                                            format_ext = ".jpg"
-                                        
-                                        # 확장자 불일치 확인
-                                        current_ext = os.path.splitext(adjusted_file_path)[1].lower()
-                                        if current_ext != format_ext:
-                                            adjusted_file_path = os.path.splitext(adjusted_file_path)[0] + format_ext
-                                            log_debug(f"이미지 형식 감지: {detected_format}, 파일 경로 조정: {adjusted_file_path}")
-                            except Exception as img_error:
-                                log_debug(f"이미지 형식 감지 중 오류: {str(img_error)}")
-                            
-                            shutil.copy(image_data, adjusted_file_path)
-                            log_debug(f"파일 복사 완료: {adjusted_file_path}")
-                            return os.path.exists(adjusted_file_path), os.path.basename(adjusted_file_path)
-                        else:
-                            log_debug(f"로컬 파일을 찾을 수 없음: {image_data}")
-                            raise HTTPException(status_code=404, detail=f"로컬 파일을 찾을 수 없습니다: {image_data}")
-                    else:
-                        log_debug(f"URL에서 다운로드: {image_data}")
-                        # 외부 URL에서 다운로드
-                        response = requests.get(image_data, stream=True)
-                        if response.status_code == 200:
-                            # 폴더가 존재하는지 확인
-                            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                            
-                            # Content-Type 헤더 확인하여 실제 형식 판별
-                            content_type = response.headers.get('content-type', '')
-                            original_extension = os.path.splitext(file_path)[1].lower()
-                            adjusted_file_path = file_path
-                            
-                            # 컨텐츠 타입에 따른 확장자 조정
-                            if 'image/jpeg' in content_type and not original_extension.endswith(('.jpg', '.jpeg')):
-                                adjusted_file_path = os.path.splitext(file_path)[0] + '.jpg'
-                                log_debug(f"JPEG 이미지지만 다른 확장자로 저장하려고 했습니다. 경로 조정: {adjusted_file_path}")
-                            elif 'image/png' in content_type and not original_extension.endswith('.png'):
-                                adjusted_file_path = os.path.splitext(file_path)[0] + '.png'
-                                log_debug(f"PNG 이미지지만 다른 확장자로 저장하려고 했습니다. 경로 조정: {adjusted_file_path}")
-                            elif 'image/gif' in content_type and not original_extension.endswith('.gif'):
-                                adjusted_file_path = os.path.splitext(file_path)[0] + '.gif'
-                                log_debug(f"GIF 이미지지만 다른 확장자로 저장하려고 했습니다. 경로 조정: {adjusted_file_path}")
-                            elif 'image/webp' in content_type and not original_extension.endswith('.webp'):
-                                adjusted_file_path = os.path.splitext(file_path)[0] + '.webp'
-                                log_debug(f"WebP 이미지지만 다른 확장자로 저장하려고 했습니다. 경로 조정: {adjusted_file_path}")
-                                
-                            # 이미지 데이터 읽기 (전체 다운로드)
-                            image_bytes = response.content
-                            log_debug(f"이미지 다운로드 완료: {len(image_bytes)} 바이트")
-                            
-                            # 메모리에서 이미지 열기
-                            try:
-                                img = Image.open(io.BytesIO(image_bytes))
+    log_debug(f"결정된 이미지 확장자 - 시작: {before_ext}, 종료: {after_ext}")
+    
+    before_filename = f"{sanitized_title}_before.{before_ext}"
+    after_filename = f"{sanitized_title}_after.{after_ext}"
+    
+    # 이미지 저장 경로
+    before_path = os.path.join(IMAGE_STORE_PATH, before_filename)
+    after_path = os.path.join(IMAGE_STORE_PATH, after_filename)
+    
+    # URL 또는 Base64 이미지를 파일로 저장하는 함수
+    def save_image(image_data, file_path, format_hint=None):
+        log_debug(f"이미지 저장 시작: {file_path}, 형식 힌트: {format_hint}")
+        # URL인지 Base64인지 확인
+        if image_data.startswith(('http://', 'https://', '/')):
+            # Blob URL 처리 (blob:http://...)
+            if image_data.startswith('blob:'):
+                log_debug(f"Blob URL 감지: {image_data}")
+                # Blob URL은 클라이언트에서만 액세스 가능하므로 별도 처리 필요
+                # 형식 힌트가 있는 경우 파일 경로 조정
+                if format_hint:
+                    adjusted_file_path = os.path.splitext(file_path)[0] + f".{format_hint}"
+                    log_debug(f"형식 힌트에 따른 파일 경로 조정: {adjusted_file_path}")
+                    return False, os.path.basename(adjusted_file_path)  # 실제 저장은 클라이언트에서 수행
+                else:
+                    return False, os.path.basename(file_path)
+            
+            # URL에서 이미지 다운로드
+            try:
+                if image_data.startswith('/'):
+                    log_debug(f"로컬 경로에서 이미지 복사: {image_data} -> {file_path}")
+                    # 절대 경로인 경우 로컬 파일 복사
+                    if os.path.exists(image_data):
+                        # 폴더가 존재하는지 확인
+                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                        
+                        # 원본 이미지 확장자 가져오기
+                        original_ext = os.path.splitext(image_data)[1].lower()
+                        adjusted_file_path = file_path
+                        
+                        # 확장자가 다른 경우 조정
+                        if original_ext and os.path.splitext(file_path)[1].lower() != original_ext:
+                            adjusted_file_path = os.path.splitext(file_path)[0] + original_ext
+                            log_debug(f"로컬 파일 확장자 불일치. 경로 조정: {adjusted_file_path}")
+                        
+                        # 파일 확장자 확인을 위해 이미지 형식 검사
+                        try:
+                            with Image.open(image_data) as img:
                                 detected_format = img.format
-                                log_debug(f"메모리에서 이미지 형식 감지: {detected_format}")
-                                
-                                # 형식에 맞는 확장자 설정
                                 if detected_format:
                                     # 실제 형식에 맞는 확장자 얻기
                                     format_ext = f".{detected_format.lower()}"
@@ -297,119 +271,198 @@ async def save_images(data: Dict[str, Any] = Body(...)):
                                     if current_ext != format_ext:
                                         adjusted_file_path = os.path.splitext(adjusted_file_path)[0] + format_ext
                                         log_debug(f"이미지 형식 감지: {detected_format}, 파일 경로 조정: {adjusted_file_path}")
+                        except Exception as img_error:
+                            log_debug(f"이미지 형식 감지 중 오류: {str(img_error)}")
+                        
+                        shutil.copy(image_data, adjusted_file_path)
+                        log_debug(f"파일 복사 완료: {adjusted_file_path}")
+                        return os.path.exists(adjusted_file_path), os.path.basename(adjusted_file_path)
+                    else:
+                        log_debug(f"로컬 파일을 찾을 수 없음: {image_data}")
+                        raise HTTPException(status_code=404, detail=f"로컬 파일을 찾을 수 없습니다: {image_data}")
+                else:
+                    log_debug(f"URL에서 다운로드: {image_data}")
+                    # 외부 URL에서 다운로드
+                    response = requests.get(image_data, stream=True)
+                    if response.status_code == 200:
+                        # 폴더가 존재하는지 확인
+                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                        
+                        # Content-Type 헤더 확인하여 실제 형식 판별
+                        content_type = response.headers.get('content-type', '')
+                        original_extension = os.path.splitext(file_path)[1].lower()
+                        adjusted_file_path = file_path
+                        
+                        # 명시적 형식 힌트가 있는 경우 이를 우선 사용
+                        if format_hint:
+                            adjusted_file_path = os.path.splitext(file_path)[0] + f".{format_hint}"
+                            log_debug(f"형식 힌트를 사용하여 파일 경로 조정: {adjusted_file_path}")
+                        # 컨텐츠 타입에 따른 확장자 조정
+                        elif 'image/jpeg' in content_type and not original_extension.endswith(('.jpg', '.jpeg')):
+                            adjusted_file_path = os.path.splitext(file_path)[0] + '.jpg'
+                            log_debug(f"JPEG 이미지지만 다른 확장자로 저장하려고 했습니다. 경로 조정: {adjusted_file_path}")
+                        elif 'image/png' in content_type and not original_extension.endswith('.png'):
+                            adjusted_file_path = os.path.splitext(file_path)[0] + '.png'
+                            log_debug(f"PNG 이미지지만 다른 확장자로 저장하려고 했습니다. 경로 조정: {adjusted_file_path}")
+                        elif 'image/gif' in content_type and not original_extension.endswith('.gif'):
+                            adjusted_file_path = os.path.splitext(file_path)[0] + '.gif'
+                            log_debug(f"GIF 이미지지만 다른 확장자로 저장하려고 했습니다. 경로 조정: {adjusted_file_path}")
+                        elif 'image/webp' in content_type and not original_extension.endswith('.webp'):
+                            adjusted_file_path = os.path.splitext(file_path)[0] + '.webp'
+                            log_debug(f"WebP 이미지지만 다른 확장자로 저장하려고 했습니다. 경로 조정: {adjusted_file_path}")
+                            
+                        # 이미지 데이터 읽기 (전체 다운로드)
+                        image_bytes = response.content
+                        log_debug(f"이미지 다운로드 완료: {len(image_bytes)} 바이트")
+                        
+                        # 메모리에서 이미지 열기
+                        try:
+                            img = Image.open(io.BytesIO(image_bytes))
+                            detected_format = img.format
+                            log_debug(f"메모리에서 이미지 형식 감지: {detected_format}")
+                            
+                            if detected_format:
+                                # 실제 형식에 맞는 확장자 얻기
+                                format_ext = f".{detected_format.lower()}"
+                                if format_ext == ".jpeg":
+                                    format_ext = ".jpg"
+                                
+                                # 형식 힌트가 있으면 그것을 우선적으로 사용
+                                if format_hint:
+                                    final_format = format_hint.upper()
+                                    if final_format == "JPG":
+                                        final_format = "JPEG"
+                                    adjusted_file_path = os.path.splitext(file_path)[0] + f".{format_hint}"
+                                    img.save(adjusted_file_path, format=final_format)
+                                    log_debug(f"이미지를 형식 힌트에 따라 저장: {final_format}, 경로: {adjusted_file_path}")
+                                # 감지된 형식을 사용
+                                else:
+                                    # 확장자 불일치 확인
+                                    current_ext = os.path.splitext(adjusted_file_path)[1].lower()
+                                    if current_ext != format_ext:
+                                        adjusted_file_path = os.path.splitext(adjusted_file_path)[0] + format_ext
+                                        log_debug(f"이미지 형식 감지: {detected_format}, 파일 경로 조정: {adjusted_file_path}")
                                     
                                     # 이미지를 올바른 형식으로 저장
-                                    with open(adjusted_file_path, 'wb') as f:
-                                        img.save(f, format=detected_format)
+                                    img.save(adjusted_file_path, format=detected_format)
                                     log_debug(f"이미지를 감지된 형식({detected_format})으로 저장: {adjusted_file_path}")
-                                else:
-                                    # 형식이 감지되지 않은 경우
-                                    with open(adjusted_file_path, "wb") as f:
-                                        f.write(image_bytes)
-                                    log_debug(f"형식 감지 실패, 원본 바이트 저장: {adjusted_file_path}")
-                            except Exception as img_error:
-                                log_debug(f"이미지 처리 중 오류, 원본 바이트 저장: {str(img_error)}")
-                                # 오류 발생 시 원본 바이트 저장
+                            else:
+                                # 형식이 감지되지 않은 경우
                                 with open(adjusted_file_path, "wb") as f:
                                     f.write(image_bytes)
-                            
-                            log_debug(f"URL 다운로드 및 저장 완료: {adjusted_file_path}")
-                            
-                            # 실제 저장된 파일명 반환
-                            return os.path.exists(adjusted_file_path), os.path.basename(adjusted_file_path)
-                        else:
-                            log_debug(f"URL 다운로드 실패: {response.status_code}")
-                            raise HTTPException(status_code=response.status_code, 
-                                              detail=f"이미지 다운로드 실패: {response.status_code}")
-                except requests.exceptions.RequestException as e:
-                    log_debug(f"요청 중 오류: {str(e)}")
-                    raise HTTPException(status_code=500, detail=f"이미지 다운로드 중 오류: {str(e)}")
+                                log_debug(f"형식 감지 실패, 원본 바이트 저장: {adjusted_file_path}")
+                        except Exception as img_error:
+                            log_debug(f"이미지 처리 중 오류, 원본 바이트 저장: {str(img_error)}")
+                            # 오류 발생 시 원본 바이트 저장
+                            with open(adjusted_file_path, "wb") as f:
+                                f.write(image_bytes)
+                        
+                        log_debug(f"URL 다운로드 및 저장 완료: {adjusted_file_path}")
+                        
+                        # 실제 저장된 파일명 반환
+                        return os.path.exists(adjusted_file_path), os.path.basename(adjusted_file_path)
+                    else:
+                        log_debug(f"URL 다운로드 실패: {response.status_code}")
+                        raise HTTPException(status_code=response.status_code, 
+                                          detail=f"이미지 다운로드 실패: {response.status_code}")
+            except requests.exceptions.RequestException as e:
+                log_debug(f"요청 중 오류: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"이미지 다운로드 중 오류: {str(e)}")
+            
+            file_exists = os.path.exists(file_path)
+            log_debug(f"이미지 저장 결과: {file_path} - {'성공' if file_exists else '실패'}")
+            return file_exists, os.path.basename(file_path)
+        else:
+            # Base64 인코딩된 이미지 처리
+            try:
+                # data:image/jpeg;base64, 형식의 URI에서 Base64 데이터 추출
+                mime_type = None
+                image_data_b64 = image_data
                 
-                file_exists = os.path.exists(file_path)
-                log_debug(f"이미지 저장 결과: {file_path} - {'성공' if file_exists else '실패'}")
-                return file_exists, os.path.basename(file_path)
-            else:
-                # Base64 데이터로 간주하고 처리
+                if ',' in image_data:
+                    mime_part, image_data_b64 = image_data.split(',', 1)
+                    mime_type = mime_part
+                    log_debug(f"MIME 타입 추출: {mime_type}")
+                
                 try:
-                    log_debug("Base64 이미지 처리 시작")
-                    # Base64 데이터 부분 추출
-                    mime_type = None
-                    if "," in image_data:
-                        header = image_data.split(",")[0]
-                        # MIME 타입 추출 (예: "data:image/jpeg;base64")
-                        if ";" in header and ":" in header:
-                            mime_type = header.split(":")[1].split(";")[0]
-                            log_debug(f"감지된 MIME 타입: {mime_type}")
-                        
-                        log_debug("Base64 데이터에서 헤더 제거")
-                        image_data = image_data.split(",")[1]
+                    # 이미지 데이터 디코딩
+                    image_bytes = base64.b64decode(image_data_b64)
+                    log_debug(f"Base64 디코딩 완료: {len(image_bytes)} 바이트")
                     
-                    # 디렉토리 확인 및 생성
-                    try:
-                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-                        log_debug(f"디렉토리 확인/생성 완료: {os.path.dirname(file_path)}")
-                    except Exception as dir_error:
-                        log_debug(f"디렉토리 생성 중 오류: {str(dir_error)}")
-                        raise Exception(f"디렉토리 생성 실패: {str(dir_error)}")
+                    # 이미지 파일 저장 전 적절한 확장자 확인
+                    adjusted_file_path = file_path
+                    orig_extension = os.path.splitext(file_path)[1].lower()
                     
-                    log_debug(f"Base64 디코딩 및 파일 저장: {file_path}")
-                    try:
-                        # 이미지 데이터 디코딩
-                        image_bytes = base64.b64decode(image_data)
-                        log_debug(f"Base64 디코딩 완료: {len(image_bytes)} 바이트")
-                        
-                        # 이미지 파일 저장 전 적절한 확장자 확인
-                        adjusted_file_path = file_path
-                        orig_extension = os.path.splitext(file_path)[1].lower()
-                        
-                        # MIME 타입에서 확장자 추론
+                    # 명시적 형식 힌트 사용
+                    if format_hint:
+                        adjusted_file_path = os.path.splitext(file_path)[0] + f".{format_hint}"
+                        log_debug(f"형식 힌트를 사용하여 파일 경로 조정: {adjusted_file_path}")
+                    # MIME 타입에서 확장자 추론
+                    elif mime_type:
                         mime_extension = None
-                        if mime_type:
-                            if 'image/jpeg' in mime_type:
-                                mime_extension = '.jpg'
-                            elif 'image/png' in mime_type:
-                                mime_extension = '.png'
-                            elif 'image/gif' in mime_type:
-                                mime_extension = '.gif'
-                            elif 'image/webp' in mime_type:
-                                mime_extension = '.webp'
+                        if 'image/jpeg' in mime_type:
+                            mime_extension = '.jpg'
+                        elif 'image/png' in mime_type:
+                            mime_extension = '.png'
+                        elif 'image/gif' in mime_type:
+                            mime_extension = '.gif'
+                        elif 'image/webp' in mime_type:
+                            mime_extension = '.webp'
+                        elif 'image/bmp' in mime_type:
+                            mime_extension = '.bmp'
+                        elif 'image/tiff' in mime_type:
+                            mime_extension = '.tiff'
                         
-                        # 매직 바이트로 파일 형식 확인
-                        is_png = len(image_bytes) > 8 and image_bytes.startswith(b'\x89PNG\r\n\x1a\n')
-                        is_jpeg = len(image_bytes) > 2 and image_bytes.startswith(b'\xff\xd8')
-                        is_gif = len(image_bytes) > 6 and (image_bytes.startswith(b'GIF87a') or image_bytes.startswith(b'GIF89a'))
-                        is_webp = len(image_bytes) > 12 and image_bytes.startswith(b'RIFF') and b'WEBP' in image_bytes[0:12]
+                        if mime_extension and orig_extension != mime_extension:
+                            adjusted_file_path = os.path.splitext(file_path)[0] + mime_extension
+                            log_debug(f"MIME 타입에 따라 파일 경로 조정: {adjusted_file_path}")
+                    
+                    # 매직 바이트로 파일 형식 확인
+                    is_png = len(image_bytes) > 8 and image_bytes.startswith(b'\x89PNG\r\n\x1a\n')
+                    is_jpeg = len(image_bytes) > 2 and image_bytes.startswith(b'\xff\xd8')
+                    is_gif = len(image_bytes) > 6 and (image_bytes.startswith(b'GIF87a') or image_bytes.startswith(b'GIF89a'))
+                    is_webp = len(image_bytes) > 12 and image_bytes.startswith(b'RIFF') and b'WEBP' in image_bytes[0:12]
+                    
+                    detected_extension = None
+                    detected_format = None
+                    
+                    if is_png:
+                        detected_extension = '.png'
+                        detected_format = 'PNG'
+                    elif is_jpeg:
+                        detected_extension = '.jpg'
+                        detected_format = 'JPEG'
+                    elif is_gif:
+                        detected_extension = '.gif'
+                        detected_format = 'GIF'
+                    elif is_webp:
+                        detected_extension = '.webp'
+                        detected_format = 'WEBP'
+                    
+                    # 매직 바이트로 감지된 형식이 있고, 명시적 형식 힌트가 없는 경우
+                    if detected_extension and not format_hint and orig_extension != detected_extension:
+                        adjusted_file_path = os.path.splitext(file_path)[0] + detected_extension
+                        log_debug(f"매직 바이트로 감지된 형식에 따라 파일 경로 조정: {adjusted_file_path}")
+                    
+                    # 폴더가 존재하는지 확인
+                    os.makedirs(os.path.dirname(adjusted_file_path), exist_ok=True)
+                    
+                    try:
+                        # 메모리에서 이미지 열기 시도 - 형식 확인 및 올바른 형식으로 저장
+                        img = Image.open(io.BytesIO(image_bytes))
+                        img_format = img.format
+                        log_debug(f"이미지 열기 성공, 감지된 형식: {img_format}")
                         
-                        detected_extension = None
-                        detected_format = None
-                        if is_png:
-                            detected_extension = '.png'
-                            detected_format = 'PNG'
-                        elif is_jpeg:
-                            detected_extension = '.jpg'
-                            detected_format = 'JPEG'
-                        elif is_gif:
-                            detected_extension = '.gif'
-                            detected_format = 'GIF'
-                        elif is_webp:
-                            detected_extension = '.webp'
-                            detected_format = 'WEBP'
-                        
-                        # 확장자 결정 순서: 매직 바이트 > MIME 타입 > 원본 확장자
-                        final_extension = detected_extension or mime_extension or orig_extension
-                        
-                        # 확장자가 다르면 파일 경로 조정
-                        if final_extension and final_extension != orig_extension:
-                            adjusted_file_path = os.path.splitext(file_path)[0] + final_extension
-                            log_debug(f"이미지 형식 감지 결과로 파일 경로 조정: {adjusted_file_path} (매직 바이트: {detected_extension}, MIME: {mime_extension})")
-                        
-                        try:
-                            # 메모리에서 이미지 열기 시도 - 형식 확인 및 올바른 형식으로 저장
-                            img = Image.open(io.BytesIO(image_bytes))
-                            img_format = img.format
-                            log_debug(f"이미지 열기 성공, 감지된 형식: {img_format}")
-                            
-                            if img_format:
+                        if img_format:
+                            # 명시적 형식 힌트가 있는 경우 사용
+                            if format_hint:
+                                final_format = format_hint.upper()
+                                if final_format == "JPG":
+                                    final_format = "JPEG"
+                                adjusted_file_path = os.path.splitext(file_path)[0] + f".{format_hint}"
+                                img.save(adjusted_file_path, format=final_format)
+                                log_debug(f"이미지를 형식 힌트에 따라 저장: {final_format}, 경로: {adjusted_file_path}")
+                            else:
                                 # 이미지 확장자와 형식 일치시키기
                                 format_ext = f".{img_format.lower()}"
                                 if format_ext == ".jpeg":
@@ -423,80 +476,74 @@ async def save_images(data: Dict[str, Any] = Body(...)):
                                 # 올바른 형식으로 저장
                                 img.save(adjusted_file_path, format=img_format)
                                 log_debug(f"이미지를 감지된 형식({img_format})으로 저장: {adjusted_file_path}")
-                            else:
-                                # 형식이 감지되지 않은 경우
-                                with open(adjusted_file_path, "wb") as f:
-                                    f.write(image_bytes)
-                                log_debug(f"PIL 형식 감지 실패, 원본 바이트로 저장: {adjusted_file_path}")
-                        except Exception as img_error:
-                            log_debug(f"이미지 처리 중 오류, 원본 바이트로 저장: {str(img_error)}")
-                            # 이미지 처리 오류 시 원본 바이트 저장
+                        else:
+                            # 형식이 감지되지 않은 경우
                             with open(adjusted_file_path, "wb") as f:
                                 f.write(image_bytes)
+                            log_debug(f"PIL 형식 감지 실패, 원본 바이트로 저장: {adjusted_file_path}")
+                    except Exception as img_error:
+                        log_debug(f"이미지 처리 중 오류, 원본 바이트로 저장: {str(img_error)}")
+                        # 이미지 처리 오류 시 원본 바이트 저장
+                        with open(adjusted_file_path, "wb") as f:
+                            f.write(image_bytes)
+                    
+                    # 파일이 실제로 저장되었는지 확인
+                    if os.path.exists(adjusted_file_path):
+                        log_debug(f"파일 저장 확인: {adjusted_file_path}, 크기: {os.path.getsize(adjusted_file_path)} 바이트")
+                    else:
+                        log_debug(f"파일이 생성되지 않음: {adjusted_file_path}")
+                        raise Exception(f"파일이 생성되지 않았습니다: {adjusted_file_path}")
                         
-                        # 파일이 실제로 저장되었는지 확인
-                        if os.path.exists(adjusted_file_path):
-                            log_debug(f"파일 저장 확인: {adjusted_file_path}, 크기: {os.path.getsize(adjusted_file_path)} 바이트")
-                        else:
-                            log_debug(f"파일이 생성되지 않음: {adjusted_file_path}")
-                            raise Exception(f"파일이 생성되지 않았습니다: {adjusted_file_path}")
-                            
-                        # 파일 확장자 변경이 있었는지 확인하고 반환 경로 업데이트
-                        return os.path.exists(adjusted_file_path), os.path.basename(adjusted_file_path)
-                    except Exception as write_error:
-                        log_debug(f"파일 쓰기 오류: {str(write_error)}")
-                        raise Exception(f"파일 쓰기 오류: {str(write_error)}")
-                except Exception as e:
-                    log_debug(f"Base64 처리 중 오류: {str(e)}")
-                    raise HTTPException(status_code=400, detail=f"유효하지 않은 Base64 데이터 또는 파일 쓰기 오류: {str(e)}")
-            
-            file_exists = os.path.exists(file_path)
-            log_debug(f"이미지 저장 결과: {file_path} - {'성공' if file_exists else '실패'}")
-            return file_exists, os.path.basename(file_path)
+                    # 파일 확장자 변경이 있었는지 확인하고 반환 경로 업데이트
+                    return os.path.exists(adjusted_file_path), os.path.basename(adjusted_file_path)
+                except Exception as write_error:
+                    log_debug(f"파일 쓰기 오류: {str(write_error)}")
+                    raise Exception(f"파일 쓰기 오류: {str(write_error)}")
+            except Exception as e:
+                log_debug(f"Base64 처리 중 오류: {str(e)}")
+                raise HTTPException(status_code=400, detail=f"유효하지 않은 Base64 데이터 또는 파일 쓰기 오류: {str(e)}")
         
-        # 이미지 파일 저장
-        before_saved, before_actual_filename = save_image(before_image, before_path)
-        after_saved, after_actual_filename = save_image(after_image, after_path)
-        
-        log_debug(f"이미지 저장 결과 - 전: {before_saved}({before_actual_filename}), 후: {after_saved}({after_actual_filename})")
-        
-        # 저장 여부 확인
-        if not before_saved or not after_saved:
-            log_debug("이미지 저장 실패 감지")
-            raise HTTPException(status_code=500, detail="이미지 파일이 정상적으로 저장되지 않았습니다.")
-        
-        # 이미지 데이터 구성 (MongoDB에 저장하지 않고 응답으로만 반환)
-        image_data = {
+        file_exists = os.path.exists(file_path)
+        log_debug(f"이미지 저장 결과: {file_path} - {'성공' if file_exists else '실패'}")
+        return file_exists, os.path.basename(file_path)
+    
+    # 이미지 파일 저장
+    before_saved, before_actual_filename = save_image(before_image, before_path)
+    # 명시적 형식 정보가 있는 경우 이를 힌트로 전달
+    after_saved, after_actual_filename = save_image(after_image, after_path, format_hint=image_format)
+    
+    log_debug(f"이미지 저장 결과 - 전: {before_saved}({before_actual_filename}), 후: {after_saved}({after_actual_filename})")
+    
+    # 저장 여부 확인
+    if not before_saved or not after_saved:
+        log_debug("이미지 저장 실패 감지")
+        raise HTTPException(status_code=500, detail="이미지 파일이 정상적으로 저장되지 않았습니다.")
+    
+    # 이미지 데이터 구성 (MongoDB에 저장하지 않고 응답으로만 반환)
+    image_data = {
+        "title": title,
+        "description": description,
+        "workflow_id": workflow_id,
+        "tags": tags,
+        "before_image_path": before_actual_filename,
+        "after_image_path": after_actual_filename,
+        "before_image_url": f"http://localhost:8000/images/{before_actual_filename}",
+        "after_image_url": f"http://localhost:8000/images/{after_actual_filename}",
+        "created_at": datetime.now().isoformat(),  # 문자열로 변환
+    }
+    
+    # 성공 결과 구성
+    result = {
+        "status": "success", 
+        "message": "이미지가 성공적으로 저장되었습니다.",
+        "image_data": {
             "title": title,
-            "description": data.get("description", ""),
-            "workflow_id": data.get("workflow_id", ""),
-            "tags": data.get("tags", []),
-            "before_image_path": before_actual_filename,
-            "after_image_path": after_actual_filename,
-            "before_image_url": f"http://localhost:8000/images/{before_actual_filename}",
-            "after_image_url": f"http://localhost:8000/images/{after_actual_filename}",
-            "created_at": datetime.now().isoformat(),  # 문자열로 변환
+            "before_url": image_data["before_image_url"],
+            "after_url": image_data["after_image_url"],
         }
-        
-        # 성공 결과 구성
-        result = {
-            "status": "success", 
-            "message": "이미지가 성공적으로 저장되었습니다.",
-            "image_data": {
-                "title": title,
-                "before_url": image_data["before_image_url"],
-                "after_url": image_data["after_image_url"],
-            }
-        }
-        
-        # 경고 메시지가 있으면 응답에 포함
-        if warning_message:
-            result["warning"] = warning_message
-        
-        return result
-    except Exception as e:
-        log_debug(f"이미지 저장 중 오류: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    }
+    
+    return result
 
 @router.get("/images")
 async def get_saved_images(limit: int = 20, skip: int = 0):
@@ -567,4 +614,98 @@ async def check_title(data: Dict[str, Any] = Body(...)):
             return {"status": "available", "message": f"사용 가능한 이름입니다: {title}"}
             
     except Exception as e:
-        return {"status": "error", "message": f"제목 확인 중 오류 발생: {str(e)}"} 
+        return {"status": "error", "message": f"제목 확인 중 오류 발생: {str(e)}"}
+
+@router.post("/upload-end-image")
+async def upload_end_image(
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    description: str = Form(""),
+    before_image: str = Form(""),
+    workflow_id: str = Form(""),
+    tags: str = Form("[]"),
+    image_format: str = Form("png")
+):
+    """
+    이미지 파일을 직접 업로드 받아 저장합니다 (Blob URL 전송에 사용)
+    """
+    try:
+        log_debug(f"[upload-end-image] 요청 받음 - 제목: {title}, 파일명: {file.filename}, 형식: {image_format}")
+        
+        # 제목 준비 (없으면 생성)
+        if not title or title.strip() == "":
+            title = generate_unique_title()
+        else:
+            # 타이틀 정리 (공백은 언더스코어로 변환)
+            title = title.strip().replace(" ", "_")
+        
+        # 파일 이름 생성
+        image_storage_dir = IMAGE_STORE_PATH
+        
+        # 디렉토리 확인
+        os.makedirs(image_storage_dir, exist_ok=True)
+        
+        # 파일 이름 추출
+        filename = file.filename
+        if not filename:
+            # 기본 파일명 생성
+            timestamp = int(time.time())
+            filename = f"upload_{timestamp}.{image_format}"
+        
+        # 파일 확장자 확인/수정
+        if '.' not in filename:
+            filename = f"{filename}.{image_format}"
+        elif filename.split('.')[-1].lower() not in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']:
+            # 확장자가 없거나 이미지 확장자가 아니면 지정된 형식으로 변경
+            filename = f"{filename.split('.')[0]}.{image_format}"
+        
+        # 최종 저장 경로
+        sanitized_title = sanitize_filename(title)
+        file_path = os.path.join(image_storage_dir, f"{sanitized_title}_{filename}")
+        
+        # 파일 존재 확인 및 처리
+        if os.path.exists(file_path):
+            # 파일이 존재하면 타임스탬프 추가
+            timestamp = int(time.time())
+            base_name, ext = os.path.splitext(filename)
+            file_path = os.path.join(image_storage_dir, f"{sanitized_title}_{base_name}_{timestamp}{ext}")
+        
+        # 파일 저장
+        contents = await file.read()
+        with open(file_path, "wb") as f:
+            f.write(contents)
+        
+        # 상대 URL 생성
+        relative_path = os.path.relpath(file_path, IMAGE_STORE_PATH).replace("\\", "/")
+        file_url = f"/images/{relative_path}"
+        
+        # 태그 처리
+        try:
+            tag_list = json.loads(tags)
+        except:
+            tag_list = ["lcnc", "이미지 처리"]
+        
+        # before_image 처리 (URL인 경우)
+        before_url = None
+        if before_image and before_image.startswith(('http://', 'https://', '/')):
+            before_url = before_image
+        
+        # 결과 반환
+        result = {
+            "status": "success", 
+            "message": "이미지가 성공적으로 업로드되었습니다.",
+            "image_data": {
+                "title": title,
+                "after_url": file_url
+            }
+        }
+        
+        # before_image 추가
+        if before_url:
+            result["image_data"]["before_url"] = before_url
+        
+        # 응답에 Access-Control-Allow-Origin 헤더 추가 (CORS 지원)
+        return result
+    except Exception as e:
+        log_debug(f"[upload-end-image] 오류 발생: {str(e)}")
+        return {"status": "error", "message": f"이미지 업로드 실패: {str(e)}"} 

@@ -2,6 +2,16 @@
  * 팝업 오버라이드 시스템
  * Vue 컴포넌트 시스템을 우회하고 직접 DOM 요소를 생성/제어하여 
  * 스케일바 감지 실패 시 팝업을 표시합니다.
+ * 
+ * ⚠️⚠️⚠️ 주의 ⚠️⚠️⚠️
+ * 이 파일은 msa6_image_popup1.vue와 밀접하게 연결되어 있습니다.
+ * 수정 시 반드시 Vue 컴포넌트의 detectScaleBar 및 showScaleDetectionFailurePopup 메소드와 
+ * 동기화해야 합니다. 특히 아래 부분에 주의하세요:
+ * 1. msa6_no_scale_popup 플래그 처리
+ * 2. 팝업 표시 조건 (isVisible 체크)
+ * 3. hasValidManualScaleBar 검증
+ * 
+ * 수정 전 반드시 msa6_image_popup1.md 문서를 참고하세요.
  */
 
 // 팝업이 이미 생성되었는지 추적하는 변수
@@ -95,22 +105,6 @@ export function createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect) 
   // 팝업 생성 플래그 설정
   popupCreated = true;
   
-  // 5초 후 팝업이 여전히 존재하는지 확인 (디버깅용)
-  setTimeout(() => {
-    const popupExists = document.getElementById('scale-choice-popup-override');
-    console.log('[popupOverride] 5초 후 팝업 존재 확인:', !!popupExists);
-    
-    if (popupExists) {
-      // 팝업 요소의 스타일 확인
-      const computedStyle = window.getComputedStyle(popupExists);
-      console.log('[popupOverride] 팝업 스타일 확인:');
-      console.log('- display:', computedStyle.display);
-      console.log('- visibility:', computedStyle.visibility);
-      console.log('- z-index:', computedStyle.zIndex);
-      console.log('- opacity:', computedStyle.opacity);
-    }
-  }, 5000);
-  
   return popupDiv;
 }
 
@@ -146,9 +140,27 @@ function removePopup(popupElement) {
 /**
  * 스케일바 감지 실패 시 팝업 표시 함수
  * @param {Object} component 이미지 측정 Vue 컴포넌트 인스턴스
+ * 
+ * ⚠️ 주의: 이 함수는 msa6_image_popup1.vue의 showScaleDetectionFailurePopup 메소드와 동기화되어야 합니다.
+ * msa6_no_scale_popup 플래그와 팝업 표시 조건이 양쪽에서 동일하게 처리되어야 합니다.
  */
 export function showScaleDetectionFailurePopup(component) {
   console.log('[popupOverride] 스케일바 감지 실패 팝업 표시 함수 호출됨');
+  
+  // 스케일바 자동 감지 팝업 방지 플래그 확인
+  const noScalePopup = sessionStorage.getItem('msa6_no_scale_popup') === 'true';
+  if (noScalePopup) {
+    console.log('[popupOverride] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
+    // 플래그 제거 (일회성)
+    sessionStorage.removeItem('msa6_no_scale_popup');
+    return;
+  }
+  
+  // 팝업이 열려있지 않은 경우 표시하지 않음
+  if (component && !component.isVisible) {
+    console.log('[popupOverride] 팝업이 열려있지 않아 스케일바 감지 실패 팝업을 표시하지 않음');
+    return;
+  }
   
   // 이미 팝업이 생성되어 있으면 중복 생성 방지
   if (popupCreated) {
@@ -197,6 +209,9 @@ export function showScaleDetectionFailurePopup(component) {
 /**
  * 메인 스케일바 감지 함수 패치 (기존 함수를 대체)
  * @param {Object} component 이미지 측정 Vue 컴포넌트 인스턴스
+ * 
+ * ⚠️ 주의: 이 함수는 msa6_image_popup1.vue의 detectScaleBar 메소드를 패치합니다.
+ * 두 부분의 변경 사항은 반드시 동기화되어야 합니다. 특히 msa6_no_scale_popup 플래그 처리는 동일해야 합니다.
  */
 export function patchDetectScaleBar(component) {
   if (!component) {
@@ -210,6 +225,21 @@ export function patchDetectScaleBar(component) {
   // 새로운 함수로 대체
   component.detectScaleBar = function() {
     console.log('[popupOverride] 패치된 detectScaleBar 함수 호출됨');
+    
+    // 팝업이 열려있지 않은 경우 아무 작업도 하지 않음
+    if (!this.isVisible) {
+      console.log('[popupOverride] 팝업이 열려있지 않아 스케일바 감지를 수행하지 않음');
+      return;
+    }
+    
+    // 스케일바 자동 감지 팝업 방지 플래그 확인
+    const noScalePopup = sessionStorage.getItem('msa6_no_scale_popup') === 'true';
+    if (noScalePopup) {
+      console.log('[popupOverride] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
+      // 플래그 제거 (일회성)
+      sessionStorage.removeItem('msa6_no_scale_popup');
+      return;
+    }
     
     // 이미지 데이터가 없는 경우 항상 팝업 표시
     if (!this.imageData && this.scaleMethod === 'scaleBar') {

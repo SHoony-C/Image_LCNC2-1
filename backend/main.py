@@ -44,7 +44,7 @@ app = FastAPI(
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 개발 환경에서는 모든 origin 허용
+    allow_origins=["http://localhost:8080", "http://localhost:8000", "http://127.0.0.1:8080", "http://127.0.0.1:8000", "*"],  # 개발 환경에서는 모든 origin 허용, 특히 프론트엔드 서버 명시
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -151,7 +151,12 @@ app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 app.include_router(user_router, prefix="/api/users", tags=["users"])
 
 # 외부 이미지 저장 API 등록
-app.include_router(external_storage_router, prefix="/api/external_storage", tags=["external_storage"])
+app.include_router(
+    external_storage_router,
+    prefix="/api/external_storage",
+    tags=["external_storage"],
+    responses={404: {"description": "Not found"}},
+)
 
 # 서버 시작
 if __name__ == "__main__":
