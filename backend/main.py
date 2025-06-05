@@ -1,9 +1,10 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request, Response
 import uvicorn
 import os
 from dotenv import load_dotenv
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 
 # MSA 모듈 라우터 임포트
 from msa1_imageload import router as msa1_router
@@ -44,10 +45,10 @@ app = FastAPI(
 # CORS 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8080", "http://localhost:8000", "http://127.0.0.1:8080", "http://127.0.0.1:8000", "*"],  # 개발 환경에서는 모든 origin 허용, 특히 프론트엔드 서버 명시
+    allow_origins=["*"],  # 모든 오리진 허용
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # 모든 HTTP 메소드 허용
+    allow_headers=["*"],  # 모든 헤더 허용
 )
 
 # 정적 파일 서빙 설정
@@ -57,8 +58,8 @@ app.mount("/storage", StaticFiles(directory="./storage"), name="storage")
 # 벡터 디렉토리 경로 변경 (더 이상 필요없음, storage 마운트로 접근 가능)
 # app.mount("/vectors", StaticFiles(directory="./vectors"), name="vectors")
 
-# 외부 이미지 디렉토리 마운트 (D:\image_set_url\images)
-app.mount("/images", StaticFiles(directory=r"D:\image_set_url\images"), name="external_images")
+# 외부 이미지 디렉토리 마운트 
+app.mount("/images", StaticFiles(directory=r"D:\image_set_url\workflow_images"), name="external_images")
 
 # 시작 이벤트: 필요한 디렉토리 생성
 @app.on_event("startup")
@@ -157,6 +158,29 @@ app.include_router(
     tags=["external_storage"],
     responses={404: {"description": "Not found"}},
 )
+
+# 전역 예외 처리기 추가
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """전역 예외 처리기 - 모든 처리되지 않은 예외를 잡아서 로깅합니다."""
+    import traceback
+    print(f"=== 처리되지 않은 예외 발생 ===")
+    print(f"요청 URL: {request.url}")
+    print(f"요청 방법: {request.method}")
+    print(f"예외 타입: {type(exc).__name__}")
+    print(f"예외 메시지: {str(exc)}")
+    print("스택 트레이스:")
+    traceback.print_exc()
+    print("=== 예외 처리 종료 ===")
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "message": f"서버 내부 오류: {str(exc)}",
+            "error_type": type(exc).__name__
+        }
+    )
 
 # 서버 시작
 if __name__ == "__main__":

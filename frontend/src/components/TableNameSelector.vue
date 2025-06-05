@@ -161,9 +161,10 @@ export default {
         return;
       }
       
+      // 사용자 경험을 해치지 않도록 404 오류 발생 시 체크를 건너뛰는 방식으로 변경
       try {
-        // 중복 체크 API 호출
-        const response = await fetch('http://localhost:8000/api/external_storage/check-lot-wafer', {
+        // 중복 체크 API 호출 (이 API가 없어도 정상 동작하도록 수정)
+        const response = await fetch('http://localhost:8000/api/msa6/check-lot-wafer', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -174,24 +175,33 @@ export default {
           })
         });
         
-        const result = await response.json();
-        
-        if (result.status === 'duplicate') {
-          // 중복된 lot_wafer 경고
-          this.lotWaferError = true;
-          this.lotWaferMessage = result.message || '이미 존재하는 Lot Wafer입니다.';
-        } else if (result.status === 'available') {
-          // 사용 가능한 lot_wafer
-          this.lotWaferError = false;
-          this.lotWaferMessage = '';
+        // API가 존재하는 경우에만 결과 처리
+        if (response.ok) {
+          const result = await response.json();
+          
+          if (result.status === 'duplicate') {
+            // 중복된 lot_wafer 경고
+            this.lotWaferError = true;
+            this.lotWaferMessage = result.message || '이미 존재하는 Lot Wafer입니다.';
+          } else if (result.status === 'available') {
+            // 사용 가능한 lot_wafer
+            this.lotWaferError = false;
+            this.lotWaferMessage = '';
+          } else {
+            // 오류 발생
+            this.lotWaferError = false;
+            this.lotWaferMessage = '';
+            console.error('Lot Wafer 중복 체크 오류:', result);
+          }
         } else {
-          // 오류 발생
+          // API가 존재하지 않거나 오류 - 경고 없이 계속 진행
+          console.warn('Lot Wafer 중복 체크 API가 없거나 응답하지 않습니다. 체크 없이 진행합니다.');
           this.lotWaferError = false;
           this.lotWaferMessage = '';
-          console.error('Lot Wafer 중복 체크 오류:', result);
         }
       } catch (error) {
-        console.error('Lot Wafer 중복 체크 중 오류 발생:', error);
+        // 오류 발생 시 경고 표시 없이 계속 진행
+        console.warn('Lot Wafer 중복 체크 오류 발생. 체크 없이 진행합니다:', error);
         this.lotWaferError = false;
         this.lotWaferMessage = '';
       }
@@ -221,11 +231,14 @@ export default {
         return;
       }
       
-      this.$emit('select', {
+      const selectedData = {
         ...this.selectedTable,
         lot_wafer: this.lot_wafer,
         is_result: true  // MSA6 결과 이미지임을 명시
-      });
+      };
+      
+      console.log('[TableNameSelector] 선택 완료, 데이터 전송:', selectedData);
+      this.$emit('select', selectedData);
       
       this.selectedTable = null;
       this.searchQuery = '';

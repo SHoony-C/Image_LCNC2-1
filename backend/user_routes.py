@@ -536,7 +536,7 @@ async def log_user_action(
         
         # 쿼리 준비
         query = text("""
-            INSERT INTO lcnc_app.user_count 
+            INSERT INTO image_app.user_count 
             (username, department, useraction, action_time) 
             VALUES (:username, :department, :useraction, :action_time)
         """)
@@ -570,7 +570,7 @@ async def get_user_statistics(db: Session = Depends(get_db)):
         from datetime import datetime, timedelta
         
         # 1. 총 사용자 수
-        total_users_query = text("SELECT COUNT(*) as count FROM lcnc_app.users")
+        total_users_query = text("SELECT COUNT(*) as count FROM image_app.users")
         total_users_result = db.execute(total_users_query).fetchone()
         total_users = total_users_result.count if total_users_result else 0
         
@@ -578,7 +578,7 @@ async def get_user_statistics(db: Session = Depends(get_db)):
         thirty_days_ago = datetime.now() - timedelta(days=30)
         active_users_query = text("""
             SELECT COUNT(DISTINCT username) as count 
-            FROM lcnc_app.user_count 
+            FROM image_app.user_count 
             WHERE action_time > :thirty_days_ago
         """)
         active_users_result = db.execute(active_users_query, {"thirty_days_ago": thirty_days_ago}).fetchone()
@@ -587,7 +587,7 @@ async def get_user_statistics(db: Session = Depends(get_db)):
         # 3. 최근 30일 내 새로 가입한 사용자 수
         new_users_query = text("""
             SELECT COUNT(*) as count 
-            FROM lcnc_app.users 
+            FROM image_app.users 
             WHERE created_at > :thirty_days_ago
         """)
         new_users_result = db.execute(new_users_query, {"thirty_days_ago": thirty_days_ago}).fetchone()
@@ -596,7 +596,7 @@ async def get_user_statistics(db: Session = Depends(get_db)):
         # 3-1. 최근 30일 내 액션(활동) 수 추가
         action_count_query = text("""
             SELECT COUNT(*) as count 
-            FROM lcnc_app.user_count 
+            FROM image_app.user_count 
             WHERE action_time > :thirty_days_ago
         """)
         action_count_result = db.execute(action_count_query, {"thirty_days_ago": thirty_days_ago}).fetchone()
@@ -606,7 +606,7 @@ async def get_user_statistics(db: Session = Depends(get_db)):
         recent_users_query = text("""
             SELECT id, username, email, full_name, department, 
                    created_at, is_active
-            FROM lcnc_app.users 
+            FROM image_app.users 
             ORDER BY created_at DESC 
             LIMIT 5
         """)
@@ -628,7 +628,7 @@ async def get_user_statistics(db: Session = Depends(get_db)):
         seven_days_ago = datetime.now() - timedelta(days=7)
         daily_activity_query = text("""
             SELECT DATE(action_time) as date, COUNT(*) as count
-            FROM lcnc_app.user_count
+            FROM image_app.user_count
             WHERE action_time > :seven_days_ago
             GROUP BY DATE(action_time)
             ORDER BY date ASC
@@ -645,7 +645,7 @@ async def get_user_statistics(db: Session = Depends(get_db)):
         # 6. 부서별 사용자 수
         department_stats_query = text("""
             SELECT department, COUNT(*) as count
-            FROM lcnc_app.users
+            FROM image_app.users
             WHERE department IS NOT NULL
             GROUP BY department
             ORDER BY count DESC
@@ -662,7 +662,7 @@ async def get_user_statistics(db: Session = Depends(get_db)):
         # 7. 가장 많이 발생한 액션 TOP 5
         top_actions_query = text("""
             SELECT SUBSTRING_INDEX(useraction, ':', 1) as action_type, COUNT(*) as count
-            FROM lcnc_app.user_count
+            FROM image_app.user_count
             GROUP BY action_type
             ORDER BY count DESC
             LIMIT 5
@@ -713,7 +713,7 @@ async def log_user_action_noauth(
         
         # 쿼리 준비
         query = text("""
-            INSERT INTO lcnc_app.user_count 
+            INSERT INTO image_app.user_count 
             (username, department, useraction, action_time) 
             VALUES (:username, :department, :useraction, :action_time)
         """)

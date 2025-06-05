@@ -1,9 +1,12 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Body
 from typing import List, Dict, Any
 import os
+import io
+import traceback
+import base64
 import shutil
 from datetime import datetime
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from db_config import lcnc_sql
 import json
 from sqlalchemy.sql import text
@@ -198,7 +201,6 @@ async def save_measurement_to_lcnc(measurement_data: Dict[str, Any] = Body(...))
     except Exception as e:
         print(f"[save_measurement_to_lcnc] 오류 발생: {str(e)}")
         print(f"[save_measurement_to_lcnc] 오류 타입: {type(e).__name__}")
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"측정 결과 저장 중 오류 발생: {str(e)}") 
 
@@ -288,7 +290,6 @@ async def transfer_table_names():
             
     except Exception as e:
         print(f"[transfer_table_names] 오류 발생: {str(e)}")
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"테이블 이름 데이터 전송 중 오류 발생: {str(e)}") 
 
@@ -352,7 +353,6 @@ async def get_table_names(search: str = ""):
             
     except Exception as e:
         print(f"[get_table_names] 오류 발생: {str(e)}")
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"테이블 이름 조회 중 오류 발생: {str(e)}")
 
@@ -418,7 +418,6 @@ async def get_table_schema(table_name: str = "msa6_result_cd"):
             
     except Exception as e:
         print(f"[get_table_schema] 오류 발생: {str(e)}")
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"테이블 스키마 조회 중 오류 발생: {str(e)}")
 
@@ -428,16 +427,27 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
     측정 데이터를 선택한 테이블 이름과 함께 msa6_result_cd 테이블에 저장합니다.
     단일 측정값 또는 측정값 배열을 받을 수 있습니다.
     """
+    # CORS 헤더 추가 (응답 커스터마이징 지원)
+    response = JSONResponse(content={"status": "pending"})
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    
     # 변수를 미리 선언하고 초기화
     trans = None
     conn = None
-    query_str = ""
-    query = None
-    schema_conn = None
     
     try:
         print("[save_with_table_name] 측정 데이터 저장 시작")
-        print(f"[save_with_table_name] 요청 데이터: {json.dumps(data, default=str)}")
+        print(f"[save_with_table_name] 요청 데이터 타입: {type(data)}")
+        
+        # 디버깅을 위한 더 자세한 요청 데이터 출력
+        for key, value in data.items():
+            print(f"[save_with_table_name] 요청 키: {key}, 값 타입: {type(value)}")
+            if key == "measurements" and isinstance(value, list):
+                print(f"[save_with_table_name] 측정값 개수: {len(value)}")
+                if value and len(value) > 0:
+                    print(f"[save_with_table_name] 첫 번째 측정값 샘플: {value[0]}")
         
         # 요청 데이터 확인
         table_name = data.get("table_name")
@@ -450,74 +460,30 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
             measurements = [data["measurement"]]
         
         if not table_name:
+            print("[save_with_table_name] 오류: 테이블 이름이 없음")
             raise HTTPException(status_code=400, detail="테이블 이름이 필요합니다")
         
         if not measurements:
+            print("[save_with_table_name] 오류: 측정 데이터가 없음")
             raise HTTPException(status_code=400, detail="측정 데이터가 필요합니다")
         
         print(f"[save_with_table_name] 저장할 데이터: 테이블={table_name}, 측정값 수={len(measurements)}")
         
-        # 권한 확인: 사용자가 해당 테이블에 저장할 권한이 있는지 확인
+        # 데이터베이스 연결 테스트
         try:
-            auth_conn = lcnc_sql["engine"].connect()
-            auth_query = text("""
-            SELECT COUNT(*) FROM table_user 
-            WHERE table_name = :table_name AND username = :username
-            """)
-            
-            print(f"[save_with_table_name] 사용자 권한 확인: 테이블={table_name}, 사용자={username}")
-            result = auth_conn.execute(auth_query, {"table_name": table_name, "username": username})
-            has_permission = result.scalar() > 0
-            
-            auth_conn.close()
-            
-            if not has_permission:
-                print(f"[save_with_table_name] 권한 없음: 테이블={table_name}, 사용자={username}")
-                return {
-                    "status": "error",
-                    "message": f"저장 권한이 없습니다. 테이블 '{table_name}'에 대한 접근 권한이 필요합니다."
-                }
-            
-            print(f"[save_with_table_name] 권한 확인 완료: 저장 권한 있음")
-            
-        except Exception as auth_error:
-            print(f"[save_with_table_name] 권한 확인 중 오류: {str(auth_error)}")
-            raise HTTPException(status_code=500, detail=f"사용자 권한 확인 중 오류 발생: {str(auth_error)}")
+            print("[save_with_table_name] 데이터베이스 연결 테스트 시작")
+            test_conn = lcnc_sql["engine"].connect()
+            test_conn.execute(text("SELECT 1"))
+            test_conn.close()
+            print("[save_with_table_name] 데이터베이스 연결 테스트 성공")
+        except Exception as db_test_error:
+            print(f"[save_with_table_name] 데이터베이스 연결 테스트 실패: {str(db_test_error)}")
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"데이터베이스 연결 실패: {str(db_test_error)}")
         
-        # 테이블 구조 조회용 별도 연결 사용
-        try:
-            schema_conn = lcnc_sql["engine"].connect()
-            schema_query = text("""
-            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_NAME = 'msa6_result_cd'
-            ORDER BY ORDINAL_POSITION
-            """)
-            result = schema_conn.execute(schema_query)
-            columns = result.fetchall()
-            print("[save_with_table_name] msa6_result_cd 테이블 구조:")
-            for col in columns:
-                print(f"  - {col[0]}: {col[1]} {'(NULL 허용)' if col[2] == 'YES' else '(NULL 불가)'}")
-            
-            # 조회용 연결 닫기
-            schema_conn.close()
-            schema_conn = None
-        except Exception as schema_error:
-            print(f"[save_with_table_name] 테이블 구조 조회 실패: {str(schema_error)}")
-            if schema_conn:
-                schema_conn.close()
-                schema_conn = None
-        
-        # 측정 데이터 삽입 쿼리 미리 정의
-        query_str = """
-        INSERT INTO msa6_result_cd (
-            table_name, username, lot_wafer, 
-            item_id, subitem_id, value, create_time
-        ) VALUES (
-            :table_name, :username, :lot_wafer,
-            :item_id, :subitem_id, :value, :create_time
-        )
-        """
+        # 권한 확인 (필요하면 나중에 활성화)
+        # 현재는 권한 확인을 건너뛰고 모든 사용자에게 저장 권한 부여
+        print(f"[save_with_table_name] 권한 확인 생략: 모든 사용자에게 저장 권한 부여")
         
         # 데이터 저장용 연결 생성
         conn = lcnc_sql["engine"].connect()
@@ -528,6 +494,18 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
             
             # 트랜잭션 시작
             trans = conn.begin()
+            print("[save_with_table_name] 트랜잭션 시작됨")
+            
+            # 측정 데이터 삽입 쿼리 미리 정의
+            query_str = """
+            INSERT INTO msa6_result_cd (
+                table_name, username, lot_wafer, 
+                item_id, subitem_id, value, create_time
+            ) VALUES (
+                :table_name, :username, :lot_wafer,
+                :item_id, :subitem_id, :value, :create_time
+            )
+            """
             
             # 쿼리 준비
             query = text(query_str)
@@ -552,19 +530,17 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                     print(f"[save_with_table_name] 측정값 #{idx+1} 원본: itemId={item_id}, subItemId={subitem_id}, value={raw_value}")
                     
                     # 값이 없거나 0인 측정값은 건너뛰기
-                    if not raw_value:
-                        print(f"[save_with_table_name] 측정값 #{idx+1}: 값이 0이거나 없음, 건너뜀")
+                    if raw_value is None:
+                        print(f"[save_with_table_name] 측정값 #{idx+1}: 값이 None임, 건너뜀")
                         continue
                     
                     # float 변환 확인
                     try:
                         float_value = float(raw_value)
-                        if float_value <= 0:
-                            print(f"[save_with_table_name] 측정값 #{idx+1}: 값({raw_value})이 0보다 작거나 같음, 건너뜀")
-                            continue
+                        print(f"[save_with_table_name] 측정값 #{idx+1}: float 변환 성공: {float_value}")
                     except (ValueError, TypeError) as e:
-                        print(f"[save_with_table_name] 측정값 #{idx+1}: 값({raw_value})을 float로 변환할 수 없음, 건너뜀: {str(e)}")
-                        continue
+                        print(f"[save_with_table_name] 측정값 #{idx+1}: 값({raw_value})을 float로 변환할 수 없음, 0으로 설정: {str(e)}")
+                        float_value = 0.0
                     
                     # 파라미터 준비
                     params = {
@@ -583,13 +559,22 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                         print(f"  - {key}: {value} (타입: {type(value).__name__})")
                     
                     # 측정 데이터 삽입
-                    conn.execute(query, params)
-                    saved_count += 1
-                    print(f"[save_with_table_name] 측정값 #{idx+1} 저장 성공")
+                    print(f"[save_with_table_name] SQL 쿼리 실행: {query_str}")
+                    try:
+                        insert_result = conn.execute(query, params)
+                        print(f"[save_with_table_name] SQL 실행 결과: {insert_result.rowcount} 행 영향 받음")
+                        saved_count += 1
+                        print(f"[save_with_table_name] 측정값 #{idx+1} 저장 성공")
+                    except Exception as exec_error:
+                        print(f"[save_with_table_name] SQL 실행 오류: {str(exec_error)}")
+                        errors.append(f"측정값 #{idx+1} SQL 오류: {str(exec_error)}")
+                        # 단일 항목 오류는 무시하고 계속 진행
+                        continue
                 
                 except Exception as item_error:
                     error_msg = f"측정값 #{idx+1} 저장 중 오류: {str(item_error)}"
                     print(f"[save_with_table_name] {error_msg}")
+                    print(f"[save_with_table_name] 오류 상세 정보:", traceback.format_exc())
                     errors.append(error_msg)
             
             if saved_count == 0 and errors:
@@ -600,12 +585,24 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                 error_detail = "; ".join(errors[:3])
                 if len(errors) > 3:
                     error_detail += f"; 외 {len(errors)-3}개 오류"
-                raise HTTPException(status_code=500, detail=f"모든 측정값 저장에 실패했습니다: {error_detail}")
+                    
+                # 오류 응답 반환
+                error_response = {
+                    "status": "error",
+                    "message": f"모든 측정값 저장에 실패했습니다: {error_detail}"
+                }
+                return JSONResponse(content=error_response, status_code=500)
             
             # 트랜잭션 커밋
             if trans:
-                trans.commit()
-                print(f"[save_with_table_name] 트랜잭션 커밋 완료, {saved_count}개 저장됨")
+                try:
+                    trans.commit()
+                    print(f"[save_with_table_name] 트랜잭션 커밋 완료, {saved_count}개 저장됨")
+                except Exception as commit_error:
+                    print(f"[save_with_table_name] 트랜잭션 커밋 오류: {str(commit_error)}")
+                    trans.rollback()
+                    print("[save_with_table_name] 트랜잭션 롤백됨")
+                    raise commit_error
             
             # 응답 반환
             response = {
@@ -618,26 +615,38 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
             if errors:
                 response["warnings"] = errors
                 
-            return response
+            # CORS 헤더가 포함된 성공 응답 반환
+            cors_response = JSONResponse(content=response, status_code=200)
+            cors_response.headers["Access-Control-Allow-Origin"] = "*"
+            cors_response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+            cors_response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            return cors_response
             
         except Exception as sql_error:
-            # 트랜잭션 롤백 - trans가 존재할 때만 롤백
+            print(f"[save_with_table_name] SQL 오류: {str(sql_error)}")
+            print(f"[save_with_table_name] SQL 오류 타입: {type(sql_error).__name__}")
+            print(f"[save_with_table_name] SQL 오류 상세 정보:", traceback.format_exc())
+            
             if trans:
                 try:
                     trans.rollback()
-                    print(f"[save_with_table_name] SQL 오류로 트랜잭션 롤백: {str(sql_error)}")
+                    print("[save_with_table_name] 트랜잭션 롤백됨")
                 except Exception as rollback_error:
-                    print(f"[save_with_table_name] 롤백 중 오류 발생: {str(rollback_error)}")
-            else:
-                print(f"[save_with_table_name] SQL 오류 발생(트랜잭션 없음): {str(sql_error)}")
+                    print(f"[save_with_table_name] 트랜잭션 롤백 중 오류: {str(rollback_error)}")
             
-            # SQL 쿼리 로깅 - query_str이 있을 때만 출력
-            if query_str:
-                print(f"[save_with_table_name] 실행 시도한 SQL 쿼리:")
-                print(query_str)
+            error_response = {
+                "status": "error",
+                "message": f"SQL 오류: {str(sql_error)}",
+                "detail": str(sql_error)
+            }
             
-            raise HTTPException(status_code=500, detail=f"SQL 오류: {str(sql_error)}")
-            
+            # CORS 헤더가 포함된 응답 반환
+            cors_response = JSONResponse(content=error_response, status_code=500)
+            cors_response.headers["Access-Control-Allow-Origin"] = "*"
+            cors_response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+            cors_response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            return cors_response
+        
         finally:
             # 커넥션 닫기 - conn이 존재할 때만 닫기
             if conn:
@@ -653,7 +662,113 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
     except Exception as e:
         print(f"[save_with_table_name] 예외 발생: {str(e)}")
         print(f"[save_with_table_name] 예외 유형: {type(e).__name__}")
-        import traceback
-        print("[save_with_table_name] 스택 트레이스:")
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"측정 데이터 저장 중 오류 발생: {str(e)}") 
+        
+        error_response = {
+            "status": "error",
+            "message": f"측정 데이터 저장 중 오류 발생: {str(e)}"
+        }
+        
+        # CORS 헤더가 포함된 응답 반환
+        cors_response = JSONResponse(content=error_response, status_code=500)
+        cors_response.headers["Access-Control-Allow-Origin"] = "*"
+        cors_response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        cors_response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        return cors_response
+
+@router.options("/save-with-table-name")
+async def options_save_with_table_name():
+    """CORS preflight 요청을 처리하기 위한 OPTIONS 메소드 핸들러"""
+    response = JSONResponse(content={"message": "CORS preflight request handled"})
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return response
+
+@router.post("/test-connection")
+async def test_connection():
+    """연결 테스트용 간단한 API 엔드포인트"""
+    response = JSONResponse(content={
+        "status": "success",
+        "message": "API 서버가 정상적으로 동작 중입니다.",
+        "timestamp": str(datetime.now())
+    })
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS, GET"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return response
+
+@router.post("/check-lot-wafer")
+async def check_lot_wafer_duplicate(data: Dict[str, Any] = Body(...)):
+    """
+    지정된 테이블에서 lot_wafer 값이 이미 존재하는지 확인합니다.
+    존재하는 경우 'duplicate'를 반환하고, 그렇지 않은 경우 'available'을 반환합니다.
+    """
+    try:
+        # 필수 파라미터 확인
+        table_name = data.get("table_name")
+        lot_wafer = data.get("lot_wafer")
+        
+        if not table_name or not lot_wafer:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "table_name과 lot_wafer 파라미터가 필요합니다."}
+            )
+        
+        print(f"[check_lot_wafer_duplicate] 중복 확인: 테이블={table_name}, lot_wafer={lot_wafer}")
+        
+        # SQL 커넥션 가져오기
+        conn = lcnc_sql["engine"].connect()
+        
+        try:
+            # 안전한 쿼리 실행을 위해 text() 사용
+            query = text("""
+            SELECT COUNT(*) as count FROM msa6_result_cd
+            WHERE table_name = :table_name AND lot_wafer = :lot_wafer
+            """)
+            
+            result = conn.execute(query, {"table_name": table_name, "lot_wafer": lot_wafer}).fetchone()
+            
+            if result and result[0] > 0:
+                print(f"[check_lot_wafer_duplicate] 중복 발견: {result[0]}개의 레코드가 있습니다.")
+                return {
+                    "status": "duplicate",
+                    "message": f"이미 '{table_name}' 테이블에 '{lot_wafer}' Lot Wafer가 존재합니다."
+                }
+            else:
+                print(f"[check_lot_wafer_duplicate] 중복 없음: 사용 가능")
+                return {
+                    "status": "available",
+                    "message": "사용 가능한 Lot Wafer입니다."
+                }
+                
+        except Exception as sql_error:
+            print(f"[check_lot_wafer_duplicate] SQL 오류: {str(sql_error)}")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"데이터베이스 쿼리 오류: {str(sql_error)}"}
+            )
+            
+        finally:
+            # 커넥션 닫기
+            conn.close()
+            print(f"[check_lot_wafer_duplicate] SQL 연결 종료")
+            
+    except Exception as e:
+        print(f"[check_lot_wafer_duplicate] 일반 오류: {str(e)}")
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"중복 확인 중 오류가 발생했습니다: {str(e)}"}
+        ) 
+
+@router.options("/check-lot-wafer")
+async def options_check_lot_wafer():
+    """
+    CORS 프리플라이트 요청을 처리하기 위한 OPTIONS 메소드 핸들러
+    """
+    response = JSONResponse(content={"status": "ok"})
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return response 

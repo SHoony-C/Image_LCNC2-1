@@ -36,8 +36,8 @@ ADMIN_DOMAINS = [
 MONGODB_SETTINGS = {
     'HOST': 'localhost',
     'PORT': 27017,
-    'DATABASE': 'lcnc',
-    'lcnc_COLLECTION': 'lcnc_store',    
+    'DATABASE': 'image_app',
+    'lcnc_COLLECTION': 'image_workflow',    
 }
 
 # Available user roles
@@ -49,6 +49,6 @@ MYSQL_SETTINGS = {
     'PORT': 3306,
     'USER': 'root',
     'PASSWORD': 'root',
-    'DATABASE': 'lcnc_app',
+    'DATABASE': 'image_app',
     'CHARSET': 'utf8mb4'
 } 

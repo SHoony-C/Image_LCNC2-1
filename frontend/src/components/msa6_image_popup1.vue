@@ -367,7 +367,16 @@
       
       <!-- 알림 메시지 -->
       <div v-if="notification.show" 
-          :class="['notification', notification.type]">
+          :class="['notification', notification.type]"
+          :style="{
+            backgroundColor: notification.type === 'success' ? 'rgb(76, 175, 80)' : 
+                            notification.type === 'error' ? 'rgb(244, 67, 54)' : 
+                            notification.type === 'warning' ? 'rgb(255, 152, 0)' : 'rgb(33, 150, 243)',
+            color: 'white',
+            borderLeft: notification.type === 'success' ? '5px solid #2e7d32' : 
+                        notification.type === 'error' ? '5px solid #c62828' : 
+                        notification.type === 'warning' ? '5px solid #ef6c00' : '5px solid #1565c0'
+          }">
         {{ notification.message }}
       </div>
       </div>
@@ -409,7 +418,7 @@ export default {
   props: {
     imageUrl: {
       type: String,
-      required: true
+      default: null
     },
     inputImageUrl: {
       type: String,
@@ -418,6 +427,22 @@ export default {
     showPopup: {
       type: Boolean,
       default: false
+    },
+    title: {
+      type: String,
+      default: '이미지 측정 결과'
+    },
+    measurements: {
+      type: Array,
+      default: () => []
+    },
+    config: {
+      type: Object,
+      default: () => ({
+        showToolbar: true,
+        showSaveButton: true,
+        showImageSwitch: true
+      })
     }
   },
   emits: ['close', 'update:showPopup'],
@@ -431,7 +456,6 @@ export default {
       ctx: null,
       isMeasuring: false,
       currentMeasurement: null,
-      measurements: [],
       segmentedMeasurements: [],
       nextId: 1,
       subItemPrefix: 'S',
@@ -621,13 +645,55 @@ export default {
     }, 500);
   },
   beforeUnmount() {
-    window.removeEventListener('resize', this.onWindowResize);
-    window.removeEventListener('keydown', this.handleKeyDown);
-    window.removeEventListener('keyup', this.handleKeyUp);
+    // 컴포넌트 언마운트 전에 클린업 수행
+    console.log('[MSA6_ImagePopup] beforeUnmount 호출됨');
     
-    // MSA5 이미지 처리 완료 이벤트 리스너 제거
-    window.removeEventListener('msa5-image-processed', this.handleMSA5ImageProcessed);
-    window.removeEventListener('msa6:imageProcessed', this.handleMSA5ImageProcessed);
+    // 모든 이미지 URL 정리
+    this.cleanupImageUrls();
+    
+    // 이벤트 리스너 제거 (안전하게 처리)
+    try {
+      // resize 이벤트 리스너 제거
+      if (typeof window !== 'undefined' && window.removeEventListener) {
+        if (this.onWindowResize) {
+          window.removeEventListener('resize', this.onWindowResize);
+          console.log('[beforeUnmount] resize 이벤트 리스너 제거됨');
+        }
+      }
+      
+      // keydown 이벤트 리스너 제거
+      if (typeof window !== 'undefined' && window.removeEventListener) {
+        if (this.handleKeyDown) {
+          window.removeEventListener('keydown', this.handleKeyDown);
+          console.log('[beforeUnmount] keydown 이벤트 리스너 제거됨');
+        }
+        
+        if (this.keydownHandler) {
+          document.removeEventListener('keydown', this.keydownHandler);
+          this.keydownHandler = null;
+          console.log('[beforeUnmount] document keydown 이벤트 리스너 제거됨');
+        }
+      }
+      
+      // keyup 이벤트 리스너 제거
+      if (typeof window !== 'undefined' && window.removeEventListener) {
+        if (this.handleKeyUp) {
+          window.removeEventListener('keyup', this.handleKeyUp);
+          console.log('[beforeUnmount] keyup 이벤트 리스너 제거됨');
+        }
+      }
+      
+      // MSA5 이미지 처리 이벤트 리스너 제거
+      if (typeof window !== 'undefined' && window.removeEventListener) {
+        if (this.handleMSA5ImageProcessed) {
+          window.removeEventListener('msa5-image-processed', this.handleMSA5ImageProcessed);
+          window.removeEventListener('msa6:imageProcessed', this.handleMSA5ImageProcessed);
+          console.log('[beforeUnmount] MSA5 이미지 처리 이벤트 리스너 제거됨');
+        }
+      }
+    } catch (error) {
+      console.error('[beforeUnmount] 이벤트 리스너 제거 중 오류:', error);
+    }
   },
   computed: {
     filteredMeasurements() {
@@ -2281,14 +2347,96 @@ export default {
       console.log('[closePopup] MSA6 이미지 팝업 닫기');
         
       // 팝업 닫기 전에 현재 스케일바 설정 저장
-            this.saveScaleBarSettings();
+      this.saveScaleBarSettings();
+        
+      // 알림 정리
+      if (this.notification.timeout) {
+        clearTimeout(this.notification.timeout);
+        this.notification.show = false;
+      }
         
       // 팝업 표시 상태 설정
-        this.isVisible = false;
-        this.$emit('update:showPopup', false);
+      this.isVisible = false;
+      this.$emit('update:showPopup', false);
         
       // 팝업이 닫힐 때 이벤트 발생
-        this.$emit('close');
+      this.$emit('close');
+    },
+    
+    async handleSave() {
+      try {
+        // 저장 처리 중인지 확인
+        if (this.isSaving) {
+          console.log('[handleSave] 이미 저장 중입니다.');
+          return;
+        }
+        
+        // 저장 처리 중 상태로 설정
+        this.isSaving = true;
+        console.log('[handleSave] 저장 시작');
+        
+        // 저장할 데이터가 있는지 확인
+        if (!this.measurements || this.measurements.length === 0) {
+          console.log('[handleSave] 저장할 측정값이 없습니다.');
+          this.showNotification('저장할 측정값이 없습니다.', 'warning');
+          this.isSaving = false;
+          return;
+        }
+        
+        // 저장 처리
+        const result = await this.openTableNameSelector();
+        
+        // 저장 결과 처리
+        if (result && result.success) {
+          console.log('[handleSave] 저장 성공:', result);
+          // 팝업 닫기
+          this.closePopup();
+        } else if (result && !result.success) {
+          console.log('[handleSave] 저장 실패:', result.error || '알 수 없는 오류');
+        } else {
+          console.log('[handleSave] 저장 취소됨');
+        }
+      } catch (error) {
+        console.log('[handleSave] 저장 중 오류:', error.message);
+        this.showNotification(`저장 중 오류가 발생했습니다: ${error.message}`, 'error');
+      } finally {
+        // 저장 처리 완료 상태로 설정
+        this.isSaving = false;
+      }
+    },
+    
+    async openTableNameSelector() {
+      return new Promise((resolve) => {
+        console.log('[openTableNameSelector] 테이블 선택기 열기');
+        
+        // 테이블 선택기 컴포넌트 표시
+        this.$refs.tableNameSelector.open({
+          onSelect: async (selectedTable) => {
+            if (!selectedTable) {
+              console.log('[openTableNameSelector] 선택된 테이블 없음, 취소됨');
+              resolve(null);
+              return;
+            }
+            
+            console.log('[openTableNameSelector] 테이블 선택됨:', selectedTable);
+            
+            try {
+              // 저장 처리
+              const result = await this.blobToBase64SaveWithTableName(selectedTable);
+              console.log('[openTableNameSelector] 저장 결과:', result);
+              resolve(result);
+            } catch (error) {
+              console.log('[openTableNameSelector] 저장 처리 중 오류:', error.message);
+              this.showNotification(`저장 중 오류가 발생했습니다: ${error.message}`, 'error');
+              resolve({ success: false, error: error.message });
+            }
+          },
+          onCancel: () => {
+            console.log('[openTableNameSelector] 사용자가 취소함');
+            resolve(null);
+          }
+        });
+      });
     },
     applySelectedIds() {
       if (this.selectedRows.length === 0 || (!this.newItemId && !this.newSubId)) return;
@@ -2751,379 +2899,299 @@ export default {
      */
     async saveWithTableName(selectedTable) {
       try {
-        console.log('[saveWithTableName] localStorage 항목:');
+        // 테이블 정보 확인
+        if (!selectedTable || typeof selectedTable !== 'object') {
+          console.log('[saveWithTableName] 테이블 정보가 유효하지 않습니다:', selectedTable);
+          this.showNotification('유효하지 않은 테이블 정보입니다.', 'error');
+          return { success: false, error: '유효하지 않은 테이블 정보입니다.' };
+        }
+        
+        // 필수 필드 확인
+        if (!selectedTable.table_name || !selectedTable.lot_wafer) {
+          console.log('[saveWithTableName] 테이블 정보에 필수 필드가 없습니다:', selectedTable);
+          this.showNotification('테이블 이름과 Lot/Wafer 정보가 필요합니다.', 'error');
+          return { success: false, error: '테이블 이름과 Lot/Wafer 정보가 필요합니다.' };
+        }
+        
+        console.log('[saveWithTableName] 저장 시작, 테이블:', selectedTable);
         
         // 사용자 정보 추출 시도
         let userName = '측정사용자';
-        
-        // 객체에서 사용자 이름 추출하는 헬퍼 함수
-        const extractUserNameFromObject = (userObject) => {
-          // 객체에서 이름 관련 필드 확인
-          const nameFields = ['name', 'userName', 'username', 'loginId', 'id', 'email'];
-          for(const field of nameFields) {
-            if(userObject[field]) {
-              return userObject[field];
+        try {
+          // 객체에서 사용자 이름 추출하는 헬퍼 함수
+          const extractUserNameFromObject = (userObject) => {
+            if (!userObject || typeof userObject !== 'object') {
+              return '측정사용자';
             }
-          }
-          return '측정사용자';
-        };
-        
-        // 1. localStorage에서 사용자 정보 찾기
-        const userKeys = ['userName', 'user_name', 'username', 'user', 'loginId', 'login_id', 'id', 'email'];
-        
-        for(const key of userKeys) {
-          const value = localStorage.getItem(key);
-          if(value && value !== 'undefined' && value !== 'null') {
-            try {
-              // JSON 데이터 파싱 시도
-              const parsed = JSON.parse(value);
-              
-              // 객체인 경우 필드 확인
-              if(typeof parsed === 'object' && parsed !== null) {
-                userName = extractUserNameFromObject(parsed);
-                console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
-                break;
-              } else if(typeof parsed === 'string') {
-                // 문자열인 경우 그대로 사용
-                userName = parsed;
-                console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
-                break;
-              }
-            } catch(e) {
-              // JSON 파싱 실패하면 문자열로 처리
-              if(typeof value === 'string') {
-                userName = value;
-                console.log(`[saveWithTableName] localStorage[${key}] 문자열로 사용자 이름 찾음: ${userName}`);
-                break;
+            
+            // 객체에서 이름 관련 필드 확인
+            const nameFields = ['name', 'userName', 'username', 'loginId', 'id', 'email'];
+            for(const field of nameFields) {
+              if(userObject[field]) {
+                return userObject[field];
               }
             }
-          }
-        }
-        
-        // 2. document.cookie에서 사용자 정보 확인
-        if(userName === '측정사용자' && document.cookie) {
-          const cookies = document.cookie.split(';');
-          for(const cookie of cookies) {
-            const [name, value] = cookie.trim().split('=');
-            if(['userName', 'user_name', 'username', 'user'].includes(name.toLowerCase())) {
-              try {
-                userName = decodeURIComponent(value);
-                console.log(`[saveWithTableName] 쿠키에서 사용자 이름 찾음: ${userName}`);
-                break;
-              } catch(e) {
-                console.error(`[saveWithTableName] 쿠키 디코딩 오류:`, e);
-              }
-            }
-          }
-        }
-        
-        // 3. sessionStorage에서 사용자 정보 확인
-        if(userName === '측정사용자') {
+            return '측정사용자';
+          };
+          
+          // localStorage에서 사용자 정보 찾기
+          const userKeys = ['userName', 'user_name', 'username', 'user', 'loginId', 'login_id', 'id', 'email'];
+          
           for(const key of userKeys) {
-            const value = sessionStorage.getItem(key);
+            const value = localStorage.getItem(key);
             if(value && value !== 'undefined' && value !== 'null') {
               try {
+                // JSON 데이터 파싱 시도
                 const parsed = JSON.parse(value);
+                
+                // 객체인 경우 필드 확인
                 if(typeof parsed === 'object' && parsed !== null) {
                   userName = extractUserNameFromObject(parsed);
-                  console.log(`[saveWithTableName] sessionStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
+                  console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
                   break;
                 } else if(typeof parsed === 'string') {
                   userName = parsed;
-                  console.log(`[saveWithTableName] sessionStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
+                  console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
                   break;
                 }
               } catch(e) {
+                // JSON 파싱 실패하면 문자열로 처리
                 if(typeof value === 'string') {
                   userName = value;
-                  console.log(`[saveWithTableName] sessionStorage[${key}] 문자열로 사용자 이름 찾음: ${userName}`);
+                  console.log(`[saveWithTableName] localStorage[${key}] 문자열로 사용자 이름 찾음: ${userName}`);
                   break;
                 }
               }
             }
           }
+          
+          // 이메일에서 사용자 이름만 추출
+          if(userName && typeof userName === 'string' && userName.includes('@')) {
+            userName = userName.split('@')[0];
+            console.log(`[saveWithTableName] 이메일에서 사용자 이름 추출: ${userName}`);
+          }
+          
+          console.log(`[saveWithTableName] 최종 결정된 사용자 이름: ${userName}`);
+        } catch (userError) {
+          console.warn('[saveWithTableName] 사용자 정보 추출 중 오류:', userError);
+          // 기본값 사용
         }
         
-        // 4. 마지막 수단: window 객체에서 전역 사용자 정보 확인
-        if(userName === '측정사용자' && window.currentUser) {
-          userName = typeof window.currentUser === 'string' ? 
-                     window.currentUser : 
-                     (window.currentUser.name || window.currentUser.userName || window.currentUser.username || window.currentUser.id);
-          console.log(`[saveWithTableName] window 객체에서 사용자 이름 찾음: ${userName}`);
+        // 1. 먼저 이미지 저장 (항상 실행)
+        let beforeImageBase64 = '';
+        let afterImageBase64 = '';
+        
+        // 이미지 URL이 존재하는지 확인
+        const hasBeforeImage = !!this.inputImageUrl;
+        const hasAfterImage = !!this.imageUrl;
+        console.log('[saveWithTableName] 이미지 확인 - before:', hasBeforeImage ? '있음' : '없음', 'after:', hasAfterImage ? '있음' : '없음');
+        
+        // Base64로 변환
+        try {
+          console.log('[saveWithTableName] 이미지를 Base64로 변환 시작');
+          if (hasBeforeImage) {
+            beforeImageBase64 = await this.blobToBase64(this.inputImageUrl);
+          }
+          
+          if (hasAfterImage) {
+            afterImageBase64 = await this.blobToBase64(this.imageUrl);
+          }
+          
+          console.log('[saveWithTableName] 이미지 변환 완료:');
+          console.log('  Before 이미지:', beforeImageBase64 ? (beforeImageBase64.substring(0, 30) + '...') : '없음');
+          console.log('  After 이미지:', afterImageBase64 ? (afterImageBase64.substring(0, 30) + '...') : '없음');
+        } catch (conversionError) {
+          console.error('[saveWithTableName] 이미지 변환 중 오류:', conversionError);
+          // 변환 실패해도 계속 진행
         }
         
-        // 5. 이름만 추출 (이메일 주소인 경우)
-        if(userName.includes('@')) {
-          userName = userName.split('@')[0];
-          console.log(`[saveWithTableName] 이메일에서 사용자 이름 추출: ${userName}`);
-        }
-        
-        console.log(`[saveWithTableName] 최종 결정된 사용자 이름: ${userName}`);
-        
-        // lot_wafer는 테이블 선택기에서 입력받은 값 사용
-        const lot_wafer = selectedTable.lot_wafer;
-        if(!lot_wafer) {
-          throw new Error('Lot Wafer 정보가 없습니다.');
-        }
-        
-        console.log(`[saveWithTableName] 사용할 lot_wafer 값: ${lot_wafer}`);
-        
-        // 1. 먼저 이미지 저장
-        if(this.imageUrl) {
+        // 이미지 저장 API 호출 (이미지가 있는 경우에만)
+        if (beforeImageBase64 || afterImageBase64) {
           try {
-            console.log('[saveWithTableName] 이미지 저장 시작');
-            console.log('[saveWithTableName] Before 이미지 URL:', this.inputImageUrl);
-            console.log('[saveWithTableName] After 이미지 URL:', this.imageUrl);
-            
-            // 이미지 URL이 유효한지 확인
-            if(!this.inputImageUrl || !this.imageUrl) {
-              console.warn('[saveWithTableName] 이미지 URL이 없습니다!');
-              console.log('[saveWithTableName] Before 이미지 상태:', this.inputImageUrl ? '있음' : '없음');
-              console.log('[saveWithTableName] After 이미지 상태:', this.imageUrl ? '있음' : '없음');
-            }
-            
             // 이미지 저장 요청 데이터 구성
-            const requestData = {
-              title: `${selectedTable.table_name}_${lot_wafer}`,
-              description: `${selectedTable.table_name}에 저장된 ${lot_wafer} 측정 이미지`,
-              before_image: this.inputImageUrl,
-              after_image: this.imageUrl,
+            const imageRequestData = {
+              title: `${selectedTable.table_name}_${selectedTable.lot_wafer}`,
+              description: `${selectedTable.table_name}에 저장된 ${selectedTable.lot_wafer} 측정 이미지`,
+              before_image: beforeImageBase64 || '',
+              after_image: afterImageBase64 || '',
               workflow_id: '',
               tags: ['msa6', '측정'],
-              is_result: true,  // MSA6 결과 이미지임을 명시
+              is_result: true,
               table_name: selectedTable.table_name,
-              lot_wafer: lot_wafer
+              lot_wafer: selectedTable.lot_wafer
             };
             
-            console.log('[saveWithTableName] 이미지 저장 요청 데이터:', requestData);
+            console.log('[saveWithTableName] 이미지 저장 API 호출 시작');
             
-            // 외부 이미지 저장 API 호출
+            // 이미지 저장 API 직접 호출 (fetch API 사용)
             const imageResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'Access-Control-Allow-Origin': '*'
               },
-              body: JSON.stringify(requestData)
+              body: JSON.stringify(imageRequestData)
             });
             
-            if (!imageResponse.ok) {
-              const errorText = await imageResponse.text();
-              console.error('[saveWithTableName] 이미지 저장 API 오류:', imageResponse.status, errorText);
-              console.warn('[saveWithTableName] 이미지 저장에 실패했지만 측정 데이터 저장은 계속합니다.');
-              
-              // FormData 방식으로 재시도
-              try {
-                console.log('[saveWithTableName] FormData 방식으로 이미지 저장 재시도');
-                
-                // 이미지를 Blob으로 변환
-                const beforeBlob = await (async () => {
-                  if (this.inputImageUrl.startsWith('data:')) {
-                    const res = await fetch(this.inputImageUrl);
-                    return await res.blob();
-                  } else if (this.inputImageUrl.startsWith('blob:')) {
-                    const res = await fetch(this.inputImageUrl);
-                    return await res.blob();
-                  } else {
-                    const res = await fetch(this.inputImageUrl);
-                    return await res.blob();
-                  }
-                })();
-                
-                const afterBlob = await (async () => {
-                  if (this.imageUrl.startsWith('data:')) {
-                    const res = await fetch(this.imageUrl);
-                    return await res.blob();
-                  } else if (this.imageUrl.startsWith('blob:')) {
-                    const res = await fetch(this.imageUrl);
-                    return await res.blob();
-                  } else {
-                    const res = await fetch(this.imageUrl);
-                    return await res.blob();
-                  }
-                })();
-                
-                console.log('[saveWithTableName] Blob 변환 완료');
-                console.log('[saveWithTableName] Before Blob 타입:', beforeBlob.type, 'Size:', beforeBlob.size);
-                console.log('[saveWithTableName] After Blob 타입:', afterBlob.type, 'Size:', afterBlob.size);
-                
-                // FormData 구성
-                const formData = new FormData();
-                formData.append('title', requestData.title);
-                formData.append('description', requestData.description);
-                formData.append('before_file', beforeBlob, `before_${lot_wafer}.${beforeBlob.type.split('/')[1] || 'png'}`);
-                formData.append('file', afterBlob, `after_${lot_wafer}.${afterBlob.type.split('/')[1] || 'png'}`);
-                formData.append('workflow_id', '');
-                formData.append('tags', JSON.stringify(['msa6', '측정']));
-                formData.append('is_result', 'true');
-                formData.append('table_name', selectedTable.table_name);
-                formData.append('lot_wafer', lot_wafer);
-                
-                console.log('[saveWithTableName] FormData 구성 완료, API 요청 시작...');
-                
-                // FormData API 호출
-                const formResponse = await fetch('http://localhost:8000/api/external_storage/upload-file', {
-                  method: 'POST',
-                  body: formData
-                });
-                
-                if (!formResponse.ok) {
-                  const errorText = await formResponse.text();
-                  console.error('[saveWithTableName] FormData 방식 API 오류:', formResponse.status, errorText);
-                  console.warn('[saveWithTableName] FormData 방식 이미지 저장에도 실패했지만 측정 데이터 저장은 계속합니다.');
-                } else {
-                  const formResult = await formResponse.json();
-                  console.log('[saveWithTableName] FormData 방식 이미지 저장 성공:', formResult);
-                }
-              } catch (formError) {
-                console.error('[saveWithTableName] FormData 방식 이미지 저장 오류:', formError);
-                console.warn('[saveWithTableName] 모든 이미지 저장 방식이 실패했지만 측정 데이터 저장은 계속합니다.');
-              }
+            if (!imageResponse) {
+              console.error('[saveWithTableName] 이미지 저장 API 응답이 없습니다');
             } else {
-              const imageResult = await imageResponse.json();
-              console.log('[saveWithTableName] 이미지 저장 성공:', imageResult);
+              const imageResponseText = await imageResponse.text();
+              console.log('[saveWithTableName] 이미지 저장 API 응답:', imageResponse.status, imageResponseText);
               
-              // 저장된 이미지 URL 로깅
-              if (imageResult.image_data) {
-                console.log('[saveWithTableName] 저장된 Before 이미지 URL:', imageResult.image_data.before_url);
-                console.log('[saveWithTableName] 저장된 After 이미지 URL:', imageResult.image_data.after_url);
+              if (imageResponse.ok) {
+                try {
+                  const imageResult = JSON.parse(imageResponseText);
+                  console.log('[saveWithTableName] 이미지 저장 성공:', imageResult);
+                } catch (e) {
+                  console.error('[saveWithTableName] 이미지 저장 응답 파싱 오류:', e);
+                }
+              } else {
+                console.error('[saveWithTableName] 이미지 저장 실패:', imageResponse.status, imageResponseText);
               }
             }
           } catch (imageError) {
-            console.error('[saveWithTableName] 이미지 저장 중 오류:', imageError);
-            console.warn('[saveWithTableName] 이미지 저장에 실패했지만 측정 데이터 저장은 계속합니다.');
+            console.error('[saveWithTableName] 이미지 저장 API 호출 중 오류:', imageError);
+            // 이미지 저장 실패해도 계속 진행
           }
+        } else {
+          console.warn('[saveWithTableName] 저장할 이미지가 없습니다. 이미지 저장 건너뜀.');
         }
         
-        // 2. 측정 데이터 저장 (기존 로직)
-        
-        // 중요: 여기서 filteredMeasurements가 아닌 화면에 표시되는 데이터를 사용해야 함
-        // 화면에 표시되는 측정 결과와 동일한 데이터 사용
-        const displayedMeasurements = [...this.filteredMeasurements].filter(m => !m.isTotal);
-        
-        // 전체 측정값 로깅
-        console.log(`[saveWithTableName] 전체 측정값: ${this.measurements.length}개, 화면 표시값: ${displayedMeasurements.length}개`);
-        console.log('측정값 배열:', displayedMeasurements);
-        
-        // 중요: 측정값 배열 검증 - 항목이 몇 개인지, 중복은 없는지, 값이 정확한지 확인
-        console.log('[saveWithTableName] 저장될 측정값 내용:');
-        const uniqueValues = new Set();
-        displayedMeasurements.forEach((m, idx) => {
-          console.log(`  항목 #${idx+1}: ID=${m.itemId}, SubID=${m.subItemId}, 값=${m.value}`);
-          uniqueValues.add(m.value);
-        });
-        console.log(`[saveWithTableName] 고유 값 개수: ${uniqueValues.size}개, 값 목록:`, Array.from(uniqueValues));
-        
-        if (displayedMeasurements.length === 0) {
-          this.showNotification('저장할 유효한 측정 결과가 없습니다.', 'error');
+        // 2. 측정 데이터 저장
+        console.log('[saveWithTableName] 측정 데이터 저장 시작');
+        if (!this.measurements) {
+          console.error('[saveWithTableName] 측정 데이터가 없습니다');
+          this.showNotification('저장할 측정 데이터가 없습니다.', 'error');
           return;
         }
         
-        console.log(`[saveWithTableName] 저장 중... 테이블: ${selectedTable.table_name}, 측정값: ${displayedMeasurements.length}개`);
+        const displayedMeasurements = this.measurements.filter(m => m && m.visible !== false);
+        console.log(`[saveWithTableName] 전체 측정값: ${this.measurements.length}개, 화면 표시값: ${displayedMeasurements.length}개`);
         
-        // 측정값 데이터 정리 - 원본 값을 최대한 보존하고 화면에 표시되는 값 그대로 저장
+        if (displayedMeasurements.length === 0) {
+          console.warn('[saveWithTableName] 표시된 측정값이 없습니다');
+          this.showNotification('저장할 측정값이 없습니다.', 'warning');
+          // 그래도 계속 진행
+        }
+        
+        // 측정값 처리
         const processedMeasurements = displayedMeasurements.map((measurement, idx) => {
-          // subItemId에서 "item_id-" 접두사 제거 (예: "1-S1" -> "S1")
-          let subItemId = measurement.subItemId || '';
-          if (subItemId.includes('-')) {
-            subItemId = subItemId.split('-').pop();
+          if (!measurement) {
+            console.warn(`[saveWithTableName] 측정값 #${idx+1}이 null입니다`);
+            return {
+              measurement_id: `unknown_${idx}`,
+              item_id: 0,
+              sub_item_id: 0,
+              value: 0,
+              value_text: '0',
+              label: '',
+              sequence: idx + 1
+            };
           }
           
-          // 정확한 측정값 사용 - 화면에 표시되는 값 그대로 저장
-          const originalValue = measurement.value;
-          
-          // 값이 이미 숫자면 그대로 사용하고, 아니면 파싱
-          const value = typeof originalValue === 'number' ? 
-                        originalValue : 
-                        parseFloat(originalValue);
-          
-          // 값이 숫자로 변환 가능한지 확인
-          if (isNaN(value)) {
-            console.error(`[saveWithTableName] 측정값 #${idx+1} 값을 숫자로 변환할 수 없음: ${originalValue}`);
+          // 측정값 변환 (숫자형으로)
+          const originalValue = measurement.value || '0';
+          let value = 0;
+          try {
+            value = parseFloat(originalValue);
+            if (isNaN(value)) {
+              value = 0;
+            }
+          } catch (e) {
+            value = 0;
           }
           
-          console.log(`[saveWithTableName] 측정값 #${idx+1} 변환: 원본=${originalValue}, 변환=${value}, ID=${measurement.itemId}, SubID=${subItemId}`);
+          // 아이템 ID 처리
+          const subItemId = measurement.subItemId || measurement.sequenceId || 0;
           
           return {
-            itemId: measurement.itemId || '',
-            subItemId: subItemId,
-            value: value
+            measurement_id: measurement.id || `${measurement.itemId || 'unknown'}_${subItemId}`,
+            item_id: measurement.itemId || 0,
+            sub_item_id: subItemId,
+            value: value,
+            value_text: originalValue,
+            label: measurement.label || '',
+            sequence: idx + 1
           };
         });
         
-        console.log(`[saveWithTableName] 정리된 데이터:`, processedMeasurements);
+        // API 요청 데이터 구성
+        const requestData = {
+          table_name: selectedTable.table_name,
+          department: selectedTable.department || null,
+          lot_wafer: selectedTable.lot_wafer,
+          is_result: selectedTable.is_result || false,
+          measurements: processedMeasurements,
+          image_urls: {
+            before_url: this.inputImageUrl || '',
+            after_url: this.imageUrl || ''
+          },
+          user_name: userName
+        };
         
-        // 측정 결과 저장 API 호출 (모든 측정값을 한 번에 전송)
-        this.isSaving = true;
+        console.log(`[saveWithTableName] 측정 데이터 저장 API 요청 시작: http://localhost:8000/api/msa6/save-with-table-name`);
+        
+        // API 호출
         const response = await fetch('http://localhost:8000/api/msa6/save-with-table-name', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Access-Control-Allow-Origin': '*'
           },
-          body: JSON.stringify({
-            table_name: selectedTable.table_name,
-            username: userName,
-            lot_wafer: lot_wafer,
-            measurements: processedMeasurements
-          })
+          body: JSON.stringify(requestData)
         });
         
-        // 응답이 JSON이 아닐 경우 처리
-        let result;
+        if (!response) {
+          throw new Error('서버 응답이 없습니다');
+        }
+        
+        // 응답 처리
+        const text = await response.text();
+        let apiResult;
         try {
-          result = await response.json();
-        } catch (parseError) {
-          console.error('[saveWithTableName] JSON 파싱 오류:', parseError);
-          const text = await response.text();
-          throw new Error(`서버 응답 파싱 오류: ${text.substring(0, 100)}...`);
+          apiResult = JSON.parse(text);
+        } catch (e) {
+          throw new Error(`서버 응답을 파싱할 수 없습니다: ${text}`);
         }
         
-        if (!response.ok) {
-          const errorDetail = result.detail || result.message || '알 수 없는 오류';
-          throw new Error(`HTTP 오류 ${response.status}: ${errorDetail}`);
-        }
-        
-        if (result.status !== 'success') {
-          // 권한 오류 메시지 특별 처리
-          if (result.message && result.message.includes('저장 권한이 없습니다')) {
-            this.showNotification(result.message, 'error');
-            console.error('[saveWithTableName] 권한 오류:', result.message);
-            // 로그 저장 - 권한 오류
-            LogService.logAction('save_measurements_permission_error', {
-              table_name: selectedTable.table_name,
-              username: userName,
-              error: result.message
-            });
-            this.isSaving = false;
-            return;
+        // 결과 처리
+        if (apiResult && (apiResult.success || apiResult.status === 'success')) {
+          // 성공 메시지를 화면에 표시 (에러로 throw하지 않고 알림만 표시)
+          const successMessage = `${processedMeasurements.length}개의 측정 데이터가 성공적으로 '${selectedTable.table_name}' 테이블 이름으로 저장되었습니다.`;
+          console.log(`[saveWithTableName] 저장 성공: ${successMessage}`);
+          this.showNotification(successMessage, 'success');
+          
+          // 이벤트 발생
+          this.$emit('saved', {
+            table_name: selectedTable.table_name,
+            lot_wafer: selectedTable.lot_wafer,
+            record_id: apiResult.record_id || 0
+          });
+          
+          // 성공 결과 반환
+          return apiResult.success ? apiResult : { ...apiResult, success: true };
+        } else {
+          // 오류 메시지 확인
+          if (apiResult && apiResult.error && apiResult.error.includes('permission')) {
+            console.log('[saveWithTableName] 권한 오류:', apiResult.message);
+            this.showNotification(`저장 권한이 없습니다: ${apiResult.message}`, 'error');
+            return { success: false, error: `저장 권한이 없습니다: ${apiResult.message}` };
+          } else {
+            const errorMessage = (apiResult && apiResult.message) || '알 수 없는 오류가 발생했습니다.';
+            console.log('[saveWithTableName] 저장 실패:', errorMessage);
+            this.showNotification(errorMessage, 'error');
+            return { success: false, error: errorMessage };
           }
-          throw new Error(result.detail || result.message || '저장 실패');
         }
-        
-        // 경고 메시지가 있는 경우 콘솔에 출력
-        if (result.warnings && result.warnings.length > 0) {
-          console.warn('[saveWithTableName] 저장 경고:', result.warnings);
-        }
-        
-        this.showNotification(`측정 결과 ${result.saved_count}개가 '${selectedTable.table_name}' 테이블에 저장되었습니다.`, 'success');
-        
-        // 로그 저장 - 측정 결과 저장 완료
-        LogService.logAction('save_measurements', {
-          table_name: selectedTable.table_name,
-          count: result.saved_count,
-          total: displayedMeasurements.length
-        });
-        
       } catch (error) {
-        console.error('[saveWithTableName] 측정 결과 저장 중 오류:', error);
-        this.showNotification(`측정 결과 저장 중 오류: ${error.message}`, 'error');
-        
-        // 로그 저장 - 측정 결과 저장 실패
-        LogService.logAction('save_measurements_error', {
-          error: error.message || '저장 실패'
-        });
-      } finally {
-        this.isSaving = false;
+        console.log('[saveWithTableName] 오류 발생:', error.message);
+        // 사용자에게 오류 표시
+        this.showNotification(`저장 중 오류가 발생했습니다: ${error.message}`, 'error');
+        // 오류를 throw 하지 않고 반환하여 처리 흐름 유지
+        return { success: false, error: error.message };
       }
     },
     
@@ -3131,20 +3199,55 @@ export default {
      * 알림 메시지 표시
      */
     showNotification(message, type = 'info') {
-      // 기존 타이머 취소
+      console.log(`[알림] ${type.toUpperCase()}: ${message}`);
+      
+      // 기존 타임아웃 정리
       if (this.notification.timeout) {
         clearTimeout(this.notification.timeout);
       }
       
-      // 알림 메시지 설정
-      this.notification.message = message;
-      this.notification.type = type;
-      this.notification.show = true;
+      // 알림 설정
+      this.notification = {
+        show: true,
+        type: type, // 'info', 'success', 'warning', 'error' 중 하나
+        message: message,
+        timeout: setTimeout(() => {
+          this.notification.show = false;
+        }, 5000) // 5초 후 자동 닫기
+      };
       
-      // 3초 후 알림 숨기기
-      this.notification.timeout = setTimeout(() => {
-        this.notification.show = false;
-      }, 3000);
+      // 알림 이벤트 발생
+      this.$emit('notification', {
+        type: type,
+        message: message
+      });
+      
+      // DOM에 직접 스타일 적용
+      this.$nextTick(() => {
+        const notificationEl = document.querySelector('.notification');
+        if (notificationEl) {
+          // Remove all possible notification type classes first
+          notificationEl.classList.remove('success', 'error', 'warning', 'info');
+          // Add the correct class
+          notificationEl.classList.add(type);
+          
+          // Set styles directly
+          if (type === 'success') {
+            notificationEl.style.backgroundColor = 'rgb(76, 175, 80)';
+            notificationEl.style.borderLeft = '5px solid #2e7d32';
+          } else if (type === 'error') {
+            notificationEl.style.backgroundColor = 'rgb(244, 67, 54)';
+            notificationEl.style.borderLeft = '5px solid #c62828';
+          } else if (type === 'warning') {
+            notificationEl.style.backgroundColor = 'rgb(255, 152, 0)';
+            notificationEl.style.borderLeft = '5px solid #ef6c00';
+          } else {
+            notificationEl.style.backgroundColor = 'rgb(33, 150, 243)';
+            notificationEl.style.borderLeft = '5px solid #1565c0';
+          }
+          notificationEl.style.color = 'white';
+        }
+      });
     },
     // 기존 createSegments 함수는 단일 선 측정에만 사용
     createSegments(measurement) {
@@ -4090,13 +4193,26 @@ export default {
      */
     async blobToBase64(blobUrl) {
       try {
+        // 입력값이 없으면 빈 문자열 반환
+        if (!blobUrl) {
+          console.log('[blobToBase64] 입력 URL이 없습니다');
+          return '';
+        }
+        
         // 이미 data URL이면 변환하지 않음
-        if (blobUrl.startsWith('data:')) {
+        if (typeof blobUrl === 'string' && blobUrl.startsWith('data:')) {
           console.log('[blobToBase64] 이미 Data URL 형식입니다. 변환 불필요');
           return blobUrl;
         }
         
-        console.log('[blobToBase64] Blob URL을 Base64로 변환 시작:', blobUrl.substring(0, 50) + '...');
+        console.log('[blobToBase64] Blob URL을 Base64로 변환 시작:', typeof blobUrl === 'string' ? blobUrl.substring(0, 50) + '...' : 'non-string');
+        
+        // URL이 유효한지 확인
+        if (typeof blobUrl !== 'string' || !blobUrl.startsWith('blob:')) {
+          console.warn('[blobToBase64] 유효하지 않은 Blob URL:', blobUrl);
+          return '';
+        }
+        
         const response = await fetch(blobUrl);
         
         if (!response.ok) {
@@ -4104,8 +4220,13 @@ export default {
         }
         
         const blob = await response.blob();
+        if (!blob) {
+          console.error('[blobToBase64] Blob이 null입니다');
+          return '';
+        }
+        
         console.log('[blobToBase64] Blob 정보:', {
-          type: blob.type,
+          type: blob.type || 'unknown',
           size: blob.size + ' bytes',
           lastModified: blob.lastModified ? new Date(blob.lastModified).toISOString() : 'N/A'
         });
@@ -4113,9 +4234,21 @@ export default {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onloadend = () => {
+            if (!reader || !reader.result) {
+              console.error('[blobToBase64] 파일 읽기 결과가 null입니다');
+              resolve('');
+              return;
+            }
+            
             const result = reader.result;
             console.log('[blobToBase64] Base64 변환 완료 (길이):', result.length);
-            resolve(result);
+            
+            // MIME 타입이 없는 경우 추가
+            if (typeof result === 'string' && !result.startsWith('data:') && blob.type) {
+              resolve(`data:${blob.type};base64,${result}`);
+            } else {
+              resolve(result);
+            }
           };
           reader.onerror = (e) => {
             console.error('[blobToBase64] FileReader 오류:', e);
@@ -4125,309 +4258,128 @@ export default {
         });
       } catch (error) {
         console.error('[blobToBase64] Base64 변환 중 오류:', error);
-        // 오류 발생 시 원본 URL 반환 (API에서 처리 가능한지 시도)
-        return blobUrl;
+        // 오류 발생 시 빈 문자열 반환 (안전한 처리)
+        return '';
       }
     },
 
     // 2. Now update the saveWithTableName method to use base64 conversion
-    async saveWithTableName(selectedTable) {
+    async blobToBase64SaveWithTableName(selectedTable) {
+      console.log('[blobToBase64SaveWithTableName] 시작');
+      
       try {
-        console.log('[saveWithTableName] localStorage 항목:');
+        // 테이블 데이터 유효성 검사
+        if (!selectedTable) {
+          console.log('[blobToBase64SaveWithTableName] 테이블 데이터가 없습니다');
+          this.showNotification('테이블 정보가 없습니다.', 'warning');
+          return;
+        }
         
-        // 사용자 정보 추출 시도
-        let userName = '측정사용자';
-        
-        // 객체에서 사용자 이름 추출하는 헬퍼 함수
-        const extractUserNameFromObject = (userObject) => {
-          // 객체에서 이름 관련 필드 확인
-          const nameFields = ['name', 'userName', 'username', 'loginId', 'id', 'email'];
-          for(const field of nameFields) {
-            if(userObject[field]) {
-              return userObject[field];
-            }
+        // 테이블 객체인 경우 (객체 경우)
+        if (typeof selectedTable === 'object') {
+          console.log('[blobToBase64SaveWithTableName] 테이블 객체 정보:', selectedTable);
+          
+          // saveWithTableName 함수 호출
+          const result = await this.saveWithTableName(selectedTable);
+          
+          // 성공 여부에 따라 다르게 처리
+          if (result && result.success) {
+            console.log('[blobToBase64SaveWithTableName] 저장 성공:', result);
+            return result;
+          } else if (result && !result.success) {
+            console.log('[blobToBase64SaveWithTableName] 저장 실패:', result.error || '알 수 없는 오류');
+            this.showNotification(`저장 실패: ${result.error || '알 수 없는 오류'}`, 'error');
+            return result;
           }
-          return '측정사용자';
-        };
-        
-        // 1. localStorage에서 사용자 정보 찾기
-        const userKeys = ['userName', 'user_name', 'username', 'user', 'loginId', 'login_id', 'id', 'email'];
-        
-        for(const key of userKeys) {
-          const value = localStorage.getItem(key);
-          if(value && value !== 'undefined' && value !== 'null') {
-            try {
-              // JSON 데이터 파싱 시도
-              const parsed = JSON.parse(value);
-              
-              // 객체인 경우 필드 확인
-              if(typeof parsed === 'object' && parsed !== null) {
-                userName = extractUserNameFromObject(parsed);
-                console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
-                break;
-              } else if(typeof parsed === 'string') {
-                userName = parsed;
-                console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
-                break;
-              }
-            } catch(e) {
-              // JSON 파싱 실패하면 문자열로 처리
-              if(typeof value === 'string') {
-                userName = value;
-                console.log(`[saveWithTableName] localStorage[${key}] 문자열로 사용자 이름 찾음: ${userName}`);
-                break;
-              }
-            }
+        } 
+        // URL 문자열인 경우 (레거시 코드 호환)
+        else if (typeof selectedTable === 'string' && selectedTable.startsWith('http')) {
+          console.log('[blobToBase64SaveWithTableName] URL 문자열로 호출됨:', selectedTable);
+          // 테이블 URL이 주어진 경우 (레거시 코드 호환)
+          const tableUrl = selectedTable;
+          const fetchResponse = await fetch(tableUrl);
+          
+          if (!fetchResponse.ok) {
+            throw new Error(`테이블 정보를 가져오는데 실패했습니다 (${fetchResponse.status})`);
           }
+          
+          const tableData = await fetchResponse.json();
+          console.log('[blobToBase64SaveWithTableName] 테이블 데이터 가져옴:', tableData);
+          
+          // 가져온 테이블 정보로 저장 함수 호출
+          return await this.saveWithTableName(tableData);
+        } else {
+          throw new Error('유효하지 않은 테이블 정보 형식입니다.');
         }
-        
-        // 2. document.cookie에서 사용자 정보 확인
-        if(userName === '측정사용자' && document.cookie) {
-          const cookies = document.cookie.split(';');
-          for(const cookie of cookies) {
-            const [name, value] = cookie.trim().split('=');
-            if(['userName', 'user_name', 'username', 'user'].includes(name.toLowerCase())) {
-              try {
-                userName = decodeURIComponent(value);
-                console.log(`[saveWithTableName] 쿠키에서 사용자 이름 찾음: ${userName}`);
-                break;
-              } catch(e) {
-                console.error(`[saveWithTableName] 쿠키 디코딩 오류:`, e);
-              }
-            }
-          }
-        }
-        
-        // 3. sessionStorage에서 사용자 정보 확인
-        if(userName === '측정사용자') {
-          for(const key of userKeys) {
-            const value = sessionStorage.getItem(key);
-            if(value && value !== 'undefined' && value !== 'null') {
-              try {
-                const parsed = JSON.parse(value);
-                if(typeof parsed === 'object' && parsed !== null) {
-                  userName = extractUserNameFromObject(parsed);
-                  console.log(`[saveWithTableName] sessionStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
-                  break;
-                } else if(typeof parsed === 'string') {
-                  userName = parsed;
-                  console.log(`[saveWithTableName] sessionStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
-                  break;
-                }
-              } catch(e) {
-                if(typeof value === 'string') {
-                  userName = value;
-                  console.log(`[saveWithTableName] sessionStorage[${key}] 문자열로 사용자 이름 찾음: ${userName}`);
-                  break;
-                }
-              }
-            }
-          }
-        }
-        
-        // 4. 마지막 수단: window 객체에서 전역 사용자 정보 확인
-        if(userName === '측정사용자' && window.currentUser) {
-          userName = typeof window.currentUser === 'string' ? 
-                     window.currentUser : 
-                     (window.currentUser.name || window.currentUser.userName || window.currentUser.username || window.currentUser.id);
-          console.log(`[saveWithTableName] window 객체에서 사용자 이름 찾음: ${userName}`);
-        }
-        
-        // 5. 이름만 추출 (이메일 주소인 경우)
-        if(userName.includes('@')) {
-          userName = userName.split('@')[0];
-          console.log(`[saveWithTableName] 이메일에서 사용자 이름 추출: ${userName}`);
-        }
-        
-        console.log(`[saveWithTableName] 최종 결정된 사용자 이름: ${userName}`);
-        
-        // lot_wafer는 테이블 선택기에서 입력받은 값 사용
-        const lot_wafer = selectedTable.lot_wafer;
-        if(!lot_wafer) {
-          throw new Error('Lot Wafer 정보가 없습니다.');
-        }
-        
-        console.log(`[saveWithTableName] 사용할 lot_wafer 값: ${lot_wafer}`);
-        
-        // 1. 먼저 이미지 저장
-        if(this.imageUrl) {
-          try {
-            console.log('[saveWithTableName] 이미지 저장 시작');
-            console.log('[saveWithTableName] Before 이미지 URL:', this.inputImageUrl ? this.inputImageUrl.substring(0, 50) + '...' : 'none');
-            console.log('[saveWithTableName] After 이미지 URL:', this.imageUrl ? this.imageUrl.substring(0, 50) + '...' : 'none');
-            
-            // 이미지 URL이 유효한지 확인
-            if(!this.inputImageUrl || !this.imageUrl) {
-              console.warn('[saveWithTableName] 이미지 URL이 없습니다!');
-              console.log('[saveWithTableName] Before 이미지 상태:', this.inputImageUrl ? '있음' : '없음');
-              console.log('[saveWithTableName] After 이미지 상태:', this.imageUrl ? '있음' : '없음');
-            }
-            
-            // *** MSA5 방식과 동일하게 Base64로 변환 ***
-            console.log('[saveWithTableName] 이미지를 Base64로 변환 시작');
-            const beforeImageBase64 = await this.blobToBase64(this.inputImageUrl || '');
-            const afterImageBase64 = await this.blobToBase64(this.imageUrl);
-            
-            console.log('[saveWithTableName] 이미지 변환 완료');
-            console.log('[saveWithTableName] Before 이미지 타입:', beforeImageBase64.startsWith('data:') ? beforeImageBase64.substring(0, 30) + '...' : '일반 URL');
-            console.log('[saveWithTableName] After 이미지 타입:', afterImageBase64.startsWith('data:') ? afterImageBase64.substring(0, 30) + '...' : '일반 URL');
-            
-            // 이미지 저장 요청 데이터 구성
-            const requestData = {
-              title: `${selectedTable.table_name}_${lot_wafer}`,
-              description: `${selectedTable.table_name}에 저장된 ${lot_wafer} 측정 이미지`,
-              before_image: beforeImageBase64,
-              after_image: afterImageBase64,
-              workflow_id: '',
-              tags: ['msa6', '측정'],
-              is_result: true,  // MSA6 결과 이미지임을 명시
-              table_name: selectedTable.table_name,
-              lot_wafer: lot_wafer
-            };
-            
-            console.log('[saveWithTableName] 이미지 저장 요청 데이터 준비 완료');
-            
-            // 외부 이미지 저장 API 호출
-            const imageResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-              },
-              body: JSON.stringify(requestData)
-            });
-            
-            if (!imageResponse.ok) {
-              const errorText = await imageResponse.text();
-              console.error('[saveWithTableName] 이미지 저장 API 오류:', imageResponse.status, errorText);
-              console.warn('[saveWithTableName] 이미지 저장에 실패했지만 측정 데이터 저장은 계속합니다.');
-              
-              // FormData 방식으로 재시도
-              try {
-                console.log('[saveWithTableName] FormData 방식으로 이미지 저장 재시도');
-                
-                // 이미지를 Blob으로 변환
-                const beforeBlob = await (async () => {
-                  if (this.inputImageUrl && this.inputImageUrl.startsWith('data:')) {
-                    const res = await fetch(this.inputImageUrl);
-                    return await res.blob();
-                  } else if (this.inputImageUrl && this.inputImageUrl.startsWith('blob:')) {
-                    const res = await fetch(this.inputImageUrl);
-                    return await res.blob();
-                  } else if (this.inputImageUrl) {
-                    const res = await fetch(this.inputImageUrl);
-                    return await res.blob();
-                  } else {
-                    // Before 이미지가 없는 경우 빈 Blob 생성
-                    return new Blob([''], { type: 'image/png' });
-                  }
-                })();
-                
-                const afterBlob = await (async () => {
-                  if (this.imageUrl.startsWith('data:')) {
-                    const res = await fetch(this.imageUrl);
-                    return await res.blob();
-                  } else if (this.imageUrl.startsWith('blob:')) {
-                    const res = await fetch(this.imageUrl);
-                    return await res.blob();
-                  } else {
-                    const res = await fetch(this.imageUrl);
-                    return await res.blob();
-                  }
-                })();
-                
-                console.log('[saveWithTableName] Blob 변환 완료');
-                console.log('[saveWithTableName] Before Blob 타입:', beforeBlob.type, 'Size:', beforeBlob.size);
-                console.log('[saveWithTableName] After Blob 타입:', afterBlob.type, 'Size:', afterBlob.size);
-                
-                // FormData 구성
-                const formData = new FormData();
-                formData.append('title', requestData.title);
-                formData.append('description', requestData.description);
-                
-                // Before 이미지가 있는 경우에만 추가
-                if (this.inputImageUrl) {
-                  formData.append('before_file', beforeBlob, `before_${lot_wafer}.${beforeBlob.type.split('/')[1] || 'png'}`);
-                }
-                
-                // After 이미지 항상 추가 (필수)
-                formData.append('file', afterBlob, `after_${lot_wafer}.${afterBlob.type.split('/')[1] || 'png'}`);
-                formData.append('workflow_id', '');
-                formData.append('tags', JSON.stringify(['msa6', '측정']));
-                formData.append('is_result', 'true');
-                formData.append('table_name', selectedTable.table_name);
-                formData.append('lot_wafer', lot_wafer);
-                
-                console.log('[saveWithTableName] FormData 구성 완료, API 요청 시작...');
-                
-                // FormData API 호출
-                const formResponse = await fetch('http://localhost:8000/api/external_storage/upload-file', {
-                  method: 'POST',
-                  body: formData
-                });
-                
-                if (!formResponse.ok) {
-                  const errorText = await formResponse.text();
-                  console.error('[saveWithTableName] FormData 방식 API 오류:', formResponse.status, errorText);
-                  console.warn('[saveWithTableName] FormData 방식 이미지 저장에도 실패했지만 측정 데이터 저장은 계속합니다.');
-                } else {
-                  const formResult = await formResponse.json();
-                  console.log('[saveWithTableName] FormData 방식 이미지 저장 성공:', formResult);
-                  
-                  // 저장된 이미지 URL 로깅
-                  if (formResult.image_data) {
-                    console.log('[saveWithTableName] 저장된 Before 이미지 URL:', formResult.image_data.before_url || 'none');
-                    console.log('[saveWithTableName] 저장된 After 이미지 URL:', formResult.image_data.after_url || 'none');
-                  }
-                }
-              } catch (formError) {
-                console.error('[saveWithTableName] FormData 방식 이미지 저장 오류:', formError);
-                console.warn('[saveWithTableName] 모든 이미지 저장 방식이 실패했지만 측정 데이터 저장은 계속합니다.');
-              }
-            } else {
-              const imageResult = await imageResponse.json();
-              console.log('[saveWithTableName] 이미지 저장 성공:', imageResult);
-              
-              // 저장된 이미지 URL 로깅
-              if (imageResult.image_data) {
-                console.log('[saveWithTableName] 저장된 Before 이미지 URL:', imageResult.image_data.before_url || 'none');
-                console.log('[saveWithTableName] 저장된 After 이미지 URL:', imageResult.image_data.after_url || 'none');
-              }
-            }
-          } catch (imageError) {
-            console.error('[saveWithTableName] 이미지 저장 중 오류:', imageError);
-            console.warn('[saveWithTableName] 이미지 저장에 실패했지만 측정 데이터 저장은 계속합니다.');
-          }
-        }
-        
-        // 2. 측정 데이터 저장 (기존 로직)
-        // ... existing code ...
       } catch (error) {
-        console.error('[saveWithTableName] 측정 결과 저장 중 오류:', error);
-        this.showNotification(`측정 결과 저장 중 오류: ${error.message}`, 'error');
-        
-        // 로그 저장 - 측정 결과 저장 실패
-        LogService.logAction('save_measurements_error', {
-          error: error.message || '저장 실패'
-        });
-      } finally {
-        this.isSaving = false;
+        console.log('[blobToBase64SaveWithTableName] 오류 발생:', error.message);
+        this.showNotification(`저장 중 오류: ${error.message}`, 'error');
+        return { success: false, error: error.message };
       }
+    },
+    cleanupImageUrls() {
+      // 생성된 Blob URL 정리
+      console.log('[cleanupImageUrls] 이미지 URL 정리 시작');
+      try {
+        // Blob URL 정리
+        const urlsToRevoke = [
+          this.imageUrl, 
+          this.inputImageUrl, 
+          ...(this.measurements || [])
+            .filter(m => m && typeof m.imageUrl === 'string' && m.imageUrl.startsWith('blob:'))
+            .map(m => m.imageUrl)
+        ].filter(url => url && typeof url === 'string' && url.startsWith('blob:'));
+        
+        // 중복 제거
+        const uniqueUrls = [...new Set(urlsToRevoke)];
+        
+        console.log(`[cleanupImageUrls] ${uniqueUrls.length}개의 Blob URL 정리 중`);
+        
+        uniqueUrls.forEach(url => {
+          try {
+            URL.revokeObjectURL(url);
+            console.log(`[cleanupImageUrls] URL 정리됨: ${url.substring(0, 30)}...`);
+          } catch (e) {
+            console.warn(`[cleanupImageUrls] URL 정리 중 오류: ${e.message}`);
+          }
+        });
+      } catch (error) {
+        console.error('[cleanupImageUrls] URL 정리 중 오류:', error);
+      }
+      
+      // 로컬 URL 변수 초기화
+      this.imageUrl = null;
+      this.inputImageUrl = null;
+      this.resultImageUrl = null;
+      
+      console.log('[cleanupImageUrls] 이미지 URL 정리 완료');
     },
   },
   created() {
-    console.log('[created] MSA6 이미지 팝업 컴포넌트 생성');
+    // 이미지 URL을 로컬 변수에 복사 (prop과 분리)
+    this.localImageUrl = this.imageUrl;
+    this.localInputImageUrl = this.inputImageUrl;
     
-    // 브라우저 이벤트 리스너 등록
-    window.addEventListener('resize', this.handleWindowResize);
+    // 측정값을 로컬 배열에 깊은 복사 (prop과 분리)
+    this.initializeMeasurements();
     
-    // 로컬 스토리지에서 스케일바 설정 복원
-    this.restoreScaleBarSettings();
+    // 모드 초기화
+    if (this.config && this.config.defaultMode) {
+      this.mode = this.config.defaultMode;
+    }
     
-    // 로그 저장
-    LogService.logAction('msa6_popup_created', {
-        imageUrl: this.imageUrl ? this.imageUrl.substring(0, 50) + '...' : 'none'
-    });
+    // 로컬 키보드 이벤트 핸들러 설정
+    this.keydownHandler = (e) => {
+      // Escape 키로 팝업 닫기
+      if (e.key === 'Escape') {
+        this.closePopup();
+      }
+    };
+    
+    // 이벤트 리스너 등록
+    if (typeof document !== 'undefined') {
+      document.addEventListener('keydown', this.keydownHandler);
+    }
   },
 };
 </script>
@@ -5310,7 +5262,9 @@ export default {
 }
 
 .notification.success {
-  background-color: rgba(46, 125, 50, 0.9);
+  background-color: #4caf50 !important;
+  color: white !important;
+  border-left: 5px solid #2e7d32 !important;
 }
 
 .notification.warning {
@@ -5400,5 +5354,120 @@ export default {
   font-weight: bold;
 }
 
+.notification-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  min-width: 300px;
+  max-width: 80%;
+}
+
+.notification-message {
+  padding: 12px 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.notification-message.success {
+  background-color: #4caf50;
+  color: white;
+  border-left: 5px solid #2e7d32;
+}
+
+.notification-message.error {
+  background-color: #f44336;
+  color: white;
+  border-left: 5px solid #c62828;
+}
+
+.notification-message.warning {
+  background-color: #ff9800;
+  color: white;
+  border-left: 5px solid #ef6c00;
+}
+
+.notification-message.info {
+  background-color: #2196f3;
+  color: white;
+  border-left: 5px solid #1565c0;
+}
+
+.notification {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 20px;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  min-width: 300px;
+  max-width: 80%;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.notification.info {
+  background-color: #2196f3;
+  color: white;
+  border-left: 5px solid #1565c0;
+}
+
+.notification.success {
+  background-color: #4caf50;
+  color: white;
+  border-left: 5px solid #2e7d32;
+}
+
+.notification.warning {
+  background-color: #ff9800;
+  color: white;
+  border-left: 5px solid #ef6c00;
+}
+
+.notification.error {
+  background-color: #f44336;
+  color: white;
+  border-left: 5px solid #c62828;
+}
+
+.notification.success {
+  background-color: #4caf50 !important;
+  color: white !important;
+  border-left: 5px solid #2e7d32 !important;
+}
+
+.notification.error {
+  background-color: #f44336 !important;
+  color: white !important;
+  border-left: 5px solid #c62828 !important;
+}
+
+/* 수정: !important 추가로 강제 적용 */
+.notification.error {
+  background-color: #f44336 !important;
+  color: white !important;
+  border-left: 5px solid #c62828 !important;
+}
+
+/* Override notification colors with highest specificity */
+div.notification.success {
+  background-color: rgb(76, 175, 80) !important;
+  color: white !important;
+  border-left: 5px solid #2e7d32 !important;
+}
+div.notification.error {
+  background-color: rgb(244, 67, 54) !important;
+  color: white !important;
+  border-left: 5px solid #c62828 !important;
+}
 </style>
 

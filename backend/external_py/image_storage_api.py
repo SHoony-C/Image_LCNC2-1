@@ -634,34 +634,6 @@ async def check_title(data: Dict[str, Any] = Body(...)):
     except Exception as e:
         return {"status": "error", "message": f"제목 확인 중 오류 발생: {str(e)}"}
 
-# lot_wafer 중복 확인 API 추가
-@router.post("/check-lot-wafer")
-async def check_lot_wafer(data: Dict[str, Any] = Body(...)):
-    """lot_wafer 중복 여부를 확인하는 API"""
-    try:
-        lot_wafer = data.get("lot_wafer", "")
-        table_name = data.get("table_name", "")
-        
-        if not lot_wafer or not table_name:
-            return {"status": "error", "message": "lot_wafer와 table_name이 모두 필요합니다."}
-        
-        # 해당 테이블 폴더 경로
-        table_folder = os.path.join(IMAGE_STORE_PATH_RESULTS, table_name)
-        
-        # 테이블 폴더가 없으면 중복 아님
-        if not os.path.exists(table_folder):
-            return {"status": "available", "message": f"사용 가능한 lot_wafer입니다: {lot_wafer}"}
-        
-        # 해당 폴더에서 lot_wafer로 시작하는 파일 검색
-        for filename in os.listdir(table_folder):
-            if filename.startswith(f"{lot_wafer}_"):
-                return {"status": "duplicate", "message": f"이미 존재하는 lot_wafer입니다: {lot_wafer}"}
-        
-        return {"status": "available", "message": f"사용 가능한 lot_wafer입니다: {lot_wafer}"}
-            
-    except Exception as e:
-        return {"status": "error", "message": f"lot_wafer 확인 중 오류 발생: {str(e)}"}
-
 @router.post("/upload-end-image")
 async def upload_end_image(
     file: UploadFile = File(...),

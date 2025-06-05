@@ -17,7 +17,7 @@ MYSQL_SETTINGS = {
     'PORT': os.getenv('MYSQL_PORT', '3306'),
     'USER': os.getenv('MYSQL_USER', 'root'),
     'PASSWORD': os.getenv('MYSQL_PASSWORD', 'asdd*963'),
-    'DATABASE': os.getenv('MYSQL_DATABASE', 'lcnc_app'),
+    'DATABASE': os.getenv('MYSQL_DATABASE', 'image_app'),
 }
 
 # SQLAlchemy connection string
@@ -86,7 +86,7 @@ LCNC_SETTINGS = {
     'PORT': os.getenv('LCNC_PORT', MYSQL_SETTINGS['PORT']),
     'USER': os.getenv('LCNC_USER', MYSQL_SETTINGS['USER']),
     'PASSWORD': os.getenv('LCNC_PASSWORD', MYSQL_SETTINGS['PASSWORD']),
-    'DATABASE': os.getenv('LCNC_DATABASE', 'lcnc'),
+    'DATABASE': os.getenv('LCNC_DATABASE', MYSQL_SETTINGS['DATABASE']),
 }
 
 # LCNC 데이터베이스 연결 문자열
@@ -137,7 +137,7 @@ AUTH_SETTINGS = {
 MONGODB_SETTINGS = {
     'HOST': os.getenv('MONGO_HOST', 'localhost'),
     'PORT': int(os.getenv('MONGO_PORT', '27017')),
-    'DATABASE': os.getenv('MONGO_DATABASE', 'lcnc'),
+    'DATABASE': os.getenv('MONGO_DATABASE', 'image_app'),
     'AUTH_COLLECTION': 'auth_users',
     'ROLES_COLLECTION': 'user_roles',
 } 

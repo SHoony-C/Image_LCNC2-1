@@ -16,7 +16,7 @@
               <input 
                 type="text" 
                 v-model="imageDirectory" 
-                placeholder="예: D:\image_set_url\images"
+                placeholder="예: D:\image_set_url\workflow_images"
               />
             </div>
             <div class="actions">
@@ -89,7 +89,7 @@ export default {
   data() {
     return {
       isProcessing: false,
-      imageDirectory: 'D:\\image_set_url\\images',
+      imageDirectory: 'D:\\image_set_url\\workflow_images',
       processingStatus: null,
       vectorResults: [],
       showAllResults: false,
