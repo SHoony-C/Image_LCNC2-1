@@ -426,9 +426,26 @@ export default {
     handleImageError(event) {
       const img = event.target;
       
-      // 이미지 로드 실패 시 기본 이미지로 대체
-      img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjY2NjYyIgc3Ryb2tlLXdpZHRoPSIyIj48cGF0aCBkPSJNMTAgMTQgMTIgMTEuNSAxNCAxNCIvPjxwYXRoIGQ9Ik0yMCAxM3YtNGExIDEgMCAwIDAtMS0xSDVhMSAxIDAgMCAwLTEgMXY0Ii8+PHBhdGggZD0iTTEgMTd2NGExIDEgMCAwIDAgMSAxaDIwYTEgMSAwIDAgMCAxLTF2LTRhMSAxIDAgMCAwLTEtMUgyYTEgMSAwIDAgMC0xIDF6Ii8+PC9zdmc+';
+      // 완전한 SVG 플레이스홀더 이미지 생성
+      const placeholderSvg = `<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="200" height="200" fill="#F5F5F5"/>
+        <path d="M75 90L90 110L110 90L130 120L70 120L75 90Z" fill="#CCCCCC"/>
+        <circle cx="120" cy="80" r="10" fill="#CCCCCC"/>
+        <path d="M160 50H40V150H160V50Z" stroke="#CCCCCC" stroke-width="4"/>
+        <text x="100" y="170" text-anchor="middle" fill="#999" font-family="Arial" font-size="12">이미지 없음</text>
+      </svg>`;
+      
+      // SVG를 Base64로 인코딩
+      const base64Svg = btoa(unescape(encodeURIComponent(placeholderSvg)));
+      img.src = `data:image/svg+xml;base64,${base64Svg}`;
       img.alt = '이미지 로드 실패';
+      
+      // 원본 URL 저장 (디버깅용)
+      if (!img.dataset.originalSrc) {
+        img.dataset.originalSrc = img.src;
+      }
+      
+      console.warn('MSA3 Image Display: Image load failed, using placeholder. Original URL:', img.dataset.originalSrc || 'unknown');
     },
     
     // 이미지 URL 생성

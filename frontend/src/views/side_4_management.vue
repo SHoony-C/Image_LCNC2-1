@@ -376,14 +376,14 @@ export default {
         }
         
         console.log("API 요청 정보:");
-        console.log("- 엔드포인트: /api/users/users");
+        console.log("- 엔드포인트: http://localhost:8000/api/users/users");
         console.log("- 메서드: GET");
         console.log("- 헤더: Authorization: Bearer " + token.substring(0, 5) + "...[보안을 위해 일부만 표시]");
         console.log("- 예상 SQL 쿼리: SELECT * FROM users");
         console.log("요청 시작 시간:", new Date().toISOString());
         
         // MySQL 엔드포인트 사용
-        const response = await axios.get('/api/users/users', {
+        const response = await axios.get('http://localhost:8000/api/users/users', {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -514,7 +514,7 @@ export default {
         }
         
         console.log("API 요청 정보:");
-        console.log("- 엔드포인트: /api/users/user/" + this.editingUser.id);
+        console.log("- 엔드포인트: http://localhost:8000/api/users/user/" + this.editingUser.id);
         console.log("- 메서드: PUT");
         console.log("- 요청 데이터:", JSON.stringify(userData, null, 2));
         console.log("- 예상 SQL 쿼리: UPDATE users SET email=?, full_name=?, permission=? WHERE id=?");
@@ -522,7 +522,7 @@ export default {
         console.log("요청 시작 시간:", new Date().toISOString());
         
         // MySQL 엔드포인트에서 MySQL 엔드포인트로 변경
-        const response = await axios.put(`/api/users/user/${this.editingUser.id}`, userData, {
+        const response = await axios.put(`http://localhost:8000/api/users/user/${this.editingUser.id}`, userData, {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -574,7 +574,7 @@ export default {
         
         // 사용자 추가 정보 로깅
         console.log("API 요청 정보:");
-        console.log("- 엔드포인트: /api/users/user");
+        console.log("- 엔드포인트: http://localhost:8000/api/users/user");
         console.log("- 메서드: POST");
         console.log("- 요청 데이터:");
         console.log("  username:", this.newUser.username);
@@ -587,7 +587,7 @@ export default {
         console.log("요청 시작 시간:", new Date().toISOString());
         
         // API 호출
-        const response = await axios.post('/api/users/user', formData, {
+        const response = await axios.post('http://localhost:8000/api/users/user', formData, {
           headers: {
             Authorization: `Bearer ${token}`
           }
@@ -633,7 +633,7 @@ export default {
         const newStatus = !user.is_active;
         
         console.log("API 요청 정보:");
-        console.log("- 엔드포인트: /api/users/user/" + user.id);
+        console.log("- 엔드포인트: http://localhost:8000/api/users/user/" + user.id);
         console.log("- 메서드: PUT");
         console.log("- 요청 데이터:", JSON.stringify({ is_active: newStatus }, null, 2));
         console.log("- 예상 SQL 쿼리: UPDATE users SET is_active = ? WHERE id = ?");
@@ -641,7 +641,7 @@ export default {
         console.log("요청 시작 시간:", new Date().toISOString());
         
         // MySQL 엔드포인트로 변경
-        const response = await axios.put(`/api/users/user/${user.id}`, 
+        const response = await axios.put(`http://localhost:8000/api/users/user/${user.id}`, 
           { is_active: newStatus },
           {
             headers: {
@@ -696,14 +696,14 @@ export default {
         const token = localStorage.getItem('token');
         
         console.log("API 요청 정보:");
-        console.log("- 엔드포인트: /api/users/user/" + this.userToDelete.id);
+        console.log("- 엔드포인트: http://localhost:8000/api/users/user/" + this.userToDelete.id);
         console.log("- 메서드: DELETE");
         console.log("- 예상 SQL 쿼리: DELETE FROM users WHERE id = ?");
         console.log("- 쿼리 파라미터:", [this.userToDelete.id]);
         console.log("요청 시작 시간:", new Date().toISOString());
         
         // MySQL 엔드포인트에서 MySQL 엔드포인트로 변경
-        const response = await axios.delete(`/api/users/user/${this.userToDelete.id}`, {
+        const response = await axios.delete(`http://localhost:8000/api/users/user/${this.userToDelete.id}`, {
           headers: {
             Authorization: `Bearer ${token}`
           }

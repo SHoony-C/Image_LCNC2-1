@@ -222,7 +222,7 @@ export default {
         formData.append('username', this.loginForm.username);
         formData.append('password', this.loginForm.password);
         
-        const response = await axios.post('/api/users/login', formData, {
+        const response = await axios.post('http://localhost:8000/api/users/login', formData, {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded'
           }
@@ -282,7 +282,7 @@ export default {
         
         console.log('Sending registration data:', formData);
         
-        const response = await axios.post('/api/users/register', formData);
+        const response = await axios.post('http://localhost:8000/api/users/register', formData);
         
         if (response.data.status === 'success') {
           this.showSignup = false;
@@ -311,7 +311,7 @@ export default {
     },
     handleSSOLogin() {
       // SSO 로그인 페이지로 리다이렉트
-      window.location.href = '/api/auth/auth_sh';
+      window.location.href = 'http://localhost:8000/api/auth/auth_sh';
     },
     handleGoogleLogin() {
       // Google OAuth 로그인 엔드포인트로 리다이렉트

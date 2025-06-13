@@ -30,7 +30,7 @@ const actions = {
   async login({ commit }, credentials) {
     try {
       console.log('로그인 시도:', credentials.username)
-      const response = await axios.post('/api/auth/login', credentials)
+      const response = await axios.post('http://localhost:8000/api/auth/login', credentials)
       console.log('로그인 성공:', response.data)
       commit('SET_TOKEN', response.data.token)
       commit('SET_USER', response.data.user)
@@ -44,7 +44,7 @@ const actions = {
     console.log('로그아웃 실행')
     try {
       // 백엔드 로그아웃 API 호출 - auth/slo 엔드포인트 사용
-      await axios.get('/api/auth/slo')
+      await axios.get('http://localhost:8000/api/auth/slo')
       console.log('백엔드 로그아웃 성공')
     } catch (error) {
       console.error('백엔드 로그아웃 요청 실패:', error)
@@ -65,7 +65,7 @@ const actions = {
     
     try {
       console.log('인증 상태 확인 요청 시작')
-      const response = await axios.get('/api/auth/check-auth', {
+      const response = await axios.get('http://localhost:8000/api/auth/check-auth', {
         params: { token: state.token }
       })
       
@@ -139,7 +139,7 @@ const actions = {
         if (hash_id_token) params.id_token = hash_id_token;
         if (hash_access_token) params.access_token = hash_access_token;
         
-        return axios.get('/api/auth/check-auth', { params })
+        return axios.get('http://localhost:8000/api/auth/check-auth', { params })
         .then(response => {
           console.log('토큰 검증 응답:', response.data);
           if (response.data.authenticated) {
@@ -231,7 +231,7 @@ const actions = {
         if (id_token) params.id_token = id_token;
         if (access_token) params.access_token = access_token;
         
-        return axios.get('/api/auth/check-auth', { params })
+        return axios.get('http://localhost:8000/api/auth/check-auth', { params })
         .then(response => {
           console.log('토큰 검증 응답:', response.data);
           if (response.data.authenticated) {
@@ -257,7 +257,7 @@ const actions = {
         
         // 토큰 검증 API 호출
         console.log('토큰 검증 API 호출');
-        return axios.get('/api/auth/check-auth', {
+        return axios.get('http://localhost:8000/api/auth/check-auth', {
           params: { token }
         })
         .then(response => {

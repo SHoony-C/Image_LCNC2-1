@@ -260,7 +260,7 @@ export default {
       }
       
       try {
-        const response = await axios.get('/api/auth/check-auth', {
+        const response = await axios.get('http://localhost:8000/api/auth/check-auth', {
           params: { token }
         });
         
@@ -300,7 +300,7 @@ export default {
     },
     async handleLogout() {
       try {
-        await axios.get('/api/auth/slo');
+        await axios.get('http://localhost:8000/api/auth/slo');
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem('remember');

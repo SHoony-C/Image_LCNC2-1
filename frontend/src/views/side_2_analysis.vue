@@ -594,8 +594,8 @@ export default {
       try {
         console.log('Fetching data...');
         const [measurementResponse, defectResponse] = await Promise.all([
-          axios.get('http://127.0.0.1:8000/api/side2/data'),
-          axios.get('http://127.0.0.1:8000/api/side2/data_defect')
+          axios.get('http://localhost:8000/api/side2/data'),
+          axios.get('http://localhost:8000/api/side2/data_defect')
         ]);
         
         console.log('Measurement API response:', measurementResponse.data);

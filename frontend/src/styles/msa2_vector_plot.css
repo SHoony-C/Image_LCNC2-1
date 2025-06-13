@@ -1,0 +1,117 @@
+/* 강제 고정 크기 및 스크롤 스타일 */
+.msa-component {
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  max-height: 100vh !important;
+}
+
+.component-header {
+  height: 48px !important;
+  min-height: 48px !important;
+  max-height: 48px !important;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 0 15px !important;
+  flex: 0 0 48px !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-left i {
+  color: #555;
+}
+
+.content-container {
+  display: flex !important;
+  flex-direction: column !important;
+  height: calc(100% - 48px) !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  position: relative !important;
+  flex: 1 1 auto !important; 
+}
+
+.plot-container {
+  height: 100% !important;
+  width: 100% !important;
+  position: relative !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  flex: 1 !important;
+}
+
+#plotly-visualization {
+  width: 100% !important;
+  height: 100% !important;
+  flex: 1 !important;
+}
+
+/* 로딩 및 에러 메시지 스타일 */
+.loading-overlay {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 10 !important;
+}
+
+.loading-spinner {
+  border: 3px solid #f3f3f3 !important;
+  border-top: 3px solid #3498db !important;
+  border-radius: 50% !important;
+  width: 30px !important;
+  height: 30px !important;
+  animation: spin 1s linear infinite !important;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-message {
+  margin-top: 10px !important;
+  color: #666 !important;
+  font-size: 14px !important;
+}
+
+.error-message {
+  color: #dc3545 !important;
+  text-align: center !important;
+  padding: 10px !important;
+  margin-top: 10px !important;
+}
+
+.status-message {
+  position: fixed !important;
+  top: 20px !important;
+  right: 20px !important;
+  background: rgba(0, 0, 0, 0.8) !important;
+  color: white !important;
+  padding: 10px 20px !important;
+  border-radius: 4px !important;
+  z-index: 1000 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+} 

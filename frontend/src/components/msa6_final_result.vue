@@ -180,15 +180,17 @@ export default {
     openMeasurementPopup() {
       if (this.finalImage) {
         console.log('Opening measurement popup with image:', this.finalImage)
+        
+        // 먼저 showMeasurementPopup을 true로 설정
         this.showMeasurementPopup = true
         
         // 세션 스토리지 플래그 초기화 (팝업을 명시적으로 열었으므로 플래그 초기화)
         sessionStorage.removeItem('msa6_no_auto_popup');
         console.log('MSA6: 사용자가 수동으로 팝업을 열었습니다. 자동 팝업 방지 플래그를 초기화합니다.');
         
-        // First make sure the container elements are visible
+        // DOM 업데이트 후 팝업 컴포넌트 메서드 호출
         this.$nextTick(() => {
-          // 먼저 팝업 관련 요소들 표시 설정
+          // 팝업 관련 요소들 표시 설정
           const teleportElements = document.querySelectorAll('.msa6-image-popup-container');
           teleportElements.forEach(element => {
             element.style.display = 'block';
@@ -199,14 +201,16 @@ export default {
           if (popupContainer) {
             popupContainer.style.removeProperty('display');
             popupContainer.style.removeProperty('visibility');
+            popupContainer.style.display = 'block';
+            popupContainer.style.visibility = 'visible';
           }
           
           console.log('MSA6: 팝업 컨테이너 표시 설정 완료');
           
-          // 이제 팝업 컴포넌트의 openPopup 메서드 호출
+          // 팝업 컴포넌트의 openPopup 메서드 호출
           if (this.$refs.measurementPopup && typeof this.$refs.measurementPopup.openPopup === 'function') {
             try {
-              this.$refs.measurementPopup.openPopup(this.finalImage);
+              this.$refs.measurementPopup.openPopup();
               console.log('MSA6: 측정 팝업 openPopup 메서드 호출 완료');
             } catch (error) {
               console.error('MSA6: openPopup 메서드 호출 중 오류 발생:', error);

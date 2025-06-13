@@ -391,7 +391,7 @@ export default {
         console.log("SQL DEBUG: Fetching users from /api/users/users-noauth (인증 없는 엔드포인트)");
         
         // 인증이 필요 없는 엔드포인트 사용
-        const response = await axios.get('/api/users/users-noauth', {
+        const response = await axios.get('http://localhost:8000/api/users/users-noauth', {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
@@ -505,13 +505,13 @@ export default {
         }
         
         console.log("API Request - Update User:", {
-          url: `/api/users/user-noauth/${this.editingUser.id}`,
+          url: `http://localhost:8000/api/users/user-noauth/${this.editingUser.id}`,
           method: 'put',
           userId: this.editingUser.id
         });
         
         // 인증 없는 엔드포인트 사용
-        const response = await axios.put(`/api/users/user-noauth/${this.editingUser.id}`, userData, {
+        const response = await axios.put(`http://localhost:8000/api/users/user-noauth/${this.editingUser.id}`, userData, {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
@@ -571,7 +571,7 @@ export default {
         console.log("요청 시작 시간:", new Date().toISOString());
         
         // API 호출 - 인증 필요 없는 엔드포인트 사용
-        const response = await axios.post('/api/users/user-noauth', userData, {
+        const response = await axios.post('http://localhost:8000/api/users/user-noauth', userData, {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json'
@@ -610,7 +610,7 @@ export default {
         const newStatus = !user.is_active;
         
         console.log("API Request - Toggle Status:", {
-          url: `/api/users/user/${user.id}`,
+          url: `http://localhost:8000/api/users/user/${user.id}`,
           method: 'put',
           userId: user.id,
           newStatus: newStatus
@@ -618,7 +618,7 @@ export default {
         
         const response = await axios({
           method: 'put',
-          url: `/api/users/user/${user.id}`,
+          url: `http://localhost:8000/api/users/user/${user.id}`,
           data: { is_active: newStatus },
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -659,13 +659,13 @@ export default {
         console.log("함수 호출: deleteUser() - 인증 없는 엔드포인트 사용");
         
         console.log("API Request - Delete User:", {
-          url: `/api/users/user-noauth/${this.userToDelete.id}`,
+          url: `http://localhost:8000/api/users/user-noauth/${this.userToDelete.id}`,
           method: 'delete',
           userId: this.userToDelete.id
         });
         
         // 인증 없는 엔드포인트 사용
-        const response = await axios.delete(`/api/users/user-noauth/${this.userToDelete.id}`, {
+        const response = await axios.delete(`http://localhost:8000/api/users/user-noauth/${this.userToDelete.id}`, {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json'

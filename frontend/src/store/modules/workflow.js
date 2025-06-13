@@ -33,7 +33,7 @@ const mutations = {
 const actions = {
   async fetchWorkflows({ commit, rootState }) {
     try {
-      const response = await axios.get('/api/workflows', {
+      const response = await axios.get('http://localhost:8000/api/workflows', {
         headers: {
           Authorization: `Bearer ${rootState.auth.token}`
         }
@@ -48,7 +48,7 @@ const actions = {
 
   async createWorkflow({ commit, rootState }, workflowData) {
     try {
-      const response = await axios.post('/api/workflows', workflowData, {
+      const response = await axios.post('http://localhost:8000/api/workflows', workflowData, {
         headers: {
           Authorization: `Bearer ${rootState.auth.token}`
         }
@@ -63,7 +63,7 @@ const actions = {
 
   async updateWorkflow({ commit, rootState }, { id, workflowData }) {
     try {
-      const response = await axios.put(`/api/workflows/${id}`, workflowData, {
+      const response = await axios.put(`http://localhost:8000/api/workflows/${id}`, workflowData, {
         headers: {
           Authorization: `Bearer ${rootState.auth.token}`
         }
@@ -78,7 +78,7 @@ const actions = {
 
   async deleteWorkflow({ commit, rootState }, workflowId) {
     try {
-      await axios.delete(`/api/workflows/${workflowId}`, {
+      await axios.delete(`http://localhost:8000/api/workflows/${workflowId}`, {
         headers: {
           Authorization: `Bearer ${rootState.auth.token}`
         }
@@ -93,7 +93,7 @@ const actions = {
   async runWorkflow({ commit, rootState }, workflowId) {
     commit('SET_RUNNING', true)
     try {
-      const response = await axios.post(`/api/workflows/${workflowId}/run`, null, {
+      const response = await axios.post(`http://localhost:8000/api/workflows/${workflowId}/run`, null, {
         headers: {
           Authorization: `Bearer ${rootState.auth.token}`
         }

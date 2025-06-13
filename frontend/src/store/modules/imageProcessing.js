@@ -86,7 +86,7 @@ const actions = {
       const formData = new FormData()
       formData.append('image', imageFile)
       
-      const response = await axios.post('/api/msa1/upload', formData, {
+      const response = await axios.post('http://localhost:8000/api/msa1/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         },
@@ -140,7 +140,7 @@ const actions = {
         progress: 0
       })
       
-      const response = await axios.post('/api/msa1/preprocess', {
+      const response = await axios.post('http://localhost:8000/api/msa1/preprocess', {
         imageId,
         options
       })
@@ -178,7 +178,7 @@ const actions = {
         stepsCount: steps.length
       })
       
-      const response = await axios.post('/api/msa5/workflow', {
+      const response = await axios.post('http://localhost:8000/api/msa5/workflow', {
         name,
         steps
       })
@@ -207,7 +207,7 @@ const actions = {
   // Poll for processing status for services that don't support WebSockets
   async pollProcessingStatus({ commit }, { serviceId, jobId }) {
     try {
-      const response = await axios.get(`/api/${serviceId}/status/${jobId}`)
+      const response = await axios.get(`http://localhost:8000/api/${serviceId}/status/${jobId}`)
       
       commit('UPDATE_PROCESSING_STATUS', {
         service: serviceId,
