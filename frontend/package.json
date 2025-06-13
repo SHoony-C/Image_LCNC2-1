@@ -2,45 +2,53 @@
   "name": "image-lcnc-frontend",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=16.0.0 <=20.x",
+    "npm": ">=8.0.0 <=10.x"
+  },
   "scripts": {
-    "serve": "vue-cli-service serve",
-    "build": "vue-cli-service build",
-    "lint": "vue-cli-service lint"
+    "serve": "vue-cli-service serve --skip-plugins @vue/cli-plugin-eslint",
+    "build": "vue-cli-service build --skip-plugins @vue/cli-plugin-eslint",
+    "lint": "vue-cli-service lint",
+    "fix-deps": "node fix-vue-deps.js"
   },
   "dependencies": {
     "@fortawesome/fontawesome-free": "^6.4.2",
     "@mdi/font": "^7.2.96",
-    "@vue-flow/background": "^1.2.0",
-    "@vue-flow/controls": "^1.0.0",
-    "@vue-flow/core": "^1.20.0",
-    "@vue-flow/minimap": "^1.1.0",
+    "@vue-flow/background": "^1.3.0",
+    "@vue-flow/controls": "^1.1.0",
+    "@vue-flow/core": "^1.25.0",
+    "@vue-flow/minimap": "^1.4.0",
     "axios": "^1.4.0",
     "chart.js": "^3.9.1",
     "core-js": "^3.30.2",
     "d3": "^7.8.5",
-    "pinia": "^2.1.4",
-    "plotly.js-dist": "^2.24.3",
-    "plotly.js-dist-min": "^2.24.3",
+    "pinia": "^2.1.6",
+    "plotly.js-dist": "^2.25.2",
+    "plotly.js-dist-min": "^2.25.2",
     "socket.io-client": "^4.7.2",
-    "vue": "^2.7.16",
+    "vue": "^3.2.47",
     "vue-chartjs": "^4.1.1",
-    "vue-router": "^3.6.5",
+    "vue-router": "^4.2.4",
     "vue3-plotly": "^0.0.7",
-    "vuex": "^3.6.2"
+    "vuex": "^4.1.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.22.5",
-    "@babel/eslint-parser": "^7.22.5",
-    "@vue/cli-plugin-babel": "~5.0.8",
+    "@babel/core": "^7.22.10",
+    "@babel/eslint-parser": "^7.22.10",
+    "@babel/preset-env": "^7.22.10",
+    "@vue/cli-plugin-babel": "^5.0.0",
+    "@vue/cli-plugin-eslint": "^5.0.8",
     "@vue/cli-plugin-router": "~5.0.8",
     "@vue/cli-plugin-vuex": "~5.0.8",
-    "@vue/cli-service": "~5.0.8",
-    "vue-template-compiler": "^2.7.16"
+    "@vue/cli-service": "^5.0.8",
+    "@vue/compiler-sfc": "^3.2.47",
+    "eslint": "^8.46.0",
+    "eslint-plugin-vue": "^9.16.1",
+    "vue-eslint-parser": "^9.3.1"
   },
-  "browserslist": [
-    "> 1%",
-    "last 2 versions",
-    "not dead",
-    "not ie 11"
-  ]
+  "resolutions": {
+    "vue": "3.2.47",
+    "vue-template-compiler": "2.7.16"
+  }
 }

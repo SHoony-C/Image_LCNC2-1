@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="msa6-image-popup-container">
   <Teleport to="body">
       <div class="image-measurement-popup" v-show="isVisible" @click.self="closePopup">
@@ -151,6 +151,13 @@
                 </button>
                 <button class="option-btn" :class="{ active: measurementMode === 'area-horizontal' }" @click="setMode('area-horizontal')" title="가로 방향 영역 측정">
                   <i class="fas fa-grip-lines"></i>
+                </button>
+              </div>
+
+              <div class="option-group">
+                <span class="option-group-label">삭제</span>
+                <button class="option-btn" :class="{ active: isDeleteMode }" @click="toggleDeleteMode" title="측정값 삭제 (D)">
+                  <i class="fas fa-trash"></i>
                 </button>
               </div>
 
@@ -550,10 +557,17 @@ export default {
       magnifierZoom: 5,
       // 단축키 도움말 표시 상태
       showShortcutHelp: false,
+      isDKeyPressed: false,
+      tempDragLine: null,
+      // 삭제 모드 관련 변수 추가
+      isDeleteMode: false,
+      deleteStart: null,
+      deleteEnd: null,
     };
   },
   mounted() {
     console.log('[mounted] 컴포넌트 마운트됨');
+    
     
     // 페이지 새로고침 시 수동 스케일바 설정 항상 초기화
     this.manualScaleBarSet = false;
@@ -1221,134 +1235,182 @@ export default {
       return value;
     },
     startMeasurement(e) {
+      if (!this.$refs.canvas) {
+        console.warn('[startMeasurement] Canvas element not found');
+        return;
+      }
+
+      if (this.isDeleteMode) {
+        try {
+          const pos = this.getLocalPos(e);
+          if (!pos) return;
+          this.deleteStart = pos;
+          this.deleteEnd = null;
+          this.isMeasuring = true;
+          this.render();
+        } catch (error) {
+          console.error('[startMeasurement] Error in delete mode:', error);
+        }
+        return;
+      }
+
+      const pos = this.getLocalPos(e);
+      if (!pos) return;
+
       if (this.isAreaSelectionMode) {
-        const pos = this.getLocalPos(e);
         this.areaSelectionStart = pos;
-        this.areaSelectionEnd = pos;
+        this.areaSelectionEnd = null;
         this.isMeasuring = true;
+        this.render();
+        return;
+      }
+
+      // d키가 눌린 상태에서 클릭한 경우
+      if (this.isDKeyPressed) {
+        this.tempDragLine = {
+          start: {...pos},
+          end: {...pos}
+        };
         this.render();
         return;
       }
 
       // 수동 스케일바 그리기 모드인 경우
       if (this.isDrawingScaleBar) {
-        e.preventDefault();
-        e.stopPropagation();
-        const pos = this.getLocalPos(e);
-        
-        // 스케일바 측정 시작
         this.currentMeasurement = {
           start: {...pos},
           end: {...pos},
           isScaleBar: true
         };
-        
         this.isMeasuring = true;
         this.render();
         return;
       }
 
-      // 기존 측정 로직
-      e.preventDefault();
-      e.stopPropagation();
-      const pos = this.getLocalPos(e);
+      this.isMeasuring = true;
 
-      this.debugInfo.lastAction = `시작: ${this.measurementMode} 모드에서 측정 시작 (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`;
-      console.log(this.debugInfo.lastAction);
-      
-      // 측정 시작 시 로깅 추가
-      console.log(`[startMeasurement] 모드: ${this.measurementMode}, 기준선 있음: ${!!this.activeReferenceLine}, 위치: (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-
-      if (this.measurementMode === 'reference') {
-        // 기준선 측정 시작
+      // 기존 측정 시작 로직
+      if (this.measurementMode === 'line' || this.measurementMode === 'reference') {
         this.currentMeasurement = {
           start: {...pos},
-          end: {...pos},
-          itemId: 'ref-' + this.referenceLines.length,
-          subItemId: 'reference',
-          value: 0,
-          isReference: true,
-          brightness: this.calculateBrightness(pos.x, pos.y),
-          color: this.referenceLineColor // 선택된 색상 저장
+          end: {...pos}
         };
-        console.log('기준선 측정 시작', JSON.stringify(this.currentMeasurement));
-      } else if (this.measurementMode === 'line') {
-        this.currentMeasurement = {
-          start: {...pos},
-          end: {...pos},
-          itemId: this.nextId.toString(),
-          subItemId: `${this.nextId}-${this.subItemPrefix}1`,
-          value: 0,
-          brightness: this.calculateBrightness(pos.x, pos.y)
-        };
-      } else if (this.measurementMode === 'circle') {
-        this.areaStart = {...pos};
-        this.areaEnd = {...pos};
-      } else {
+      } else if (this.measurementMode === 'circle' || this.measurementMode.startsWith('area')) {
         this.areaStart = {...pos};
         this.areaEnd = {...pos};
       }
       
-      this.isMeasuring = true;
       this.render();
     },
     updateMeasurement(e) {
+      if (!this.$refs.canvas) {
+        console.warn('[updateMeasurement] Canvas element not found');
+        return;
+      }
+
+      if (this.isDeleteMode) {
+        // 삭제 모드에서는 isMeasuring이 true이고 시작점이 있을 때만 업데이트
+        if (!this.isMeasuring || !this.deleteStart) {
+          return;
+        }
+        try {
+          const pos = this.getLocalPos(e);
+          if (!pos) return;
+          this.deleteEnd = pos;
+          this.render();
+        } catch (error) {
+          console.error('[updateMeasurement] Error in delete mode:', error);
+        }
+        return;
+      }
+
       if (!this.isMeasuring) return;
-      
+
+      const pos = this.getLocalPos(e);
+      if (!pos) return;
+
       if (this.isAreaSelectionMode) {
-        const pos = this.getLocalPos(e);
         this.areaSelectionEnd = pos;
+        this.render();
+        return;
+      }
+
+      // d키가 눌린 상태에서 드래그 중인 경우
+      if (this.isDKeyPressed && this.tempDragLine) {
+        this.tempDragLine.end = {...pos};
         this.render();
         return;
       }
 
       // 수동 스케일바 그리기 모드인 경우
       if (this.isDrawingScaleBar && this.currentMeasurement) {
-        const pos = this.getLocalPos(e);
         this.currentMeasurement.end = {...pos};
         this.render();
         return;
       }
 
       // 기존 측정 업데이트 로직
-      const pos = this.getLocalPos(e);
-
-      // 측정 업데이트 시 로깅 추가 - 너무 많은 로그를 방지하기 위해 샘플링
-      if (Math.random() < 0.05) { // 5%의 확률로 로그 출력
-        console.log(`[updateMeasurement] 모드: ${this.measurementMode}, 기준선 있음: ${!!this.activeReferenceLine}, 위치: (${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-      }
-
       if ((this.measurementMode === 'line' || this.measurementMode === 'reference') && this.currentMeasurement) {
         this.currentMeasurement.end = {...pos};
-        
-        // 실시간으로 선 미리보기를 위한 경계 감지 제거 - 드래그 완료 후에만 경계 감지 적용
-        if (this.measurementMode === 'reference') {
-          console.log('기준선 업데이트', 
-            `시작(${this.currentMeasurement.start.x.toFixed(0)}, ${this.currentMeasurement.start.y.toFixed(0)})`, 
-            `끝(${pos.x.toFixed(0)}, ${pos.y.toFixed(0)})`);
-        }
-      } else if (this.measurementMode === 'circle' || this.areaStart) {
+      } else if (this.measurementMode === 'circle' || this.measurementMode.startsWith('area')) {
         this.areaEnd = {...pos};
       }
       
       this.render();
     },
-    endMeasurement(evt) {
-      if (!this.isMeasuring) return;
-      
-      // 측정 모드 종료
-      this.isMeasuring = false;
-      
-      // 마우스 위치로부터 끝점 설정
-      const rect = this.$refs.canvas.getBoundingClientRect();
-      const offsetX = evt.clientX - rect.left;
-      const offsetY = evt.clientY - rect.top;
-          
-      if (this.currentMeasurement) {
-        this.currentMeasurement.end = { x: offsetX, y: offsetY };
+    endMeasurement(e) {
+      if (!this.$refs.canvas) {
+        console.warn('[endMeasurement] Canvas element not found');
+        return;
       }
 
-      // 스케일바 모드인 경우
+      if (this.isDeleteMode) {
+        try {
+          if (this.isMeasuring && this.deleteStart && this.deleteEnd) {
+            this.deleteMeasurementsInPath();
+          }
+        } catch (error) {
+          console.error('[endMeasurement] Error in delete mode:', error);
+        } finally {
+          // 삭제 모드의 모든 상태 초기화
+          this.deleteStart = null;
+          this.deleteEnd = null;
+          this.isMeasuring = false;
+          this.render();
+        }
+        return;
+      }
+
+      if (!this.isMeasuring) return;
+
+      if (this.isAreaSelectionMode) {
+        if (this.areaSelectionStart && this.areaSelectionEnd) {
+          // 영역 선택 처리
+          const width = Math.abs(this.areaSelectionEnd.x - this.areaSelectionStart.x);
+          const height = Math.abs(this.areaSelectionEnd.y - this.areaSelectionStart.y);
+          
+          if (width > 10 && height > 10) {
+            this.selectedAreaRect = {
+              start: { ...this.areaSelectionStart },
+              end: { ...this.areaSelectionEnd }
+            };
+            console.log('Selected area rect set:', this.selectedAreaRect);
+          }
+        }
+        this.areaSelectionStart = null;
+        this.areaSelectionEnd = null;
+        this.isMeasuring = false;
+        this.render();
+        return;
+      }
+
+      // d키가 눌린 상태에서 드래그가 끝난 경우
+      if (this.isDKeyPressed && this.tempDragLine) {
+        this.handleDragEnd();
+        return;
+      }
+
+      // 수동 스케일바 그리기 모드인 경우
       if (this.isDrawingScaleBar && this.currentMeasurement) {
         const distance = Math.sqrt(
           Math.pow(this.currentMeasurement.end.x - this.currentMeasurement.start.x, 2) +
@@ -1409,70 +1471,34 @@ export default {
         }
         
         this.currentMeasurement = null;
+        this.isMeasuring = false;
         this.render();
         return;
       }
 
       // 기존 측정 종료 로직
-      if (this.isAreaSelectionMode) {
-        if (this.areaSelectionStart && this.areaSelectionEnd) {
-          const width = Math.abs(this.areaSelectionEnd.x - this.areaSelectionStart.x);
-          const height = Math.abs(this.areaSelectionEnd.y - this.areaSelectionStart.y);
-          
-          if (width > 10 && height > 10) {
-            this.selectedAreaRect = {
-              start: { ...this.areaSelectionStart },
-              end: { ...this.areaSelectionEnd }
-            };
-            console.log('Selected area rect set:', this.selectedAreaRect);
-          }
-        }
-        this.render();
-        return;
-      }
-
-      if (this.measurementMode === 'reference') {
-        if (this.currentMeasurement && 
-            this.calculateValue(this.currentMeasurement.start, this.currentMeasurement.end) > 5) {
-          
-          const referenceLine = {
-            start: {...this.currentMeasurement.start},
-            end: {...this.currentMeasurement.end},
-            itemId: this.currentMeasurement.itemId,
-            subItemId: this.currentMeasurement.subItemId,
-            isReference: true,
-            value: this.calculateValue(this.currentMeasurement.start, this.currentMeasurement.end),
-            color: this.currentMeasurement.color // 선택된 색상 저장
-          };
-          
-          this.referenceLines.push(referenceLine);
-          this.activeReferenceLine = referenceLine;
-          
-          console.log('기준선 추가 완료', JSON.stringify(referenceLine));
-          this.debugInfo.referenceLinesCount = this.referenceLines.length;
-          console.log(`총 기준선 개수: ${this.referenceLines.length}`);
-        }
-      } else if (this.measurementMode === 'line') {
-        if (this.currentMeasurement && 
-            this.calculateValue(this.currentMeasurement.start, this.currentMeasurement.end) > 5) {
-          
-          // 측정선의 끝점을 객체 경계에 맞게 조정
-          const trimmedMeasurement = this.trimMeasurementToObjectBoundaries(this.currentMeasurement);
-          
+      if ((this.measurementMode === 'line' || this.measurementMode === 'reference') && this.currentMeasurement) {
+        const width = Math.abs(this.currentMeasurement.end.x - this.currentMeasurement.start.x);
+        const height = Math.abs(this.currentMeasurement.end.y - this.currentMeasurement.start.y);
+        
+        if (width > 10 || height > 10) {
           const measurement = {
-            ...trimmedMeasurement,
-            value: this.calculateValue(trimmedMeasurement.start, trimmedMeasurement.end),
-            brightness: this.calculateAverageBrightness(trimmedMeasurement.start, trimmedMeasurement.end)
+            ...this.currentMeasurement,
+            itemId: this.nextId.toString(),
+            subItemId: `${this.nextId}-${this.subItemPrefix}1`,
+            isReference: this.measurementMode === 'reference',
+            color: this.referenceLineColor,
+            value: this.calculateValue(this.currentMeasurement.start, this.currentMeasurement.end)
           };
           
-          // 기준선 기반 측정인 경우
-          if (this.activeReferenceLine) {
-            this.applyReferenceToMeasurement(measurement);
+          if (this.measurementMode === 'reference') {
+            this.referenceLines.push(measurement);
+            this.activeReferenceLine = measurement;
+          } else {
+            this.measurements.push(measurement);
+            this.segmentedMeasurements.push(measurement);
           }
-          
-          this.measurements.push(measurement);
           this.nextId++;
-          this.createBoundedSegments(measurement);
         }
       } else if (this.areaStart && this.areaEnd) {
         const width = Math.abs(this.areaEnd.x - this.areaStart.x);
@@ -1516,7 +1542,11 @@ export default {
         }
       }
       
+      // 모든 상태 초기화
       this.currentMeasurement = null;
+      this.areaStart = null;
+      this.areaEnd = null;
+      this.isMeasuring = false;
       this.render();
     },
     calculateBrightness(x, y) {
@@ -1573,6 +1603,11 @@ export default {
     },
     getLocalPos(e) {
       const canvas = this.$refs.canvas;
+      if (!canvas) {
+        console.warn('getLocalPos: Canvas reference is null');
+        return { x: 0, y: 0 };
+      }
+      
       const rect = canvas.getBoundingClientRect();
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
@@ -2304,6 +2339,17 @@ export default {
             Math.abs(this.selectedAreaRect.end.y - this.selectedAreaRect.start.y)
           );
         }
+
+        // 삭제 모드에서 삭제 경로 그리기
+        if (this.isDeleteMode && this.deleteStart && this.deleteEnd) {
+          this.ctx.beginPath();
+          this.ctx.strokeStyle = 'white';
+          this.ctx.setLineDash([5, 5]); // 흰색 점선
+          this.ctx.lineWidth = 2;
+          this.ctx.moveTo(this.deleteStart.x, this.deleteStart.y);
+          this.ctx.lineTo(this.deleteEnd.x, this.deleteEnd.y);
+          this.ctx.stroke();
+        }
       } catch (error) {
         console.error('[render] 렌더링 중 오류:', error);
       }
@@ -2506,65 +2552,18 @@ export default {
       this.selectionStart = null;
     },
     handleKeyDown(e) {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-        e.preventDefault();
-        this.undoLastMeasurement();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
-        e.preventDefault();
-        this.redoLastMeasurement();
-      } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (this.selectedSegment) {
-          this.deleteSegment(this.selectedSegment);
-          this.selectedSegment = null;
-        }
-      } else if (e.key && e.key.toLowerCase() === 'f') {
-        this.isFKeyPressed = true;
-        this.showBrightnessTooltip = true;
-        
-        console.log('키보드 이벤트 감지: f', this.isFKeyPressed);
-        console.log('키보드 이벤트 상세정보:', e);
-        
-        // 마우스 위치에서 돋보기 초기화
-        if (this.currentMousePos.x && this.currentMousePos.y) {
-          const pos = this.getLocalPos({ 
-            clientX: this.currentMousePos.x, 
-            clientY: this.currentMousePos.y 
-          });
-          
-          // 돋보기 즉시 업데이트
-          this.$nextTick(() => {
-            this.updateMagnifier(pos);
-            
-            // 돋보기가 보이도록 강제 설정
-            const magnifierContainer = document.querySelector('.magnifier-container');
-            if (magnifierContainer) {
-              magnifierContainer.style.display = 'block';
-            }
-          });
-        }
-      } else if (e.key && e.key.toLowerCase() === 'a') {
-        // a키: 영역 선 측정 모드 토글 (수평 <-> 수직)
-        if (this.measurementMode === 'area-horizontal') {
-          this.setMode('area-vertical');
-        } else {
-          this.setMode('area-horizontal');
-        }
-      } else if (e.key && e.key.toLowerCase() === 's') {
-        // s키: 단일 선 측정 모드 활성화
-        this.setMode('line');
-      } else if (e.key && e.key.toLowerCase() === 'd') {
-        // d키: 선택된 측정 삭제
-        if (this.selectedSegment) {
-          this.deleteSegment(this.selectedSegment);
-          this.selectedSegment = null;
-        } else if (this.measurements.length > 0) {
-          // 선택된 세그먼트가 없으면 마지막 측정값 삭제
-          this.undoLastMeasurement();
-        }
-      } else if (e.key && e.key.toLowerCase() === 'h') {
-        // h키: 도움말 표시 (키를 누르고 있는 동안)
+      // 단축키 처리
+      if (e.key === 'h' || e.key === 'H') {
         this.showShortcutHelp = true;
+      } else if (e.key === 'f' || e.key === 'F') {
+        this.isFKeyPressed = true;
+      } else if (e.key === 'd' || e.key === 'D') {
+        if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+          e.preventDefault();
+          this.toggleDeleteMode();
+        }
       }
+      // ... existing code ...
     },
     undoLastMeasurement() {
       if (this.measurements.length > 0) {
@@ -2609,6 +2608,50 @@ export default {
         segment.value = this.calculateValue(segment.start, segment.end);
       });
     },
+    
+    // 두 선의 교차 여부 확인
+    isLineIntersecting(line1, line2) {
+      // 첫 번째 선
+      const x1 = line1.start.x;
+      const y1 = line1.start.y;
+      const x2 = line1.end.x;
+      const y2 = line1.end.y;
+      
+      // 두 번째 선
+      const x3 = line2.start.x;
+      const y3 = line2.start.y;
+      const x4 = line2.end.x;
+      const y4 = line2.end.y;
+      
+      // 선분 교차점 계산
+      const det = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3);
+      
+      // 평행한 경우
+      if (det === 0) {
+        return false;
+      }
+      
+      const t = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / det;
+      const u = -((x1 - x2) * (y3 - y1) - (y1 - y2) * (x3 - x1)) / det;
+      
+      // 선분 내에 교차점이 있는 경우
+      return (t >= 0 && t <= 1 && u >= 0 && u <= 1);
+    },
+    
+    // 드래그 선과 교차하는 모든 측정선 찾기
+    findIntersectingLines(dragLine) {
+      const intersectingLines = [];
+      
+      // 모든 segmentedMeasurements에 대해 교차 검사
+      for (const segment of this.segmentedMeasurements) {
+        if (this.isLineIntersecting(dragLine, segment)) {
+          intersectingLines.push(segment);
+        }
+      }
+      
+      return intersectingLines;
+    },
+    
     decreaseLineCount() {
       if (this.lineCount > 2) {
         this.lineCount--;
@@ -2833,6 +2876,7 @@ export default {
               // 교차점이 끝점에 더 가까우면
               result.end = intersectionPoint;
             }
+            
             
             console.log('[trimMeasurementToObjectBoundaries] 기준선 기준 측정선 조정:', 
               `Start: (${result.start.x.toFixed(0)}, ${result.start.y.toFixed(0)})`, 
@@ -3467,8 +3511,8 @@ export default {
             
             // 현재 이미지 키 생성
             let currentImageKey = 'default';
-            if (this.imageUrl) {
-                const urlParts = this.imageUrl.split('/');
+            if (this.outputImageUrl) {
+                const urlParts = this.outputImageUrl.split('/');
                 const fileName = urlParts[urlParts.length - 1];
                 currentImageKey = fileName.split('.')[0]; // 확장자 제거
             }
@@ -3790,7 +3834,7 @@ export default {
     
     updateMagnifier(pos) {
       // 돋보기 캔버스가 없으면 종료
-      if (!this.$refs.magnifierCanvas) return;
+      if (!this.$refs.magnifierCanvas || !this.$refs.canvas) return;
       
       const sourceCanvas = this.$refs.canvas;
       const magnifierCanvas = this.$refs.magnifierCanvas;
@@ -4354,6 +4398,166 @@ export default {
       
       console.log('[cleanupImageUrls] 이미지 URL 정리 완료');
     },
+    // 임시 드래그 선 그리기 메서드
+    drawTempDragLine() {
+      if (!this.ctx || !this.isDKeyPressed || !this.tempDragLine) return;
+      
+      console.log('drawTempDragLine 호출됨:', this.tempDragLine);
+      
+      // 교차하는 선 찾기
+      const intersectingLines = this.findIntersectingLines(this.tempDragLine);
+      
+      // 교차하는 선들을 먼저 강조 표시 (더 두껍게)
+      if (intersectingLines.length > 0) {
+        this.ctx.beginPath();
+        this.ctx.strokeStyle = 'rgba(255, 255, 0, 0.9)'; // 더 진한 노란색
+        this.ctx.lineWidth = 5; // 더 두껍게
+        this.ctx.setLineDash([]);
+        
+        intersectingLines.forEach(line => {
+          this.ctx.moveTo(line.start.x, line.start.y);
+          this.ctx.lineTo(line.end.x, line.end.y);
+        });
+        
+        this.ctx.stroke();
+      }
+      
+      // 임시 드래그 선 그리기 (빨간 점선)
+      this.ctx.beginPath();
+      this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.9)'; // 더 진한 빨간색
+      this.ctx.lineWidth = 4; // 더 두껍게
+      this.ctx.setLineDash([8, 8]); // 더 큰 점선
+      this.ctx.moveTo(this.tempDragLine.start.x, this.tempDragLine.start.y);
+      this.ctx.lineTo(this.tempDragLine.end.x, this.tempDragLine.end.y);
+      this.ctx.stroke();
+      this.ctx.setLineDash([]);
+      
+      // 안내 텍스트 표시 (배경과 함께)
+      if (intersectingLines.length > 0) {
+        const text = `${intersectingLines.length}개 선이 선택되었습니다 (삭제됩니다)`;
+        this.ctx.font = 'bold 16px Arial';
+        
+        // 텍스트 크기 측정
+        const textMetrics = this.ctx.measureText(text);
+        const textWidth = textMetrics.width;
+        const textHeight = 20;
+        
+        // 배경 그리기
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        this.ctx.fillRect(15, 15, textWidth + 20, textHeight + 10);
+        
+        // 텍스트 그리기
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 1)';
+        this.ctx.fillText(text, 25, 35);
+      } else {
+        // 교차하는 선이 없을 때
+        const text = "드래그하여 삭제할 선을 선택하세요";
+        this.ctx.font = 'bold 14px Arial';
+        
+        const textMetrics = this.ctx.measureText(text);
+        const textWidth = textMetrics.width;
+        const textHeight = 18;
+        
+        // 배경 그리기
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        this.ctx.fillRect(15, 15, textWidth + 20, textHeight + 10);
+        
+        // 텍스트 그리기
+        this.ctx.fillStyle = 'rgba(200, 200, 200, 1)';
+        this.ctx.fillText(text, 25, 32);
+      }
+    },
+    toggleDeleteMode() {
+      const canvas = this.$refs.canvas;
+      if (!canvas) {
+        console.warn('[toggleDeleteMode] Canvas element not found');
+        return;
+      }
+
+      this.isDeleteMode = !this.isDeleteMode;
+      if (this.isDeleteMode) {
+        this.measurementMode = null;
+        this.deleteStart = null;
+        this.deleteEnd = null;
+        this.showNotification('삭제 모드가 활성화되었습니다. 삭제할 측정값을 선택하세요.', 'info');
+      } else {
+        this.measurementMode = 'line';
+        this.deleteStart = null;
+        this.deleteEnd = null;
+        this.showNotification('삭제 모드가 비활성화되었습니다.', 'info');
+      }
+      this.render();
+    },
+    deleteMeasurementsInPath() {
+      if (!this.deleteStart || !this.deleteEnd) return;
+
+      // 삭제 선과 교차하는 측정선들 찾기
+      const intersectingMeasurements = this.segmentedMeasurements.filter(segment => {
+        return this.checkIntersection(
+          this.deleteStart,
+          this.deleteEnd,
+          segment.start,
+          segment.end
+        );
+      });
+
+      // 교차하는 측정선들 삭제
+      if (intersectingMeasurements.length > 0) {
+        // 먼저 segmentedMeasurements에서 삭제
+        intersectingMeasurements.forEach(segment => {
+          const index = this.segmentedMeasurements.findIndex(s => 
+            s.itemId === segment.itemId && s.subItemId === segment.subItemId
+          );
+          if (index !== -1) {
+            this.segmentedMeasurements.splice(index, 1);
+          }
+        });
+
+        // 관련된 measurements도 삭제
+        const itemIdsToDelete = new Set(intersectingMeasurements.map(m => m.itemId));
+        
+        // 부모 컴포넌트에 삭제 이벤트 발생
+        this.$emit('delete-measurements', itemIdsToDelete);
+
+        // 삭제 후 화면 갱신
+        this.render();
+      }
+    },
+    checkIntersection(line1Start, line1End, line2Start, line2End) {
+      // 두 선분의 교차점을 확인하는 함수
+      const x1 = line1Start.x;
+      const y1 = line1Start.y;
+      const x2 = line1End.x;
+      const y2 = line1End.y;
+      const x3 = line2Start.x;
+      const y3 = line2Start.y;
+      const x4 = line2End.x;
+      const y4 = line2End.y;
+
+      // 두 선분의 방정식을 연립하여 교차점 계산
+      const denominator = ((x1 - x2) * (y3 - y4)) - ((y1 - y2) * (x3 - x4));
+      if (denominator === 0) return false; // 평행한 경우
+
+      const t = (((x1 - x3) * (y3 - y4)) - ((y1 - y3) * (x3 - x4))) / denominator;
+      const u = -(((x1 - x2) * (y1 - y3)) - ((y1 - y2) * (x1 - x3))) / denominator;
+
+      // 교차점이 두 선분 위에 있는지 확인
+      return (t >= 0 && t <= 1 && u >= 0 && u <= 1);
+    },
+    initializeMeasurements() {
+      // Initialize local measurements from props to avoid prop mutation
+      if (this.$props.measurements && Array.isArray(this.$props.measurements)) {
+        this.measurements = JSON.parse(JSON.stringify(this.$props.measurements));
+        console.log('[initializeMeasurements] Initialized local measurements:', this.measurements.length);
+      } else {
+        this.measurements = [];
+        console.log('[initializeMeasurements] No prop measurements, initialized empty array');
+      }
+    },
+  },
+  created() {
+    // 이미지 URL을 로컬 변수에 복사 (prop과 분리)
+    this.localImageUrl = this.imageUrl;
   },
   created() {
     // 이미지 URL을 로컬 변수에 복사 (prop과 분리)

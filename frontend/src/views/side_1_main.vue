@@ -3,7 +3,7 @@
     <!-- Server connection error component -->
     <ServerConnectionError v-if="serverError" />
     
-    <div v-else>
+    <div v-else class="main-container">
       <!-- 기존 사용자 아이콘 섹션 제거하고 AppHeader 추가 -->
       <AppHeader pageTitle="I-App Main" />
       
@@ -30,11 +30,13 @@
         <div class="msa-grid">
           <div class="top-row">
             <MSA1ImageInput class="msa-card msa1" />
-            <MSA2LLMAnalysis class="msa-card msa2" />
-            <MSA3LLMAnalysis2 class="msa-card msa3" />
+            <MSA2VectorPlot class="msa-card msa2" />
+            <div class="msa-card msa3-wrapper">
+              <MSA3ImageDisplay v-if="true" class="msa3" />
+            </div>
           </div>
           <div class="bottom-row">
-            <MSA4VectorTransform class="msa-card msa4" />
+            <MSA4LLMAnalysis class="msa-card msa4" />
             <MSA5ImageLCNC class="msa-card msa5" />
             <MSA6FinalResult class="msa-card msa6" />
           </div>
@@ -54,9 +56,9 @@
 
 <script>
 import MSA1ImageInput from '@/components/msa1_image_input.vue'
-import MSA2LLMAnalysis from '@/components/msa2_llm_analysis.vue'
-import MSA3LLMAnalysis2 from '@/components/msa3_llm_analysis2.vue'
-import MSA4VectorTransform from '@/components/msa4_vector_transform.vue'
+import MSA2VectorPlot from '@/components/msa2_vector_plot.vue'
+import MSA3ImageDisplay from '@/components/msa3_image_display.vue'
+import MSA4LLMAnalysis from '@/components/msa4_llm_analysis.vue'
 import MSA5ImageLCNC from '@/components/msa5_image_lcnc.vue'
 import MSA6FinalResult from '@/components/msa6_final_result.vue'
 import LoginModal from '@/components/login_modal.vue'
@@ -83,9 +85,9 @@ export default {
   name: 'MSADashboard',
   components: {
     MSA1ImageInput,
-    MSA2LLMAnalysis,
-    MSA3LLMAnalysis2,
-    MSA4VectorTransform,
+    MSA2VectorPlot,
+    MSA3ImageDisplay,
+    MSA4LLMAnalysis,
     MSA5ImageLCNC,
     MSA6FinalResult,
     LoginModal,
@@ -103,7 +105,8 @@ export default {
       currentUser: null,
       authChecked: false,
       serverError: false,
-      showUserMenu: false
+      showUserMenu: false,
+      resizeObserverTimeout: null
     }
   },
   created() {
@@ -136,6 +139,73 @@ export default {
     
     // Test server connection
     this.testServerConnection();
+    
+    // ResizeObserver 오류 방지를 위한 글로벌 핸들러
+    window.addEventListener('error', (event) => {
+      if (event.message && event.message.includes('ResizeObserver loop')) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+    });
+  },
+  mounted() {
+    // 레이아웃 안정화를 위한 지연 처리
+    this.$nextTick(() => {
+      // MSA 컴포넌트 간 통신을 위한 전역 객체 확인 및 생성
+      if (!window.MSASharedData) {
+        console.log('전역 MSASharedData 객체가 없습니다. 생성합니다.');
+        window.MSASharedData = {
+          currentImage: null,
+          similarImages: []
+        };
+      }
+      
+      // 전역 이벤트 버스 확인 및 생성
+      if (!window.MSAEventBus) {
+        console.log('전역 MSAEventBus 객체가 없습니다. 생성합니다.');
+        // 간단한 이벤트 버스 구현
+        window.MSAEventBus = {
+          events: {},
+          on(event, callback) {
+            if (!this.events[event]) {
+              this.events[event] = [];
+            }
+            this.events[event].push(callback);
+          },
+          off(event, callback) {
+            if (this.events[event]) {
+              this.events[event] = this.events[event].filter(cb => cb !== callback);
+            }
+          },
+          emit(event, data) {
+            if (this.events[event]) {
+              this.events[event].forEach(callback => {
+                try {
+                  callback(data);
+                } catch (e) {
+                  console.error('Error in event handler:', e);
+                }
+              });
+            }
+          }
+        };
+      }
+      
+      // 컴포넌트가 마운트된 후 약간의 지연을 두고 레이아웃 안정화
+      setTimeout(() => {
+        const msa3El = document.querySelector('.msa3');
+        if (msa3El) {
+          // MSA3 컴포넌트의 명시적 크기 설정으로 ResizeObserver 루프 방지
+          const parent = msa3El.parentElement;
+          if (parent) {
+            const parentHeight = parent.offsetHeight;
+            const parentWidth = parent.offsetWidth;
+            msa3El.style.height = `${parentHeight}px`;
+            msa3El.style.width = `${parentWidth}px`;
+          }
+        }
+      }, 100);
+    });
   },
   beforeUnmount() {
     // Clean up event listener
@@ -281,261 +351,113 @@ export default {
 </script>
 
 <style scoped>
+/* Global container styles */
 html, body {
-  overflow-x: hidden;
-  width: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  height: 100%;
+  box-sizing: border-box;
 }
 
-* {
-  box-sizing: border-box;
+*, *:before, *:after {
+  box-sizing: inherit;
 }
 
 .main-view {
   position: relative;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.main-container {
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: #f6f3ff; /* 연보라톤 배경 */
-  padding: 0;
-  margin: 0;
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
+  overflow: hidden;
   box-sizing: border-box;
-  flex: 1;
 }
 
-.page-title {
-  width: 100%;
-  text-align: center;
-  margin-top: 3rem; /* Add space for the user icon at the top */
-  margin-bottom: 1rem;
-}
-
-.page-title h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--primary-800);
-  margin: 0;
-  letter-spacing: -0.5px;
-}
-
-.title-underline {
-  width: 50px;
-  height: 3px;
-  background: var(--primary-600);
-  margin: 0.5rem auto 0;
-  border-radius: 2px;
-}
-
+/* Content area styles */
 .content {
-  margin: 0;
-  padding: 0.5rem;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  flex: 1;
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
-  box-sizing: border-box;
-  padding-bottom: 3.5rem; /* 푸터 높이만큼 하단 여백 추가 */
-}
-
-.msa-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.5rem;
-  width: 100%;
-  max-width: 100%;
-  height: 100%;
-  flex: 1;
-  margin: 0 0 1rem 0;
-  overflow: hidden !important;
-  position: relative;
-  box-sizing: border-box;
-  padding-bottom: 1rem; /* 추가 여백 */
-}
-
-.top-row,
-.bottom-row {
-  width: 100%;
-  max-width: 100%;
-  margin: 0;
+  overflow: hidden;
   padding: 0;
-  box-sizing: border-box;
-  display: grid;
-  gap: 0.5rem;
-  overflow: hidden !important;
+  margin: 0;
+  height: calc(100vh - 55px); /* Account for header height */
+  width: 100%;
   position: relative;
+  box-sizing: border-box;
 }
 
-.top-row {
-  grid-template-columns: 1.2fr 2fr 2fr;
-  height: 35% !important;
-  min-height: 200px;
-  max-height: 35% !important;
+/* MSA Grid layout - exact height calculation */
+.msa-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-rows: minmax(300px, 1fr) minmax(300px, 1fr); /* 최소 높이 설정 */
+  height: calc(100vh - 180px);
+  width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+  position: relative;
+  contain: layout style; /* 레이아웃 계산 최적화 */
 }
 
-.bottom-row {
-  grid-template-columns: 1.5fr 3.5fr 1fr;
-  height: 65% !important;
-  min-height: 200px;
-  max-height: 65% !important;
+.top-row, .bottom-row {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(200px, 1fr) minmax(400px, 2fr) minmax(200px, 1fr); /* 최소 너비 설정 */
+  height: 100%;
+  width: 100%;
+  position: relative;
+  contain: layout style; /* 레이아웃 계산 최적화 */
 }
 
 .msa-card {
   background: white;
-  border-radius: 15px;
-  padding: 0.75rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: all 0.3s ease;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  height: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  overflow: hidden !important;
-  height: 100% !important;
-  width: 100% !important;
   position: relative;
-  box-sizing: border-box;
-  margin: 0;
-}
-
-.msa1, .msa2, .msa3, .msa4, .msa5, .msa6 {
-  height: 100% !important;
-  width: 100% !important;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden !important;
-  position: relative;
-}
-
-.msa-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-}
-
-@media (max-width: 1600px) {
-  .top-row {
-    grid-template-columns: 1fr 1.5fr 1.5fr;
-  }
-}
-
-@media (max-width: 1400px) {
-  .top-row {
-    grid-template-columns: 1fr 1fr 1fr;
-  }
-}
-
-@media (max-width: 1200px) {
-  .content {
-    height: auto;
-    padding: 0 0.5rem;
-  }
-
-  .top-row,
-  .bottom-row {
-    grid-template-columns: 1fr;
-    height: auto !important;
-    max-height: none !important;
-  }
-
-  .msa1, .msa2, .msa3, .msa4, .msa5, .msa6 {
-    min-height: 300px;
-    height: auto;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .msa-card {
-    margin-bottom: 1rem;
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .mobile-header {
-    display: block;
-  }
-
-  .main-view {
-    padding-top: 0;
-  }
-}
-
-@media (max-width: 768px) {
-  .msa-grid {
-    gap: 1rem;
-    padding: 0.5rem;
-  }
-}
-
-.dashboard-footer {
-  background: rgba(255, 255, 255, 0.8);
-  padding: 0.75rem 0;
-  border-top: 1px solid var(--gray-200);
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
   width: 100%;
+  box-sizing: border-box; /* 박스 크기 계산 방식 명확히 */
 }
 
-.footer-content {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 0 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+.msa3 {
+  display: block !important; /* flex에서 block으로 변경하여 크기 계산 방식 단순화 */
+  background-color: white !important;
+  height: 100% !important;
+  width: 100% !important;
+  z-index: 1;
+  position: relative;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  /* 레이아웃 계산 안정화를 위한 추가 속성 */
+  contain: layout style; /* 성능 최적화 및 리플로우 제한 */
+  box-sizing: border-box;
 }
 
-.footer-info {
-  color: var(--gray-500);
+.msa3-wrapper {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  display: block; /* flex에서 block으로 변경 */
+  position: relative;
+  padding: 0 !important;
+  margin: 0 !important;
+  /* 레이아웃 계산 안정화를 위한 추가 속성 */
+  contain: layout style; /* 성능 최적화 및 리플로우 제한 */
+  box-sizing: border-box;
 }
 
-.footer-info p {
-  margin: 0;
-  font-size: 0.85rem;
-}
-
-.footer-links {
-  display: flex;
-  gap: 1.5rem;
-}
-
-.footer-link {
-  color: var(--primary-600);
-  text-decoration: none;
-  font-size: 0.85rem;
-  transition: color 0.3s ease;
-}
-
-.footer-link:hover {
-  color: var(--primary-700);
-}
-
-.mobile-header {
-  display: none;
-  padding: 1rem;
-  background: white;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-
-.hamburger-btn {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  color: var(--primary-600);
-  cursor: pointer;
-  padding: 0.5rem;
-}
-
+/* Sidebar styles */
 .sidebar {
   position: fixed;
   top: 0;
@@ -553,42 +475,39 @@ html, body {
 }
 
 .sidebar-header {
-  padding: 1.5rem;
+  padding: 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid var(--gray-200);
+  border-bottom: 1px solid #eee;
 }
 
 .sidebar-header h3 {
   margin: 0;
-  color: var(--primary-800);
 }
 
 .close-btn {
   background: none;
   border: none;
   font-size: 1.25rem;
-  color: var(--gray-600);
   cursor: pointer;
 }
 
 .sidebar-nav {
-  padding: 1rem;
+  padding: 0.5rem;
 }
 
 .nav-item {
   display: block;
-  padding: 1rem;
-  color: var(--gray-800);
+  padding: 0.75rem;
+  color: #333;
   text-decoration: none;
   transition: background 0.2s;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .nav-item:hover {
-  background: var(--primary-50);
-  color: var(--primary-600);
+  background: #f5f5f5;
 }
 
 .sidebar-overlay {
@@ -601,170 +520,36 @@ html, body {
   z-index: 999;
 }
 
-.msa4-container {
-  height: calc(100vh - 200px); /* 뷰포트 높이에서 헤더와 여백을 뺀 크기 */
-  min-height: 500px;
-}
-
-/* Plotly and SVG elements styles to ensure fixed heights */
-:deep(.js-plotly-plot),
-:deep(.plotly), 
-:deep(.plot-container),
-:deep(.svg-container),
-:deep(.main-svg) {
-  width: 100% !important;
-  height: 100% !important;
-  max-height: 100% !important;
-  overflow: hidden !important;
-}
-
-/* Ensure all components maintain fixed size */
-:deep(.msa-component),
-:deep(.msa-container),
-:deep(.main-layout) {
-  height: 100% !important;
-  max-height: 100% !important;
-  overflow: hidden !important;
-  display: flex !important;
-  flex-direction: column !important;
-}
-
-/* Fixed size for msa4 component */
-:deep(.msa4) .msa-component {
-  height: 100% !important;
-  max-height: 100% !important;
-  overflow: hidden !important;
-}
-
-/* User auth section */
-.user-auth-section {
-  display: none; /* 기존 사용자 인증 섹션 숨김 */
-}
-
-.user-icon-container {
-  position: relative;
-}
-
-.user-avatar-circle {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  background-color: #4a5568;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: white;
-  font-size: 1.2rem;
-  transition: background-color 0.2s;
+/* Mobile header */
+.mobile-header {
+  display: none;
+  padding: 0.75rem;
+  background: white;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.user-avatar-circle:hover {
-  background-color: #2d3748;
-}
-
-/* User dropdown menu */
-.user-dropdown {
-  position: absolute;
-  top: calc(100% + 0.5rem);
-  right: 0;
-  width: 280px;
-  background: #1a202c;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 1000;
-  overflow: hidden;
-  animation: slideDown 0.2s ease-out;
-  color: #e2e8f0;
-}
-
-@keyframes slideDown {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.dropdown-header {
-  padding: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background-color: #2d3748;
-}
-
-.user-avatar-large {
-  width: 3rem;
-  height: 3rem;
-  border-radius: 50%;
-  background-color: #4a5568;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
+.hamburger-btn {
+  background: none;
+  border: none;
   font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem;
 }
 
-.user-details {
-  flex: 1;
-}
-
-.user-email {
-  font-weight: 500;
-  color: #e2e8f0;
-  margin-bottom: 0.25rem;
-}
-
-.user-id {
-  font-size: 0.875rem;
-  color: #a0aec0;
-}
-
-.dropdown-divider {
-  height: 1px;
-  background-color: #4a5568;
-  margin: 0;
-}
-
-.dropdown-menu-items {
-  padding: 0.5rem 0;
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  color: #cbd5e0;
-  text-decoration: none;
-  transition: background-color 0.2s;
-}
-
-.dropdown-item:hover {
-  background-color: #2d3748;
-}
-
-.dropdown-item i {
-  width: 1.5rem;
-  text-align: center;
-  color: #a0aec0;
-}
-
-.logout-item {
-  color: #fc8181;
-}
-
-.logout-item i {
-  color: #fc8181;
-}
-
-/* Hide the previous user bar */
-.user-auth-bar {
-  display: none;
+/* Mobile responsive styles */
+@media (max-width: 1200px) {
+  .mobile-header {
+    display: block;
+  }
+  
+  .top-row,
+  .bottom-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .msa-grid {
+    grid-template-rows: 1fr;
+    height: auto;
+  }
 }
 </style> 

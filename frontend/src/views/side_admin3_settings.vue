@@ -11,13 +11,23 @@
           <div class="setting-info">
             <h3>테스트 이미지 로드 및 벡터 변환</h3>
             <p>지정된 경로에서 이미지를 로드하고 벡터로 변환합니다. 각 이미지당 하나의 벡터만 저장합니다.</p>
-            <div class="directory-input">
-              <label>이미지 경로:</label>
-              <input 
-                type="text" 
-                v-model="imageDirectory" 
-                placeholder="예: D:\image_set_url\workflow_images"
-              />
+            <div class="directory-inputs">
+              <div class="directory-input">
+                <label>I-app 이미지 경로 (_before 필터링):</label>
+                <input 
+                  type="text" 
+                  v-model="imageDirectory" 
+                  placeholder="예: D:\image_set_url\workflow_images"
+                />
+              </div>
+              <div class="directory-input">
+                <label>Analysis 이미지 경로 (필터링 없음):</label>
+                <input 
+                  type="text" 
+                  v-model="analysisImageDirectory" 
+                  placeholder="예: D:\image_set_url\\additional_images"
+                />
+              </div>
             </div>
             <div class="actions">
               <button 
@@ -90,6 +100,7 @@ export default {
     return {
       isProcessing: false,
       imageDirectory: 'D:\\image_set_url\\workflow_images',
+      analysisImageDirectory: 'D:\\image_set_url\\additional_images',
       processingStatus: null,
       vectorResults: [],
       showAllResults: false,
@@ -119,78 +130,143 @@ export default {
       };
       
       try {
-        // 이미지 로드 API 호출 - 경로는 정확함 (/api/load-local-images)
-        const response = await fetch('http://localhost:8000/api/settings/load-local-images', {
+        // 먼저 I-app 이미지 로드 (_before 필터링)
+        const response1 = await fetch('http://localhost:8000/api/settings/load-local-images', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ 
             directory_path: this.imageDirectory,
-            includeBeforeImagesOnly: true // '_before' 접미사 파일만 포함
+            includeBeforeImagesOnly: true, // '_before' 접미사 파일만 포함
+            tag: 'I-app' // 이미지 태그 추가
           })
         });
         
-        const data = await response.json();
+        let data1 = { processed: [], errors: [] };
+        try {
+          data1 = await response1.json();
+        } catch (err) {
+          console.error('Error parsing I-app images response:', err);
+          data1 = { status: 'error', message: '응답 파싱 오류', processed: [], errors: [{ error: err.message }] };
+        }
         
-        if (data.status === 'success' || data.status === 'partial_success') {
-          // 필터링된 이미지 목록 저장 (로드된 이미지 이름만 추출)
-          const loadedImages = data.processed?.map(img => img.stored_filename) || [];
-          console.log('로드된 이미지:', loadedImages);
-          
-          // 벡터 변환 API 호출 (백엔드로 직접 요청)
-          const transformResponse = await fetch('http://localhost:8000/api/settings/vectors/transform', {
+        this.processingStatus = {
+          type: 'info',
+          message: 'I-app 이미지 로드 완료, Analysis 이미지 로드 중...'
+        };
+        
+        // 그 다음 Analysis 이미지 로드 (필터링 없음)
+        let data2 = { processed: [], errors: [] };
+        try {
+          const response2 = await fetch('http://localhost:8000/api/settings/load-local-images', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({ 
-              images: loadedImages,
-              includeBeforeImagesOnly: true
+              directory_path: this.analysisImageDirectory,
+              includeBeforeImagesOnly: false, // 모든 이미지 포함
+              tag: 'Analysis' // 이미지 태그 추가
             })
           });
           
-          if (!transformResponse.ok) {
-            throw new Error(`벡터 변환 API 오류: ${transformResponse.status}`);
-          }
-          
-          const transformData = await transformResponse.json();
-          console.log('변환 데이터:', transformData);
-          
+          data2 = await response2.json();
+        } catch (err) {
+          console.error('Error loading Analysis images:', err);
+          data2 = { status: 'error', message: '분석 이미지 로드 오류', processed: [], errors: [{ error: err.message }] };
+        }
+        
+        // 두 데이터 결합
+        const combinedProcessed = [...(data1.processed || []), ...(data2.processed || [])];
+        const combinedErrors = [...(data1.errors || []), ...(data2.errors || [])];
+        
+        const combinedData = {
+          status: (data1.status === 'success' && data2.status === 'success') ? 'success' : 
+                 (combinedProcessed.length > 0) ? 'partial_success' : 'error',
+          processed: combinedProcessed,
+          errors: combinedErrors
+        };
+        
+        if (combinedProcessed.length > 0) {
           this.processingStatus = {
-            type: transformData.status === 'success' ? 'success' : 'warning',
-            message: transformData.message || (transformData.status === 'success' 
-              ? '이미지 로드 및 벡터 변환 완료!' 
-              : '일부 이미지만 처리되었습니다.'),
-            details: {
-              processed: data.processed?.length || 0,
-              vectors: transformData.count || 0,
-              filtered: transformData.filtering?.only_before_images ? '(only _before 이미지)' : '',
-              errors: (data.errors?.length || 0) + (transformData.errors?.length || 0)
-            }
+            type: 'info',
+            message: `${combinedProcessed.length}개 이미지 로드 완료, 벡터 변환 중...`
           };
           
-          // 벡터 결과 저장 - 백엔드가 처리한 모든 파일명을 가져옴
-          if (transformData.debug_info && transformData.debug_info.processed_filenames) {
-            // 디버그 정보에서 처리된 모든 파일명 가져오기
-            this.vectorResults = transformData.debug_info.processed_filenames.map(filename => ({
-              filename: filename
-            }));
-            console.log(`${this.vectorResults.length}개 파일명 로드됨:`, this.vectorResults);
-          }
-          else if (transformData.results && transformData.results.length > 0) {
-            this.vectorResults = transformData.results;
-            console.log(`${this.vectorResults.length}개 결과 로드됨:`, this.vectorResults);
-          }
+          // 필터링된 이미지 목록 저장 (로드된 이미지 이름만 추출)
+          const loadedImages = combinedProcessed.map(img => img.stored_filename) || [];
+          console.log('로드된 이미지:', loadedImages);
           
-          // 원본 이미지 목록 저장
-          this.loadedOriginalImages = loadedImages;
+          try {
+            // 벡터 변환 API 호출 (백엔드로 직접 요청)
+            const transformResponse = await fetch('http://localhost:8000/api/settings/vectors/transform', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ 
+                images: loadedImages,
+                includeBeforeImagesOnly: false, // 모든 이미지 처리
+                useUMAP: true, // UMAP 차원 축소 사용
+                directory_path: this.imageDirectory,    // I-app 이미지 경로 추가
+                analysisDirectory: this.analysisImageDirectory // Analysis 이미지 경로 추가
+              })
+            });
+            
+            if (!transformResponse.ok) {
+              throw new Error(`벡터 변환 API 오류: ${transformResponse.status}`);
+            }
+            
+            const transformData = await transformResponse.json();
+            console.log('변환 데이터:', transformData);
+            
+            this.processingStatus = {
+              type: transformData.status === 'success' ? 'success' : 'warning',
+              message: transformData.message || (transformData.status === 'success' 
+                ? '이미지 로드 및 벡터 변환 완료!' 
+                : '일부 이미지만 처리되었습니다.'),
+              details: {
+                processed: combinedProcessed.length || 0,
+                vectors: transformData.count || 0,
+                filtered: '',
+                errors: combinedErrors.length + (transformData.errors?.length || 0)
+              }
+            };
+            
+            // 벡터 결과 저장 - 백엔드가 처리한 모든 파일명을 가져옴
+            if (transformData.debug_info && transformData.debug_info.processed_filenames) {
+              // 디버그 정보에서 처리된 모든 파일명 가져오기
+              this.vectorResults = transformData.debug_info.processed_filenames.map(filename => ({
+                filename: filename
+              }));
+              console.log(`${this.vectorResults.length}개 파일명 로드됨:`, this.vectorResults);
+            }
+            else if (transformData.results && transformData.results.length > 0) {
+              this.vectorResults = transformData.results;
+              console.log(`${this.vectorResults.length}개 결과 로드됨:`, this.vectorResults);
+            }
+            
+            // 원본 이미지 목록 저장
+            this.loadedOriginalImages = loadedImages;
+          } catch (error) {
+            console.error('Error in vector transformation:', error);
+            this.processingStatus = {
+              type: 'error',
+              message: '벡터 변환 중 오류: ' + (error.message || '알 수 없는 오류'),
+              details: {
+                processed: combinedProcessed.length || 0,
+                vectors: 0,
+                errors: combinedErrors.length + 1
+              }
+            };
+          }
         } else {
           this.processingStatus = {
             type: 'error',
-            message: data.message || '이미지 로드 실패',
+            message: combinedData.message || '이미지 로드 실패',
             details: {
-              errors: data.errors?.length || 0
+              errors: combinedErrors.length || 0
             }
           };
         }
@@ -443,8 +519,15 @@ h1 {
   margin-bottom: 1rem;
 }
 
-.directory-input {
+.directory-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   margin-bottom: 1rem;
+}
+
+.directory-input {
+  margin-bottom: 0.5rem;
   display: flex;
   flex-direction: column;
 }

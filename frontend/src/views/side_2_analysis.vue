@@ -3,286 +3,307 @@
     <!-- AppHeader 컴포넌트 추가 -->
     <AppHeader pageTitle="Analysis" />
     
-    <!-- 데이터 로드 컨트롤 섹션 -->
-    <div class="control-section">
-      <div class="control-group">
-        <label for="table-select">테이블 선택:</label>
-        <select 
-          id="table-select"
-          v-model="selectedTable" 
-          class="table-select"
-          :disabled="isLoading"
-        >
-          <option value="">테이블을 선택하세요</option>
-          <option v-for="table in authorizedTables" 
-                  :key="table" 
-                  :value="table">
-            {{ table }}
-          </option>
-        </select>
-      </div>
-      
-      <div class="control-group">
-        <label>날짜 범위:</label>
-        <div class="date-range">
-          <input 
-            type="date" 
-            v-model="dateFrom" 
-            class="date-input"
-            :disabled="isLoading"
-          />
-          <span class="date-separator">~</span>
-          <input 
-            type="date" 
-            v-model="dateTo" 
-            class="date-input"
-            :disabled="isLoading"
-          />
+    <div class="analysis-content">
+      <div class="analysis-left-panel">
+        <!-- 데이터 로드 컨트롤 섹션 -->
+        <div class="control-section">
+          <div class="control-group">
+            <label for="table-select">테이블 선택:</label>
+            <select 
+              id="table-select"
+              v-model="selectedTable" 
+              class="table-select"
+              :disabled="isLoading"
+            >
+              <option value="">테이블을 선택하세요</option>
+              <option v-for="table in authorizedTables" 
+                      :key="table" 
+                      :value="table">
+                {{ table }}
+              </option>
+            </select>
+          </div>
+          
+          <div class="control-group">
+            <label>날짜 범위:</label>
+            <div class="date-range">
+              <input 
+                type="date" 
+                v-model="dateFrom" 
+                class="date-input"
+                :disabled="isLoading"
+              />
+              <span class="date-separator">~</span>
+              <input 
+                type="date" 
+                v-model="dateTo" 
+                class="date-input"
+                :disabled="isLoading"
+              />
+            </div>
+          </div>
+          
+          <button 
+            class="load-btn" 
+            @click="loadData" 
+            :disabled="!canLoadData || isLoading"
+          >
+            {{ isLoading ? '로딩 중...' : 'Data Load' }}
+          </button>
         </div>
-      </div>
-      
-      <button 
-        class="load-btn" 
-        @click="loadData" 
-        :disabled="!canLoadData || isLoading"
-      >
-        {{ isLoading ? '로딩 중...' : 'Data Load' }}
-      </button>
-    </div>
 
-    <div class="chart-container">
-      <div class="chart-card">
-        <div class="chart-header">
-          <h3>분석 결과</h3>
-          <div class="chart-actions">
-            <button class="btn-chart-type" :class="{ active: chartType === 'measurement' }" @click="setChartType('measurement')">
-              계측
-            </button>
-            <button class="btn-chart-type" :class="{ active: chartType === 'defect' }" @click="setChartType('defect')">
-              불량 감지
-            </button>
+        <div class="chart-container">
+          <div class="chart-card">
+            <div class="chart-header">
+              <h3>분석 결과</h3>
+              <div class="chart-actions">
+                <button class="btn-chart-type" :class="{ active: chartType === 'measurement' }" @click="setChartType('measurement')">
+                  계측
+                </button>
+                <button class="btn-chart-type" :class="{ active: chartType === 'defect' }" @click="setChartType('defect')">
+                  불량 감지
+                </button>
+              </div>
+            </div>
+            <div class="chart-content" ref="chartContainer">
+              <!-- 계측 차트 -->
+              <svg v-if="chartType === 'measurement' && chartData && chartData.points && chartData.points.length > 0" 
+                  :width="width" :height="height" class="chart">
+                <!-- Grid Lines -->
+                <g class="grid-lines">
+                  <line v-for="y in yGridLines" :key="'y-' + y"
+                    :x1="margin.left" :x2="width - margin.right" :y1="y" :y2="y"
+                    stroke="#eee" stroke-dasharray="2,2" />
+                  <line v-for="x in xGridLines" :key="'x-' + x"
+                    :x1="x" :x2="x" :y1="margin.top" :y2="height - margin.bottom"
+                    stroke="#eee" stroke-dasharray="2,2" />
+                </g>
+                <!-- Data points -->
+                <g class="data-points">
+                  <circle v-for="point in getVisiblePoints" :key="point.item_id + '-' + point.x + '-' + point.y"
+                    :cx="point.x" :cy="point.y" r="4"
+                    :fill="point.color"
+                    stroke="white"
+                    stroke-width="2"
+                    @mouseover="selectedPoint = point"
+                    @mouseout="selectedPoint = null" />
+                </g>
+                <!-- Tooltip -->
+                <g v-if="selectedPoint" class="tooltip"
+                  :transform="'translate(' + (selectedPoint.x + 10) + ',' + (selectedPoint.y - 10) + ')'">
+                  <rect x="0" y="0" width="120" height="60" rx="4"
+                    fill="rgba(255,255,255,0.95)" />
+                  <text x="10" y="20" fill="#333" font-size="12">
+                    {{ selectedPoint.label }}
+                  </text>
+                  <text x="10" y="40" fill="#333" font-size="12">
+                    {{ selectedPoint.date }}
+                  </text>
+                  <text x="10" y="55" fill="#333" font-size="12">
+                    값: {{ selectedPoint.value.toFixed(3) }}
+                  </text>
+                </g>
+                <!-- Axes -->
+                <g class="axes">
+                  <line :x1="margin.left" :x2="width - margin.right" 
+                        :y1="height - margin.bottom" :y2="height - margin.bottom" 
+                        stroke="#666" />
+                  <line :x1="margin.left" :y1="margin.top" 
+                        :x2="margin.left" :y2="height - margin.bottom" 
+                        stroke="#666" />
+                </g>
+                <!-- Labels -->
+                <g class="labels">
+                  <text v-for="(label, i) in limitedLabels" :key="'label-' + i"
+                    :x="getLabelX(i)" :y="height - margin.bottom/2"
+                    fill="#666" text-anchor="middle"
+                    font-size="12">{{ label }}</text>
+                </g>
+              </svg>
+              <!-- 불량 감지 차트 -->
+              <svg v-if="chartType === 'defect' && defectChartData && defectChartData.points && defectChartData.points.length > 0" 
+                  :width="width" :height="height" class="chart">
+                <!-- Grid Lines -->
+                <g class="grid-lines">
+                  <line v-for="y in yGridLines" :key="'y-' + y"
+                    :x1="margin.left" :x2="width - margin.right" :y1="y" :y2="y"
+                    stroke="#eee" stroke-dasharray="2,2" />
+                  <line v-for="x in xGridLines" :key="'x-' + x"
+                    :x1="x" :x2="x" :y1="margin.top" :y2="height - margin.bottom"
+                    stroke="#eee" stroke-dasharray="2,2" />
+                </g>
+                <!-- Data points -->
+                <g class="data-points">
+                  <circle v-for="point in getVisibleDefectPoints" :key="point.item_id + '-' + point.x + '-' + point.y"
+                    :cx="point.x" :cy="point.y" r="4"
+                    :fill="point.color"
+                    stroke="white"
+                    stroke-width="2"
+                    @mouseover="selectedPoint = point"
+                    @mouseout="selectedPoint = null" />
+                </g>
+                <!-- Tooltip -->
+                <g v-if="selectedPoint" class="tooltip"
+                  :transform="'translate(' + (selectedPoint.x + 10) + ',' + (selectedPoint.y - 10) + ')'">
+                  <rect x="0" y="0" width="160" height="100" rx="4"
+                    fill="rgba(255,255,255,0.95)" />
+                  <text x="10" y="20" fill="#333" font-size="12">
+                    {{ selectedPoint.item_id }}
+                  </text>
+                  <text x="10" y="40" fill="#333" font-size="12">
+                    {{ selectedPoint.date }}
+                  </text>
+                  <text x="10" y="60" fill="#333" font-size="12">
+                    줄무늬: {{ selectedPoint.striation?.toFixed(3) || 'N/A' }}
+                  </text>
+                  <text x="10" y="80" fill="#333" font-size="12">
+                    왜곡: {{ selectedPoint.distortion?.toFixed(3) || 'N/A' }}
+                  </text>
+                </g>
+                <!-- Axes -->
+                <g class="axes">
+                  <line :x1="margin.left" :x2="width - margin.right" 
+                        :y1="height - margin.bottom" :y2="height - margin.bottom" 
+                        stroke="#666" />
+                  <line :x1="margin.left" :y1="margin.top" 
+                        :x2="margin.left" :y2="height - margin.bottom" 
+                        stroke="#666" />
+                </g>
+                <!-- Labels -->
+                <g class="labels">
+                  <text v-for="(label, i) in limitedLabels" :key="'label-' + i"
+                    :x="getLabelX(i)" :y="height - margin.bottom/2"
+                    fill="#666" text-anchor="middle"
+                    font-size="12">{{ label }}</text>
+                </g>
+              </svg>
+              <div v-else class="loading-chart">
+                <template v-if="chartType === 'measurement' && (!chartData || !chartData.points || chartData.points.length === 0)">
+                  계측 데이터 로딩 중...
+                </template>
+                <template v-else-if="chartType === 'defect' && (!defectChartData || !defectChartData.points || defectChartData.points.length === 0)">
+                  불량 감지 데이터 로딩 중...
+                </template>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="chart-content" ref="chartContainer">
-          <!-- 계측 차트 -->
-          <svg v-if="chartType === 'measurement' && chartData && chartData.points && chartData.points.length > 0" 
-              :width="width" :height="height" class="chart">
-            <!-- Grid Lines -->
-            <g class="grid-lines">
-              <line v-for="y in yGridLines" :key="'y-' + y"
-                :x1="margin.left" :x2="width - margin.right" :y1="y" :y2="y"
-                stroke="#eee" stroke-dasharray="2,2" />
-              <line v-for="x in xGridLines" :key="'x-' + x"
-                :x1="x" :x2="x" :y1="margin.top" :y2="height - margin.bottom"
-                stroke="#eee" stroke-dasharray="2,2" />
-            </g>
-            <!-- Data points -->
-            <g class="data-points">
-              <circle v-for="point in getVisiblePoints" :key="point.item_id + '-' + point.x + '-' + point.y"
-                :cx="point.x" :cy="point.y" r="4"
-                :fill="point.color"
-                stroke="white"
-                stroke-width="2"
-                @mouseover="selectedPoint = point"
-                @mouseout="selectedPoint = null" />
-            </g>
-            <!-- Tooltip -->
-            <g v-if="selectedPoint" class="tooltip"
-              :transform="'translate(' + (selectedPoint.x + 10) + ',' + (selectedPoint.y - 10) + ')'">
-              <rect x="0" y="0" width="120" height="60" rx="4"
-                fill="rgba(255,255,255,0.95)" />
-              <text x="10" y="20" fill="#333" font-size="12">
-                {{ selectedPoint.label }}
-              </text>
-              <text x="10" y="40" fill="#333" font-size="12">
-                {{ selectedPoint.date }}
-              </text>
-              <text x="10" y="55" fill="#333" font-size="12">
-                값: {{ selectedPoint.value.toFixed(3) }}
-              </text>
-            </g>
-            <!-- Axes -->
-            <g class="axes">
-              <line :x1="margin.left" :x2="width - margin.right" 
-                    :y1="height - margin.bottom" :y2="height - margin.bottom" 
-                    stroke="#666" />
-              <line :x1="margin.left" :y1="margin.top" 
-                    :x2="margin.left" :y2="height - margin.bottom" 
-                    stroke="#666" />
-            </g>
-            <!-- Labels -->
-            <g class="labels">
-              <text v-for="(label, i) in limitedLabels" :key="'label-' + i"
-                :x="getLabelX(i)" :y="height - margin.bottom/2"
-                fill="#666" text-anchor="middle"
-                font-size="12">{{ label }}</text>
-            </g>
-          </svg>
-          <!-- 불량 감지 차트 -->
-          <svg v-if="chartType === 'defect' && defectChartData && defectChartData.points && defectChartData.points.length > 0" 
-              :width="width" :height="height" class="chart">
-            <!-- Grid Lines -->
-            <g class="grid-lines">
-              <line v-for="y in yGridLines" :key="'y-' + y"
-                :x1="margin.left" :x2="width - margin.right" :y1="y" :y2="y"
-                stroke="#eee" stroke-dasharray="2,2" />
-              <line v-for="x in xGridLines" :key="'x-' + x"
-                :x1="x" :x2="x" :y1="margin.top" :y2="height - margin.bottom"
-                stroke="#eee" stroke-dasharray="2,2" />
-            </g>
-            <!-- Data points -->
-            <g class="data-points">
-              <circle v-for="point in getVisibleDefectPoints" :key="point.item_id + '-' + point.x + '-' + point.y"
-                :cx="point.x" :cy="point.y" r="4"
-                :fill="point.color"
-                stroke="white"
-                stroke-width="2"
-                @mouseover="selectedPoint = point"
-                @mouseout="selectedPoint = null" />
-            </g>
-            <!-- Tooltip -->
-            <g v-if="selectedPoint" class="tooltip"
-              :transform="'translate(' + (selectedPoint.x + 10) + ',' + (selectedPoint.y - 10) + ')'">
-              <rect x="0" y="0" width="160" height="100" rx="4"
-                fill="rgba(255,255,255,0.95)" />
-              <text x="10" y="20" fill="#333" font-size="12">
-                {{ selectedPoint.item_id }}
-              </text>
-              <text x="10" y="40" fill="#333" font-size="12">
-                {{ selectedPoint.date }}
-              </text>
-              <text x="10" y="60" fill="#333" font-size="12">
-                줄무늬: {{ selectedPoint.striation?.toFixed(3) || 'N/A' }}
-              </text>
-              <text x="10" y="80" fill="#333" font-size="12">
-                왜곡: {{ selectedPoint.distortion?.toFixed(3) || 'N/A' }}
-              </text>
-            </g>
-            <!-- Axes -->
-            <g class="axes">
-              <line :x1="margin.left" :x2="width - margin.right" 
-                    :y1="height - margin.bottom" :y2="height - margin.bottom" 
-                    stroke="#666" />
-              <line :x1="margin.left" :y1="margin.top" 
-                    :x2="margin.left" :y2="height - margin.bottom" 
-                    stroke="#666" />
-            </g>
-            <!-- Labels -->
-            <g class="labels">
-              <text v-for="(label, i) in limitedLabels" :key="'label-' + i"
-                :x="getLabelX(i)" :y="height - margin.bottom/2"
-                fill="#666" text-anchor="middle"
-                font-size="12">{{ label }}</text>
-            </g>
-          </svg>
-          <div v-else class="loading-chart">
-            <template v-if="chartType === 'measurement' && (!chartData || !chartData.points || chartData.points.length === 0)">
-              계측 데이터 로딩 중...
-            </template>
-            <template v-else-if="chartType === 'defect' && (!defectChartData || !defectChartData.points || defectChartData.points.length === 0)">
-              불량 감지 데이터 로딩 중...
-            </template>
+        
+        <!-- 계측 데이터 테이블 -->
+        <div v-if="chartType === 'measurement'" class="data-container">
+          <h3>계측 데이터</h3>
+          <div class="table-section">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>날짜</th>
+                  <th>Item ID</th>
+                  <th>Sub ID</th>
+                  <th>값</th>
+                  <th class="image-header">이미지</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-for="(group, groupIndex) in Object.values(groupDataByImage)">
+                  <tr v-for="(point, index) in group.points" 
+                      :key="'point-' + groupIndex + '-' + index"
+                      :class="{ 
+                        'group-row': true,
+                        'group-start': index === 0,
+                        'hovered': hoveredImage === group
+                      }"
+                      :data-item-id="group.item_id"
+                      @mouseover="hoveredImage = group"
+                      @mouseout="handleMouseOut">
+                    <td>{{ point.date }}</td>
+                    <td>{{ point.label }}</td>
+                    <td>{{ point.subId }}</td>
+                    <td>{{ point.value.toFixed(3) }}</td>
+                    <td v-if="index === 0" :rowspan="group.points.length" class="image-cell">
+                      <img :src="group.imageUrl" 
+                           :alt="group.item_id" 
+                           class="table-image"
+                           @error="handleImageError"
+                           @click="showImagePopup(group)" />
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
           </div>
+        </div>
+
+        <!-- 불량 감지 데이터 테이블 -->
+        <div v-if="chartType === 'defect'" class="data-container">
+          <h3>불량 감지 데이터</h3>
+          <div class="table-section">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>날짜</th>
+                  <th>Item ID</th>
+                  <th>Sub ID</th>
+                  <th>X</th>
+                  <th>Y</th>
+                  <th>Striation</th>
+                  <th>Distortion</th>
+                  <th>양/불</th>
+                  <th class="image-header">이미지</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template v-for="(group, groupIndex) in Object.values(groupDefectDataByImage)">
+                  <tr v-for="(point, index) in group.points" 
+                      :key="'point-' + groupIndex + '-' + index"
+                      :class="{ 
+                        'group-row': true,
+                        'group-start': index === 0,
+                        'hovered': hoveredImage === group
+                      }"
+                      :data-item-id="group.item_id"
+                      @mouseover="hoveredImage = group"
+                      @mouseout="handleMouseOut">
+                    <td>{{ point.date }}</td>
+                    <td>{{ point.item_id }}</td>
+                    <td>{{ point.subitem_id }}</td>
+                    <td>{{ point.x.toFixed(3) }}</td>
+                    <td>{{ point.y.toFixed(3) }}</td>
+                    <td>{{ point.striation.toFixed(3) }}</td>
+                    <td>{{ point.distortion.toFixed(3) }}</td>
+                    <td :class="point.result === '양품' ? 'pass' : 'fail'">{{ point.result }}</td>
+                    <td v-if="index === 0" :rowspan="group.points.length" class="image-cell">
+                      <img :src="group.imageUrl" 
+                           :alt="group.item_id" 
+                           class="table-image"
+                           @error="handleImageError"
+                           @click="showImagePopup(group)" />
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      
+      <div class="analysis-right-panel">
+        <!-- MSA3 이미지 상세 정보 -->
+        <div class="msa3-wrapper">
+          <MSA3ImageDisplay 
+            ref="msa3Component"
+            @analyze-image="handleImageAnalysis"
+          />
+        </div>
+        
+        <!-- MSA4 이미지 분석 어시스턴트 -->
+        <div class="msa4-wrapper">
+          <MSA4LLMAnalysis 
+            ref="msa4Component"
+          />
         </div>
       </div>
     </div>
     
-    <!-- 계측 데이터 테이블 -->
-    <div v-if="chartType === 'measurement'" class="data-container">
-      <h3>계측 데이터</h3>
-      <div class="table-section">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>날짜</th>
-              <th>Item ID</th>
-              <th>Sub ID</th>
-              <th>값</th>
-              <th class="image-header">이미지</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="(group, groupIndex) in Object.values(groupDataByImage)">
-              <tr v-for="(point, index) in group.points" 
-                  :key="'point-' + groupIndex + '-' + index"
-                  :class="{ 
-                    'group-row': true,
-                    'group-start': index === 0,
-                    'hovered': hoveredImage === group
-                  }"
-                  :data-item-id="group.item_id"
-                  @mouseover="hoveredImage = group"
-                  @mouseout="handleMouseOut">
-                <td>{{ point.date }}</td>
-                <td>{{ point.label }}</td>
-                <td>{{ point.subId }}</td>
-                <td>{{ point.value.toFixed(3) }}</td>
-                <td v-if="index === 0" :rowspan="group.points.length" class="image-cell">
-                  <img :src="group.imageUrl" 
-                       :alt="group.item_id" 
-                       class="table-image"
-                       @error="handleImageError"
-                       @click="showImagePopup(group)" />
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- 불량 감지 데이터 테이블 -->
-    <div v-if="chartType === 'defect'" class="data-container">
-      <h3>불량 감지 데이터</h3>
-      <div class="table-section">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>날짜</th>
-              <th>Item ID</th>
-              <th>Sub ID</th>
-              <th>X</th>
-              <th>Y</th>
-              <th>Striation</th>
-              <th>Distortion</th>
-              <th>양/불</th>
-              <th class="image-header">이미지</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="(group, groupIndex) in Object.values(groupDefectDataByImage)">
-              <tr v-for="(point, index) in group.points" 
-                  :key="'point-' + groupIndex + '-' + index"
-                  :class="{ 
-                    'group-row': true,
-                    'group-start': index === 0,
-                    'hovered': hoveredImage === group
-                  }"
-                  :data-item-id="group.item_id"
-                  @mouseover="hoveredImage = group"
-                  @mouseout="handleMouseOut">
-                <td>{{ point.date }}</td>
-                <td>{{ point.item_id }}</td>
-                <td>{{ point.subitem_id }}</td>
-                <td>{{ point.x.toFixed(3) }}</td>
-                <td>{{ point.y.toFixed(3) }}</td>
-                <td>{{ point.striation.toFixed(3) }}</td>
-                <td>{{ point.distortion.toFixed(3) }}</td>
-                <td :class="point.result === '양품' ? 'pass' : 'fail'">{{ point.result }}</td>
-                <td v-if="index === 0" :rowspan="group.points.length" class="image-cell">
-                  <img :src="group.imageUrl" 
-                       :alt="group.item_id" 
-                       class="table-image"
-                       @error="handleImageError"
-                       @click="showImagePopup(group)" />
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
     <!-- Image Popup -->
     <div v-if="selectedImage" class="image-popup" @click="closeImagePopup">
       <div class="popup-content" @click.stop>
@@ -314,11 +335,15 @@
 import { ref, onMounted, computed, watch, reactive, onUnmounted } from 'vue'
 import axios from 'axios'
 import AppHeader from '@/components/AppHeader.vue'
+import MSA3ImageDisplay from '@/components/msa3_image_display.vue'
+import MSA4LLMAnalysis from '@/components/msa4_llm_analysis.vue'
 
 export default {
   name: 'Side2Analysis',
   components: {
-    AppHeader
+    AppHeader,
+    MSA3ImageDisplay,
+    MSA4LLMAnalysis
   },
   setup() {
     const chartContainer = ref(null)
@@ -337,6 +362,19 @@ export default {
     const defectData = ref([])
     const measurementData = ref([])
     const images = ref([])
+    
+    // MSA3 and MSA4 component references
+    const msa3Component = ref(null)
+    const msa4Component = ref(null)
+    
+    // Method to handle image analysis request from MSA3
+    const handleImageAnalysis = (imageData) => {
+      console.log('Received image analysis request from MSA3:', imageData)
+      // Forward the analysis data from MSA3 to MSA4
+      if (msa4Component.value) {
+        msa4Component.value.analyzeImage(imageData)
+      }
+    }
 
     const setChartType = (type) => {
       chartType.value = type;
@@ -842,7 +880,10 @@ export default {
       onMouseover,
       getVisibleDefectPoints,
       groupDefectDataByImage,
-      handleResize
+      handleResize,
+      msa3Component,
+      msa4Component,
+      handleImageAnalysis
     }
   }
 }
@@ -871,6 +912,37 @@ html, body {
   overflow: hidden;
   box-sizing: border-box;
   padding-bottom: 3.5rem; /* 푸터 높이만큼 하단 여백 추가 */
+}
+
+.analysis-content {
+  display: flex;
+  height: calc(100vh - 120px);
+  gap: 20px;
+  padding: 20px;
+}
+
+.analysis-left-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.analysis-right-panel {
+  width: 40%;
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.msa3-wrapper, .msa4-wrapper {
+  flex: 1;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background-color: white;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .chart-container {
@@ -1245,6 +1317,17 @@ html, body {
   
   .load-btn {
     width: 100%;
+  }
+}
+
+@media (max-width: 1200px) {
+  .analysis-content {
+    flex-direction: column;
+  }
+  
+  .analysis-right-panel {
+    width: 100%;
+    max-width: 100%;
   }
 }
 </style> 

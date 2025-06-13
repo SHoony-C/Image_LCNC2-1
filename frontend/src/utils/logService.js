@@ -15,6 +15,11 @@ class LogService {
   
   // 동일 액션 로깅 방지를 위한 쿨다운 시간 (밀리초)
   static COOLDOWN_MS = 2000;
+  
+  // 에러 발생 시 로깅 기능 자동 비활성화를 위한 변수
+  static errorCount = 0;
+  static maxErrorCount = 3; // 3번 이상 실패하면 로깅 중단
+  static loggingDisabled = false;
 
   /**
    * 사용자 액션을 로깅합니다
@@ -22,6 +27,11 @@ class LogService {
    * @param {object} details - 액션에 대한 추가 정보 (선택 사항)
    */
   static async logAction(action, details = {}) {
+    // 로깅이 비활성화된 경우 아무 작업도 하지 않음
+    if (this.loggingDisabled) {
+      return false;
+    }
+    
     try {
       // 중복 로깅 방지 로직
       const actionKey = this.getActionKey(action, details);
@@ -31,7 +41,6 @@ class LogService {
       if (this.recentLogs.has(actionKey)) {
         const lastLogTime = this.recentLogs.get(actionKey);
         if (now - lastLogTime < this.COOLDOWN_MS) {
-          console.log(`[LogService] 중복 액션 감지, 무시됨: ${action}`, details);
           return false; // 중복 요청 무시
         }
       }
@@ -45,8 +54,6 @@ class LogService {
         this.recentLogs.delete(oldestKey);
       }
       
-      console.log(`[LogService] 액션 로깅 시작: ${action}`, details);
-      
       // 로컬 스토리지에서 사용자 정보 가져오기
       const userStr = localStorage.getItem('user');
       let username = 'anonymous';
@@ -57,12 +64,9 @@ class LogService {
           const user = JSON.parse(userStr);
           username = user.username || 'anonymous';
           department = user.department || null;
-          console.log(`[LogService] 사용자 정보 로드됨: ${username}, ${department}`);
         } catch (e) {
           console.error('[LogService] 사용자 정보 파싱 오류:', e);
         }
-      } else {
-        console.log('[LogService] 사용자 정보 없음, 익명으로 처리');
       }
       
       // 액션 문자열 형식화
@@ -78,15 +82,14 @@ class LogService {
         useraction: actionStr
       };
       
-      console.log('[LogService] API 요청 데이터:', requestData);
-      
       // 로그 저장 API 호출 (인증 필요 없는 엔드포인트 사용)
       const response = await axios.post('http://localhost:8000/api/users/log-action-noauth', requestData, {
         // 타임아웃 설정으로 응답 지연 시 요청 취소
         timeout: 3000
       });
       
-      console.log('[LogService] API 응답:', response.data);
+      // 에러 카운트 초기화 (성공 시)
+      this.errorCount = 0;
       
       // 개발 환경에서는 콘솔에도 로깅
       if (process.env.NODE_ENV !== 'production') {
@@ -97,13 +100,16 @@ class LogService {
     } catch (error) {
       // 로깅 실패해도 앱 동작에 영향 주지 않도록 조용히 에러 핸들링
       console.error('[LogService] 액션 로깅 실패:', error);
-      if (error.response) {
-        console.error('[LogService] 서버 응답:', error.response.status, error.response.data);
-      } else if (error.request) {
-        console.error('[LogService] 서버 응답 없음:', error.request);
-      } else {
-        console.error('[LogService] 요청 설정 오류:', error.message);
+      
+      // 에러 카운트 증가
+      this.errorCount++;
+      
+      // 최대 에러 카운트 초과 시 로깅 비활성화
+      if (this.errorCount >= this.maxErrorCount) {
+        console.warn(`[LogService] ${this.maxErrorCount}회 이상 로깅 실패로 로깅 기능 비활성화됨`);
+        this.loggingDisabled = true;
       }
+      
       return false;
     }
   }
@@ -183,6 +189,16 @@ class LogService {
     const details = { type: dataType };
     if (dataId) details.id = dataId;
     return this.logAction('data_save', details);
+  }
+  
+  /**
+   * 로깅 기능 수동 활성화/비활성화
+   * @param {boolean} enabled - 로깅 활성화 여부
+   */
+  static setLoggingEnabled(enabled) {
+    this.loggingDisabled = !enabled;
+    this.errorCount = 0; // 에러 카운트 초기화
+    console.log(`[LogService] 로깅 기능 ${enabled ? '활성화' : '비활성화'} 됨`);
   }
 }
 

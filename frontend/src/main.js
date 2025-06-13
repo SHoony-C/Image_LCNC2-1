@@ -5,6 +5,10 @@ import router from './router'
 import store from './store'
 import './assets/main.css'
 import LogService from './utils/logService'
+import mitt from 'mitt'
+
+// 전역 이벤트 버스 생성
+const eventBus = mitt()
 
 // Font Awesome
 import '@fortawesome/fontawesome-free/css/all.css'
@@ -21,16 +25,13 @@ axios.defaults.baseURL = process.env.VUE_APP_API_URL || 'http://localhost:8000'
 axios.defaults.headers.common['Content-Type'] = 'application/json'
 
 // axios 요청 인터셉터
-axios.interceptors.request.use(
-  config => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`
-    }
-    return config
-  },
-  error => Promise.reject(error)
-)
+axios.interceptors.request.use(function (config) {
+  // 요청 보내기 전에 수행할 로직
+  return config;
+}, function (error) {
+  // 요청 에러 처리
+  return Promise.reject(error);
+});
 
 // axios 응답 인터셉터 - 인증 오류 처리
 axios.interceptors.response.use(
@@ -57,11 +58,40 @@ axios.interceptors.response.use(
   }
 )
 
+// 전역 이벤트 버스와 MSA 간 통신을 위한 전역 객체 설정
+window.MSAEventBus = eventBus
+window.MSASharedData = {
+  currentImage: null,
+  similarImages: []
+}
+
+// ResizeObserver 루프 오류를 무시하는 글로벌 핸들러 추가
+const originalError = window.console.error;
+window.console.error = function(...args) {
+  if (args[0] && typeof args[0] === 'string' && args[0].includes('ResizeObserver loop')) {
+    // ResizeObserver 루프 오류 무시
+    return;
+  }
+  originalError.apply(console, args);
+};
+
+// 전역 에러 이벤트 핸들러 추가
+window.addEventListener('error', (event) => {
+  if (event.message && event.message.includes('ResizeObserver loop')) {
+    event.stopPropagation();
+    event.preventDefault();
+    return false;
+  }
+}, true);
+
 // Vue 프로덕션 하이드레이션 경고 해결
 window.__VUE_PROD_HYDRATION_MISMATCH_DETAILS__ = false
 
 const app = createApp(App)
 const pinia = createPinia()
+
+// 전역 이벤트 버스를 앱 인스턴스에 추가
+app.config.globalProperties.$eventBus = eventBus
 
 // 글로벌 에러 핸들러
 app.config.errorHandler = (err, vm, info) => {

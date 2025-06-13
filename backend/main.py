@@ -22,6 +22,9 @@ from side_4_management import router as management_router
 from side_5_settings import router as settings_router
 from side_6_help import router as help_router
 
+# API Gateway import
+from api_gateway import api_gateway_app
+
 # 외부 이미지 저장 API 임포트
 from external_py.image_storage_api import router as external_storage_router
 
@@ -132,9 +135,13 @@ async def health():
 
 # MSA 모듈 라우터 등록
 app.include_router(msa1_router, prefix="/api/msa1", tags=["msa1"])
-app.include_router(msa2_router, prefix="/api/msa2", tags=["msa2"])
-app.include_router(msa3_router, prefix="/api/msa3", tags=["msa3"])
-app.include_router(msa4_router, prefix="/api/msa4", tags=["msa4"])
+app.include_router(msa2_router, prefix="/api/msa4", tags=["msa2"])
+app.include_router(msa3_router, prefix="/api/imageanalysis", tags=["msa3"])
+
+# 추가 라우팅: similar-images API를 imageanalysis 라우터에 연결
+app.include_router(msa3_router, prefix="/api", tags=["msa3"])
+
+app.include_router(msa4_router, prefix="/api/msa2", tags=["msa4"])
 app.include_router(msa5_router, prefix="/api/msa5", tags=["msa5"])
 app.include_router(msa5_work_router, prefix="/api/msa5/work", tags=["msa5_work"])
 app.include_router(msa6_router, prefix="/api/msa6", tags=["msa6"])
@@ -157,6 +164,14 @@ app.include_router(
     prefix="/api/external_storage",
     tags=["external_storage"],
     responses={404: {"description": "Not found"}},
+)
+
+# API Gateway 라우터 등록 - 최상위 경로로 설정
+app.include_router(
+    api_gateway_app,
+    prefix="/api",
+    tags=["api_gateway"],
+    responses={404: {"description": "Not found"}}
 )
 
 # 전역 예외 처리기 추가
