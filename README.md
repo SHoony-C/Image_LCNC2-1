@@ -1,6 +1,6 @@
  - 측정 결과 ctrl z,y 안돼
  - 측정 결과에서 전후 이미지 전환 기능
-
+ - LLM 기능 구현
 
 ## To Do List (Out - msa6)
 ```
