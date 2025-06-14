@@ -139,6 +139,8 @@ export default {
       // 커스텀 이벤트 리스너 추가
       document.addEventListener('msa2-to-msa3-image-selected', this.handleMSA2Event);
       document.addEventListener('msa2-to-msa3-similar-images', this.handleMSA2SimilarImages);
+      // MSA1에서 직접 전송되는 유사 이미지 데이터 리스너 추가 (새로 추가)
+      document.addEventListener('msa1-to-msa3-similar-images', this.handleMSA1SimilarImages);
       //console.log('MSA3: DOM 커스텀 이벤트 리스너 등록 완료');
       
       // 전역 이벤트 버스 리스너 추가
@@ -186,6 +188,8 @@ export default {
       // 커스텀 이벤트 리스너 정리
       document.removeEventListener('msa2-to-msa3-image-selected', this.handleMSA2Event);
       document.removeEventListener('msa2-to-msa3-similar-images', this.handleMSA2SimilarImages);
+      // MSA1 이벤트 리스너 정리 (새로 추가)
+      document.removeEventListener('msa1-to-msa3-similar-images', this.handleMSA1SimilarImages);
       
       // 전역 이벤트 버스 리스너 정리
       if (window.MSAEventBus) {
@@ -289,6 +293,31 @@ export default {
     handleMSA2SimilarImages(event) {
       if (event.detail && Array.isArray(event.detail)) {
         this.handleSimilarImagesFound(event.detail);
+      }
+    },
+    
+    // MSA1에서 보내는 유사 이미지 커스텀 이벤트 핸들러 (새로 추가)
+    handleMSA1SimilarImages(event) {
+      try {
+        console.log('[MSA3] MSA1에서 유사 이미지 데이터 수신:', event.detail);
+        
+        if (event.detail) {
+          const { mainImage, similarImages } = event.detail;
+          
+          // 메인 이미지 설정
+          if (mainImage) {
+            this.handleImageSelected(mainImage);
+          }
+          
+          // 유사 이미지 설정
+          if (similarImages && Array.isArray(similarImages)) {
+            this.handleSimilarImagesFound(similarImages);
+          }
+          
+          console.log('[MSA3] MSA1 유사 이미지 데이터 처리 완료');
+        }
+      } catch (error) {
+        console.error('[MSA3] MSA1 유사 이미지 데이터 처리 오류:', error);
       }
     },
     
@@ -426,26 +455,9 @@ export default {
     handleImageError(event) {
       const img = event.target;
       
-      // 완전한 SVG 플레이스홀더 이미지 생성
-      const placeholderSvg = `<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="200" height="200" fill="#F5F5F5"/>
-        <path d="M75 90L90 110L110 90L130 120L70 120L75 90Z" fill="#CCCCCC"/>
-        <circle cx="120" cy="80" r="10" fill="#CCCCCC"/>
-        <path d="M160 50H40V150H160V50Z" stroke="#CCCCCC" stroke-width="4"/>
-        <text x="100" y="170" text-anchor="middle" fill="#999" font-family="Arial" font-size="12">이미지 없음</text>
-      </svg>`;
-      
-      // SVG를 Base64로 인코딩
-      const base64Svg = btoa(unescape(encodeURIComponent(placeholderSvg)));
-      img.src = `data:image/svg+xml;base64,${base64Svg}`;
+      // 이미지 로드 실패 시 기본 이미지로 대체
+      img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjY2NjYyIgc3Ryb2tlLXdpZHRoPSIyIj48cGF0aCBkPSJNMTAgMTQgMTIgMTEuNSAxNCAxNCIvPjxwYXRoIGQ9Ik0yMCAxM3YtNGExIDEgMCAwIDAtMS0xSDVhMSAxIDAgMCAwLTEgMXY0Ii8+PHBhdGggZD0iTTEgMTd2NGExIDEgMCAwIDAgMSAxaDIwYTEgMSAwIDAgMCAxLTF2LTRhMSAxIDAgMCAwLTEtMUgyYTEgMSAwIDAgMC0xIDF6Ii8+PC9zdmc+';
       img.alt = '이미지 로드 실패';
-      
-      // 원본 URL 저장 (디버깅용)
-      if (!img.dataset.originalSrc) {
-        img.dataset.originalSrc = img.src;
-      }
-      
-      console.warn('MSA3 Image Display: Image load failed, using placeholder. Original URL:', img.dataset.originalSrc || 'unknown');
     },
     
     // 이미지 URL 생성

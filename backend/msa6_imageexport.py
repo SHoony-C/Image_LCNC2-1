@@ -421,6 +421,72 @@ async def get_table_schema(table_name: str = "msa6_result_cd"):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"테이블 스키마 조회 중 오류 발생: {str(e)}")
 
+@router.post("/check-table-permission")
+async def check_table_permission(data: Dict[str, Any] = Body(...)):
+    """
+    table_user 테이블에서 사용자의 테이블 접근 권한을 확인합니다.
+    """
+    try:
+        table_name = data.get("table_name")
+        username = data.get("username")
+        
+        if not table_name or not username:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "table_name과 username 파라미터가 필요합니다."}
+            )
+        
+        print(f"[check_table_permission] 권한 확인: 사용자={username}, 테이블={table_name}")
+        
+        # SQL 커넥션 가져오기
+        conn = lcnc_sql["engine"].connect()
+        
+        try:
+            # table_user 테이블에서 권한 확인
+            query = text("""
+            SELECT COUNT(*) as count FROM table_user
+            WHERE table_name = :table_name AND username = :username
+            """)
+            
+            result = conn.execute(query, {"table_name": table_name, "username": username}).fetchone()
+            
+            has_permission = result and result[0] > 0
+            
+            print(f"[check_table_permission] 권한 확인 결과: {has_permission}")
+            
+            return {
+                "status": "success",
+                "has_permission": has_permission,
+                "message": "권한이 있습니다." if has_permission else "권한이 없습니다."
+            }
+                
+        except Exception as sql_error:
+            print(f"[check_table_permission] SQL 오류: {str(sql_error)}")
+            return JSONResponse(
+                status_code=500,
+                content={"status": "error", "message": f"권한 확인 중 오류: {str(sql_error)}"}
+            )
+            
+        finally:
+            conn.close()
+            
+    except Exception as e:
+        print(f"[check_table_permission] 오류: {str(e)}")
+        traceback.print_exc()
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "message": f"권한 확인 중 오류가 발생했습니다: {str(e)}"}
+        )
+
+@router.options("/check-table-permission")
+async def options_check_table_permission():
+    """CORS preflight 요청을 처리하기 위한 OPTIONS 메소드 핸들러"""
+    response = JSONResponse(content={"message": "CORS preflight request handled"})
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return response
+
 @router.post("/save-with-table-name")
 async def save_with_table_name(data: Dict[str, Any] = Body(...)):
     """
@@ -451,7 +517,7 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
         
         # 요청 데이터 확인
         table_name = data.get("table_name")
-        username = data.get("username", "측정사용자")
+        username = data.get("username") or data.get("user_name", "")
         lot_wafer = data.get("lot_wafer", "")
         measurements = data.get("measurements", [])
         
@@ -463,11 +529,15 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
             print("[save_with_table_name] 오류: 테이블 이름이 없음")
             raise HTTPException(status_code=400, detail="테이블 이름이 필요합니다")
         
+        if not username:
+            print("[save_with_table_name] 오류: 사용자명이 없음")
+            raise HTTPException(status_code=400, detail="사용자명이 필요합니다")
+        
         if not measurements:
             print("[save_with_table_name] 오류: 측정 데이터가 없음")
             raise HTTPException(status_code=400, detail="측정 데이터가 필요합니다")
         
-        print(f"[save_with_table_name] 저장할 데이터: 테이블={table_name}, 측정값 수={len(measurements)}")
+        print(f"[save_with_table_name] 저장할 데이터: 테이블={table_name}, 사용자={username}, 측정값 수={len(measurements)}")
         
         # 데이터베이스 연결 테스트
         try:
@@ -481,9 +551,53 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
             traceback.print_exc()
             raise HTTPException(status_code=500, detail=f"데이터베이스 연결 실패: {str(db_test_error)}")
         
-        # 권한 확인 (필요하면 나중에 활성화)
-        # 현재는 권한 확인을 건너뛰고 모든 사용자에게 저장 권한 부여
-        print(f"[save_with_table_name] 권한 확인 생략: 모든 사용자에게 저장 권한 부여")
+        # 권한 확인 - table_user 테이블에서 실제 권한 확인
+        print(f"[save_with_table_name] 권한 확인 시작: 사용자={username}, 테이블={table_name}")
+        
+        # 권한 확인용 연결 생성
+        permission_conn = lcnc_sql["engine"].connect()
+        try:
+            permission_query = text("""
+            SELECT COUNT(*) as count FROM table_user
+            WHERE table_name = :table_name AND username = :username
+            """)
+            
+            permission_result = permission_conn.execute(permission_query, {
+                "table_name": table_name, 
+                "username": username
+            }).fetchone()
+            
+            has_permission = permission_result and permission_result[0] > 0
+            
+            print(f"[save_with_table_name] 권한 확인 결과: {has_permission}")
+            
+            if not has_permission:
+                print(f"[save_with_table_name] 권한 없음: 사용자={username}, 테이블={table_name}")
+                error_response = {
+                    "status": "error",
+                    "message": f"사용자 '{username}'은 테이블 '{table_name}'에 대한 저장 권한이 없습니다."
+                }
+                cors_response = JSONResponse(content=error_response, status_code=403)
+                cors_response.headers["Access-Control-Allow-Origin"] = "*"
+                cors_response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+                cors_response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+                return cors_response
+                
+        except Exception as permission_error:
+            print(f"[save_with_table_name] 권한 확인 중 오류: {str(permission_error)}")
+            error_response = {
+                "status": "error",
+                "message": f"권한 확인 중 오류가 발생했습니다: {str(permission_error)}"
+            }
+            cors_response = JSONResponse(content=error_response, status_code=500)
+            cors_response.headers["Access-Control-Allow-Origin"] = "*"
+            cors_response.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+            cors_response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            return cors_response
+        finally:
+            permission_conn.close()
+        
+        print(f"[save_with_table_name] 권한 확인 완료: 저장 권한 있음")
         
         # 데이터 저장용 연결 생성
         conn = lcnc_sql["engine"].connect()
@@ -545,7 +659,7 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                     # 파라미터 준비
                     params = {
                         "table_name": str(table_name)[:45] if table_name else "",  # varchar(45) 제한
-                        "username": str(username)[:45] if username else "측정사용자",  # varchar(45) 제한
+                        "username": str(username)[:45] if username else "",  # varchar(45) 제한
                         "lot_wafer": str(lot_wafer)[:45] if lot_wafer else "",              # varchar(45) 제한
                         "item_id": str(item_id)[:45] if item_id else "",           # varchar(45) 제한
                         "subitem_id": str(subitem_id)[:45] if subitem_id else "",  # varchar(45) 제한

@@ -60,11 +60,18 @@ export default {
           return;
         }
         
-        // 사용자 정보
-        const userName = localStorage.getItem('userName') || '사용자';
+        // 로컬 스토리지에서 사용자 정보 가져오기
+        const userInfo = JSON.parse(localStorage.getItem('user') || '{}');
+        const userName = userInfo.username || '';
+        
+        if (!userName) {
+          this.showNotification('사용자 정보를 찾을 수 없습니다.', 'error');
+          return;
+        }
+        
         const lot_wafer = this.currentFile ? this.currentFile.name.split('.')[0] : '';
         
-        // 측정 결과 저장 API 호출
+        // 측정 결과 저장 API 호출 (백엔드에서 권한 확인 포함)
         for (const measurement of this.measurements) {
           const response = await fetch('http://localhost:8000/api/msa6/save-with-table-name', {
             method: 'POST',
@@ -86,10 +93,9 @@ export default {
           const result = await response.json();
           
           if (result.status !== 'success') {
-            // 권한 오류 메시지 특별 처리
-            if (result.message && result.message.includes('저장 권한이 없습니다')) {
-              this.showNotification(result.message, 'error');
-              console.error('[saveWithTableName] 권한 오류:', result.message);
+            // 권한 오류인 경우 특별 처리
+            if (response.status === 403) {
+              this.showNotification(result.message || '해당 테이블에 대한 저장 권한이 없습니다.', 'error');
               return;
             }
             throw new Error(result.message || '저장 실패');

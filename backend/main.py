@@ -135,7 +135,7 @@ async def health():
 
 # MSA 모듈 라우터 등록
 app.include_router(msa1_router, prefix="/api/msa1", tags=["msa1"])
-app.include_router(msa2_router, prefix="/api/msa4", tags=["msa2"])
+app.include_router(msa2_router, prefix="/api/imageprocess", tags=["msa2"])
 app.include_router(msa3_router, prefix="/api/imageanalysis", tags=["msa3"])
 
 # 추가 라우팅: similar-images API를 imageanalysis 라우터에 연결

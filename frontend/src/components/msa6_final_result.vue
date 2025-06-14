@@ -35,8 +35,12 @@
       :imageUrl="finalImage"
       :inputImageUrl="inputImage"
       :showPopup="showMeasurementPopup"
+      :measurements="measurements"
       @update:showPopup="showMeasurementPopup = $event"
       @close="closeMeasurementPopup"
+      @measurement-added="handleMeasurementAdded"
+      @measurement-removed="handleMeasurementRemoved"
+      @measurements-cleared="handleMeasurementsCleared"
     />
   </div>
 </template>
@@ -56,12 +60,16 @@ export default {
       showResult: false,
       showMeasurementPopup: false,
       inputImage: null,
-      msa5ImageAvailable: false
+      msa5ImageAvailable: false,
+      measurements: []
     }
   },
   mounted() {
     // MSA5 이미지 처리 이벤트 리스너 등록
     window.addEventListener('msa5-image-processed', this.handleMSA5ImageProcessed)
+    
+    // MSA5 프로세스 시작 이벤트 리스너 등록 (측정 결과 즉시 초기화)
+    window.addEventListener('msa5-process-start', this.handleMSA5ProcessStart)
     
     // 측정 팝업 컴포넌트가 항상 존재하지만 처음에는 보이지 않게 설정
     this.showMeasurementPopup = false
@@ -81,6 +89,7 @@ export default {
   },
   beforeUnmount() {
     window.removeEventListener('msa5-image-processed', this.handleMSA5ImageProcessed)
+    window.removeEventListener('msa5-process-start', this.handleMSA5ProcessStart)
     window.removeEventListener('load', this.clearImageOnReload)
     window.removeEventListener('msa6-popup-closed', () => {})
   },
@@ -174,23 +183,47 @@ export default {
         }
       }
     },
+    handleMSA5ProcessStart(event) {
+      console.log('MSA6: MSA5 프로세스 시작 이벤트 수신')
+      
+      try {
+        // 이벤트 데이터 확인
+        const data = event.detail;
+        
+        if (data && data.action === 'clear_measurements') {
+          console.log('MSA6: 측정 결과 초기화 요청 수신');
+          
+          // measurements 배열 직접 초기화
+          this.measurements = [];
+          console.log('MSA6: measurements 배열 초기화 완료');
+          
+          // 측정 팝업 컴포넌트에도 초기화 요청 (내부 데이터 초기화용)
+          if (this.$refs.measurementPopup && typeof this.$refs.measurementPopup.clearMeasurements === 'function') {
+            this.$refs.measurementPopup.clearMeasurements();
+            console.log('MSA6: 측정 팝업에 초기화 요청 전송 완료');
+          } else {
+            console.warn('MSA6: 측정 팝업 컴포넌트를 찾을 수 없거나 clearMeasurements 메서드가 없습니다');
+          }
+        }
+      } catch (error) {
+        console.error('MSA6: MSA5 프로세스 시작 이벤트 처리 중 오류:', error);
+      }
+    },
     toggleMaximize() {
       this.isMaximized = !this.isMaximized
     },
     openMeasurementPopup() {
       if (this.finalImage) {
         console.log('Opening measurement popup with image:', this.finalImage)
-        
-        // 먼저 showMeasurementPopup을 true로 설정
         this.showMeasurementPopup = true
         
         // 세션 스토리지 플래그 초기화 (팝업을 명시적으로 열었으므로 플래그 초기화)
         sessionStorage.removeItem('msa6_no_auto_popup');
         console.log('MSA6: 사용자가 수동으로 팝업을 열었습니다. 자동 팝업 방지 플래그를 초기화합니다.');
         
-        // DOM 업데이트 후 팝업 컴포넌트 메서드 호출
+        // First make sure the container elements are visible
         this.$nextTick(() => {
-          // 팝업 관련 요소들 표시 설정
+          // 먼저 팝업 관련 요소들 표시 설정
           const teleportElements = document.querySelectorAll('.msa6-image-popup-container');
           teleportElements.forEach(element => {
             element.style.display = 'block';
@@ -201,16 +234,14 @@ export default {
           if (popupContainer) {
             popupContainer.style.removeProperty('display');
             popupContainer.style.removeProperty('visibility');
-            popupContainer.style.display = 'block';
-            popupContainer.style.visibility = 'visible';
           }
           
           console.log('MSA6: 팝업 컨테이너 표시 설정 완료');
           
-          // 팝업 컴포넌트의 openPopup 메서드 호출
+          // 이제 팝업 컴포넌트의 openPopup 메서드 호출
           if (this.$refs.measurementPopup && typeof this.$refs.measurementPopup.openPopup === 'function') {
             try {
-              this.$refs.measurementPopup.openPopup();
+              this.$refs.measurementPopup.openPopup(this.finalImage);
               console.log('MSA6: 측정 팝업 openPopup 메서드 호출 완료');
             } catch (error) {
               console.error('MSA6: openPopup 메서드 호출 중 오류 발생:', error);
@@ -248,6 +279,30 @@ export default {
         
         console.log('MSA6: 측정 팝업 DOM 요소 강제 숨김 처리 완료');
       });
+    },
+    handleMeasurementAdded(measurement) {
+      console.log('MSA6: 측정 결과 추가됨', measurement);
+      this.measurements.push(measurement);
+    },
+    handleMeasurementRemoved(measurement) {
+      console.log('MSA6: 측정 결과 제거됨', measurement);
+      if (measurement.itemId) {
+        // itemId로 삭제하는 경우
+        this.measurements = this.measurements.filter(m => m.itemId !== measurement.itemId);
+      } else if (measurement.id) {
+        // id로 삭제하는 경우
+        this.measurements = this.measurements.filter(m => m.id !== measurement.id);
+      } else {
+        // 전체 객체로 삭제하는 경우
+        const index = this.measurements.indexOf(measurement);
+        if (index > -1) {
+          this.measurements.splice(index, 1);
+        }
+      }
+    },
+    handleMeasurementsCleared() {
+      console.log('MSA6: 모든 측정 결과 제거됨');
+      this.measurements = [];
     }
   }
 }

@@ -926,6 +926,29 @@ export default {
         return
       }
       
+      // MSA6 측정 결과 초기화 이벤트 발생 (프로세스 시작 시 즉시)
+      try {
+        console.log('[processStart] MSA6 측정 결과 초기화 이벤트 발생');
+        const clearEvent = new CustomEvent('msa5-process-start', {
+          detail: {
+            timestamp: Date.now(),
+            action: 'clear_measurements'
+          },
+          bubbles: true,
+          cancelable: true
+        });
+        
+        document.dispatchEvent(clearEvent);
+        window.dispatchEvent(clearEvent);
+        
+        // 세션 스토리지에도 플래그 설정
+        sessionStorage.setItem('msa5_process_started', 'true');
+        
+        console.log('[processStart] MSA6 측정 결과 초기화 이벤트 발생 완료');
+      } catch (error) {
+        console.error('[processStart] MSA6 초기화 이벤트 발생 실패:', error);
+      }
+      
       // 액션 로깅 데이터 준비
       const logData = {
         component: 'MSA5',
