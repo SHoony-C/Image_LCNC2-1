@@ -492,6 +492,7 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
     """
     측정 데이터를 선택한 테이블 이름과 함께 msa6_result_cd 테이블에 저장합니다.
     단일 측정값 또는 측정값 배열을 받을 수 있습니다.
+    측정 결과가 표시된 before/after 이미지도 함께 저장합니다.
     """
     # CORS 헤더 추가 (응답 커스터마이징 지원)
     response = JSONResponse(content={"status": "pending"})
@@ -509,17 +510,22 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
         
         # 디버깅을 위한 더 자세한 요청 데이터 출력
         for key, value in data.items():
-            print(f"[save_with_table_name] 요청 키: {key}, 값 타입: {type(value)}")
-            if key == "measurements" and isinstance(value, list):
-                print(f"[save_with_table_name] 측정값 개수: {len(value)}")
-                if value and len(value) > 0:
-                    print(f"[save_with_table_name] 첫 번째 측정값 샘플: {value[0]}")
+            if key in ['before_image_data', 'after_image_data']:
+                print(f"[save_with_table_name] 요청 키: {key}, 값 길이: {len(str(value)) if value else 0}")
+            else:
+                print(f"[save_with_table_name] 요청 키: {key}, 값 타입: {type(value)}")
+                if key == "measurements" and isinstance(value, list):
+                    print(f"[save_with_table_name] 측정값 개수: {len(value)}")
+                    if value and len(value) > 0:
+                        print(f"[save_with_table_name] 첫 번째 측정값 샘플: {value[0]}")
         
         # 요청 데이터 확인
         table_name = data.get("table_name")
         username = data.get("username") or data.get("user_name", "")
         lot_wafer = data.get("lot_wafer", "")
         measurements = data.get("measurements", [])
+        before_image_data = data.get("before_image_data")
+        after_image_data = data.get("after_image_data")
         
         # 단일 측정값인 경우 리스트로 변환
         if "measurement" in data and data["measurement"]:
@@ -538,6 +544,84 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
             raise HTTPException(status_code=400, detail="측정 데이터가 필요합니다")
         
         print(f"[save_with_table_name] 저장할 데이터: 테이블={table_name}, 사용자={username}, 측정값 수={len(measurements)}")
+        
+        # 이미지 저장 처리
+        saved_images = {}
+        if before_image_data or after_image_data:
+            print("[save_with_table_name] 이미지 저장 시작")
+            
+            # 파일명 생성 (lot_wafer 기반)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            base_filename = f"{lot_wafer}_{timestamp}" if lot_wafer else f"measurement_{timestamp}"
+            
+            # Before 이미지 저장
+            if before_image_data:
+                try:
+                    # base64 데이터에서 헤더 제거
+                    if before_image_data.startswith('data:image/'):
+                        before_image_data = before_image_data.split(',')[1]
+                    
+                    # base64 디코딩
+                    before_image_bytes = base64.b64decode(before_image_data)
+                    before_filename = f"{base_filename}_before.png"
+                    before_filepath = os.path.join(EXPORT_DIR, before_filename)
+                    
+                    with open(before_filepath, 'wb') as f:
+                        f.write(before_image_bytes)
+                    
+                    saved_images['before'] = before_filename
+                    print(f"[save_with_table_name] Before 이미지 저장 완료: {before_filename}")
+                except Exception as e:
+                    print(f"[save_with_table_name] Before 이미지 저장 실패: {str(e)}")
+            
+            # After 이미지 저장
+            if after_image_data:
+                try:
+                    print(f"[save_with_table_name] After 이미지 저장 시작")
+                    print(f"[save_with_table_name] After 이미지 데이터 길이: {len(after_image_data)}")
+                    print(f"[save_with_table_name] After 이미지 데이터 시작 부분: {after_image_data[:50]}...")
+                    
+                    # base64 데이터에서 헤더 제거
+                    if after_image_data.startswith('data:image/'):
+                        header_part = after_image_data.split(',')[0]
+                        after_image_data = after_image_data.split(',')[1]
+                        print(f"[save_with_table_name] After 이미지 헤더 제거: {header_part}")
+                    
+                    print(f"[save_with_table_name] After 이미지 Base64 데이터 길이: {len(after_image_data)}")
+                    
+                    # base64 디코딩
+                    after_image_bytes = base64.b64decode(after_image_data)
+                    after_filename = f"{base_filename}_after.png"
+                    after_filepath = os.path.join(EXPORT_DIR, after_filename)
+                    
+                    print(f"[save_with_table_name] After 이미지 저장 경로: {after_filepath}")
+                    print(f"[save_with_table_name] After 이미지 바이트 크기: {len(after_image_bytes)} bytes")
+                    
+                    with open(after_filepath, 'wb') as f:
+                        f.write(after_image_bytes)
+                    
+                    # 저장된 파일 확인
+                    if os.path.exists(after_filepath):
+                        file_size = os.path.getsize(after_filepath)
+                        print(f"[save_with_table_name] After 이미지 저장 완료: {after_filename} (크기: {file_size} bytes)")
+                        
+                        # 파일이 실제로 유효한 이미지인지 간단히 확인
+                        try:
+                            from PIL import Image
+                            with Image.open(after_filepath) as img:
+                                print(f"[save_with_table_name] After 이미지 검증 성공: {img.size} 크기, {img.mode} 모드")
+                        except Exception as img_verify_error:
+                            print(f"[save_with_table_name] After 이미지 검증 실패: {str(img_verify_error)}")
+                    else:
+                        print(f"[save_with_table_name] After 이미지 파일이 생성되지 않음: {after_filepath}")
+                    
+                    saved_images['after'] = after_filename
+                except Exception as e:
+                    print(f"[save_with_table_name] After 이미지 저장 실패: {str(e)}")
+                    import traceback
+                    print(f"[save_with_table_name] After 이미지 저장 오류 상세: {traceback.format_exc()}")
+            else:
+                print(f"[save_with_table_name] After 이미지 데이터가 없음")
         
         # 데이터베이스 연결 테스트
         try:
@@ -630,9 +714,9 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
             
             for idx, measurement in enumerate(measurements):
                 try:
-                    # 유효한 측정값인지 확인
-                    if not measurement or not isinstance(measurement, dict):
-                        print(f"[save_with_table_name] 측정값 #{idx+1}: 유효하지 않은 형식, 건너뜀")
+                    # 유효한 측정값인지 확인 - dict 타입만 확인
+                    if not isinstance(measurement, dict):
+                        print(f"[save_with_table_name] 측정값 #{idx+1}: dict 타입이 아님, 건너뜀 (타입: {type(measurement)})")
                         continue
                     
                     # 필수 필드 확인
@@ -642,11 +726,12 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                     
                     # 원본 데이터 출력
                     print(f"[save_with_table_name] 측정값 #{idx+1} 원본: itemId={item_id}, subItemId={subitem_id}, value={raw_value}")
+                    print(f"[save_with_table_name] 측정값 #{idx+1} 전체 객체: {measurement}")
                     
-                    # 값이 없거나 0인 측정값은 건너뛰기
+                    # 값이 없거나 0인 측정값도 저장하도록 변경 (실제 측정값이 0일 수 있음)
                     if raw_value is None:
-                        print(f"[save_with_table_name] 측정값 #{idx+1}: 값이 None임, 건너뜀")
-                        continue
+                        print(f"[save_with_table_name] 측정값 #{idx+1}: 값이 None임, 0으로 설정")
+                        raw_value = 0
                     
                     # float 변환 확인
                     try:
@@ -656,13 +741,16 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                         print(f"[save_with_table_name] 측정값 #{idx+1}: 값({raw_value})을 float로 변환할 수 없음, 0으로 설정: {str(e)}")
                         float_value = 0.0
                     
+                    # item_id, subitem_id는 원본 값 그대로 사용 (빈 값이어도 그대로 저장)
+                    print(f"[save_with_table_name] 측정값 #{idx+1}: 원본 값 사용 - item_id='{item_id}', subitem_id='{subitem_id}'")
+                    
                     # 파라미터 준비
                     params = {
                         "table_name": str(table_name)[:45] if table_name else "",  # varchar(45) 제한
                         "username": str(username)[:45] if username else "",  # varchar(45) 제한
                         "lot_wafer": str(lot_wafer)[:45] if lot_wafer else "",              # varchar(45) 제한
-                        "item_id": str(item_id)[:45] if item_id else "",           # varchar(45) 제한
-                        "subitem_id": str(subitem_id)[:45] if subitem_id else "",  # varchar(45) 제한
+                        "item_id": str(item_id)[:45],           # varchar(45) 제한 - 원본 값 그대로 사용
+                        "subitem_id": str(subitem_id)[:45],  # varchar(45) 제한 - 원본 값 그대로 사용
                         "value": float_value,                                      # double 타입
                         "create_time": now                                         # datetime 타입
                     }
@@ -670,17 +758,25 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                     # 상세 로깅 추가 - 모든 값 정확히 확인
                     print(f"[save_with_table_name] 측정값 #{idx+1} 저장 파라미터:")
                     for key, value in params.items():
-                        print(f"  - {key}: {value} (타입: {type(value).__name__})")
+                        print(f"  - {key}: '{value}' (타입: {type(value).__name__}, 길이: {len(str(value)) if isinstance(value, str) else 'N/A'})")
                     
                     # 측정 데이터 삽입
                     print(f"[save_with_table_name] SQL 쿼리 실행: {query_str}")
                     try:
                         insert_result = conn.execute(query, params)
                         print(f"[save_with_table_name] SQL 실행 결과: {insert_result.rowcount} 행 영향 받음")
-                        saved_count += 1
-                        print(f"[save_with_table_name] 측정값 #{idx+1} 저장 성공")
+                        
+                        # 실제로 데이터가 삽입되었는지 확인
+                        if insert_result.rowcount > 0:
+                            saved_count += 1
+                            print(f"[save_with_table_name] 측정값 #{idx+1} 저장 성공 (총 {saved_count}개 저장됨)")
+                        else:
+                            print(f"[save_with_table_name] 측정값 #{idx+1} 저장 실패: 영향받은 행이 0개")
+                            errors.append(f"측정값 #{idx+1}: 데이터베이스에 저장되지 않음")
+                            
                     except Exception as exec_error:
                         print(f"[save_with_table_name] SQL 실행 오류: {str(exec_error)}")
+                        print(f"[save_with_table_name] SQL 오류 상세:", traceback.format_exc())
                         errors.append(f"측정값 #{idx+1} SQL 오류: {str(exec_error)}")
                         # 단일 항목 오류는 무시하고 계속 진행
                         continue
@@ -690,6 +786,9 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                     print(f"[save_with_table_name] {error_msg}")
                     print(f"[save_with_table_name] 오류 상세 정보:", traceback.format_exc())
                     errors.append(error_msg)
+            
+            # 저장 결과 확인
+            print(f"[save_with_table_name] 저장 완료: 성공 {saved_count}개, 실패 {len(errors)}개")
             
             if saved_count == 0 and errors:
                 # 모든 측정값 저장에 실패한 경우
@@ -712,6 +811,29 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                 try:
                     trans.commit()
                     print(f"[save_with_table_name] 트랜잭션 커밋 완료, {saved_count}개 저장됨")
+                    
+                    # 커밋 후 실제 저장된 데이터 확인
+                    verify_conn = lcnc_sql["engine"].connect()
+                    try:
+                        verify_query = text("""
+                        SELECT COUNT(*) as count FROM msa6_result_cd 
+                        WHERE table_name = :table_name AND username = :username AND lot_wafer = :lot_wafer
+                        ORDER BY create_time DESC
+                        """)
+                        verify_result = verify_conn.execute(verify_query, {
+                            "table_name": table_name,
+                            "username": username,
+                            "lot_wafer": lot_wafer
+                        }).fetchone()
+                        
+                        actual_count = verify_result[0] if verify_result else 0
+                        print(f"[save_with_table_name] 데이터베이스 확인: 실제 저장된 레코드 수 = {actual_count}")
+                        
+                    except Exception as verify_error:
+                        print(f"[save_with_table_name] 저장 확인 중 오류: {str(verify_error)}")
+                    finally:
+                        verify_conn.close()
+                    
                 except Exception as commit_error:
                     print(f"[save_with_table_name] 트랜잭션 커밋 오류: {str(commit_error)}")
                     trans.rollback()
@@ -725,6 +847,16 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                 "saved_count": saved_count,
                 "total_sent": len(measurements)
             }
+            
+            # 이미지 저장 정보 추가
+            if saved_images:
+                response["saved_images"] = saved_images
+                image_info = []
+                if 'before' in saved_images:
+                    image_info.append(f"처리 전 이미지: {saved_images['before']}")
+                if 'after' in saved_images:
+                    image_info.append(f"처리 후 이미지: {saved_images['after']}")
+                response["message"] += f". {', '.join(image_info)}도 저장되었습니다"
             
             if errors:
                 response["warnings"] = errors

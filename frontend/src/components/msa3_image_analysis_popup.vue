@@ -12,7 +12,7 @@
           <div class="image-card">
             <h4>Original Image</h4>
             <div class="image-wrapper">
-              <img :src="imageUrl" :alt="imageName" class="detail-image" />
+              <img :src="originalImageUrl" :alt="imageName" class="detail-image" />
             </div>
           </div>
           
@@ -26,6 +26,33 @@
                 @error="handleImageError" 
                 @load="imageLoaded"
               />
+            </div>
+          </div>
+        </div>
+        
+        <div class="text-content-section">
+          <h4>Image Information</h4>
+          <div class="text-content-wrapper">
+            <div class="text-content-container">
+              <div class="text-content-header">
+                <div class="header-left">
+                  <i class="fas fa-file-text"></i>
+                  <span>{{ imageName.split('.')[0] }}.txt</span>
+                </div>
+                <button class="refresh-button" @click="refreshTextFrame" title="새로고침">
+                  <i class="fas fa-sync-alt"></i>
+                </button>
+              </div>
+              <div class="text-content-body">
+                <iframe 
+                  :src="textContentUrl" 
+                  class="text-content-frame"
+                  frameborder="0"
+                  :key="frameKey"
+                  @load="onFrameLoad"
+                  @error="onFrameError"
+                ></iframe>
+              </div>
             </div>
           </div>
         </div>
@@ -58,6 +85,23 @@ export default {
       required: true
     }
   },
+  data() {
+    return {
+      frameKey: 0
+    };
+  },
+  watch: {
+    show: {
+      handler(newVal) {
+        console.log('Analysis Popup: show prop changed to:', newVal);
+        // iframe handles loading automatically
+      },
+      immediate: true
+    }
+  },
+  mounted() {
+    console.log('Analysis Popup: Component mounted, show prop is:', this.show);
+  },
   computed: {
     wholeImageUrl() {
       // Construct URL for the '_whole.png' version of the image
@@ -67,12 +111,19 @@ export default {
       console.log('Analysis Popup: Generated whole image URL:', imageName,url);
       return url;
     },
+    originalImageUrl() {
+      // Construct URL for the original image without '_whole'
+      const imageName = this.imageName.split('.')[0]; // Remove file extension
+      const url = `http://localhost:8091/additional_images/${imageName}.png`
+      console.log('Analysis Popup: Generated original image URL:', imageName, url);
+      return url;
+    },
     textContentUrl() {
       // Construct URL for the '.txt' file associated with the image
-      // Using proxy to avoid CORS issues
+      // Using direct IIS server connection with encoding hints
       const imageName = this.imageName.split('.')[0]; // Remove file extension
-      const url = `http://localhost:8000/proxy/additional_images/${imageName}.txt`;
-      //console.log('Analysis Popup: Generated text content URL:', url);
+      const url = `http://localhost:8091/additional_images/${imageName}.txt?charset=utf-8`;
+      console.log('Analysis Popup: Generated text content URL:', imageName, url);
       return url;
     }
   },
@@ -112,6 +163,16 @@ export default {
         console.error('Error analyzing image:', error);
         alert('Failed to analyze image. Please try again.');
       }
+    },
+    refreshTextFrame() {
+      this.frameKey++;
+    },
+    onFrameLoad(event) {
+      //console.log('Text content frame loaded');
+    },
+    onFrameError(event) {
+      console.error('Error loading text content:', event.target.error);
+      // Handle error appropriately
     }
   }
 };
@@ -202,6 +263,124 @@ export default {
   max-width: 100%;
   max-height: 400px;
   border-radius: 4px;
+}
+
+.text-content-section {
+  margin-bottom: 24px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.text-content-section h4 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.text-content-wrapper {
+  min-height: 100px;
+  display: block;
+}
+
+.text-content-container {
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.text-content-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 500;
+}
+
+.text-content-header .header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.text-content-header i {
+  font-size: 16px;
+}
+
+.refresh-button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.refresh-button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.text-content-body {
+  background-color: #f8f9fa;
+  min-height: 400px;
+  overflow: hidden;
+}
+
+.text-content-frame {
+  width: 100%;
+  height: 400px;
+  border: none;
+  background-color: white;
+  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+}
+
+.text-content-frame::before {
+  content: '';
+  display: block;
+  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+}
+
+.loading-message {
+  color: #6c757d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px;
+  font-size: 16px;
+  height: 400px;
+}
+
+.loading-message i {
+  font-size: 18px;
+}
+
+.error-message {
+  color: #dc3545;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px;
+  font-size: 16px;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 8px;
+  margin: 20px;
+  height: 360px;
+}
+
+.error-message i {
+  font-size: 18px;
+}
+
+.fallback-message {
+  height: 400px;
 }
 
 .action-buttons {

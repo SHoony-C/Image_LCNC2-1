@@ -21,7 +21,7 @@
                 />
               </div>
               <div class="directory-input">
-                <label>Analysis 이미지 경로 (필터링 없음):</label>
+                <label>Analysis 이미지 경로 (_whole 제외 필터링):</label>
                 <input 
                   type="text" 
                   v-model="analysisImageDirectory" 
@@ -167,6 +167,7 @@ export default {
             body: JSON.stringify({ 
               directory_path: this.analysisImageDirectory,
               includeBeforeImagesOnly: false, // 모든 이미지 포함
+              includeWholeImagesOnly: false, // '_whole' 접미사가 없는 파일만 포함
               tag: 'Analysis' // 이미지 태그 추가
             })
           });

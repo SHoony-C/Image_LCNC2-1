@@ -25,19 +25,20 @@ DATABASE_URL = f"mysql+pymysql://{MYSQL_SETTINGS['USER']}:{MYSQL_SETTINGS['PASSW
                f"{MYSQL_SETTINGS['HOST']}:{MYSQL_SETTINGS['PORT']}/{MYSQL_SETTINGS['DATABASE']}"
 
 # Create SQLAlchemy engine with echo=True to log all SQL statements
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL, echo=False)
 
 # Add SQL query logging
 @event.listens_for(engine, "before_cursor_execute")
 def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
     conn.info.setdefault('query_start_time', []).append(os.times())
-    print("\n===== 실행 SQL 쿼리 =====")
-    print(statement)
-    print("바인딩 파라미터:", parameters)
+    # print("\n===== 실행 SQL 쿼리 =====")
+    # print(statement)
+    # print("바인딩 파라미터:", parameters)
 
 @event.listens_for(engine, "after_cursor_execute")
 def after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
-    print("===== SQL 쿼리 실행 완료 =====\n")
+    # print("===== SQL 쿼리 실행 완료 =====\n")
+    pass
 
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -94,7 +95,7 @@ LCNC_DATABASE_URL = f"mysql+pymysql://{LCNC_SETTINGS['USER']}:{LCNC_SETTINGS['PA
                f"{LCNC_SETTINGS['HOST']}:{LCNC_SETTINGS['PORT']}/{LCNC_SETTINGS['DATABASE']}"
 
 # LCNC 데이터베이스용 엔진 생성
-lcnc_engine = create_engine(LCNC_DATABASE_URL, echo=True)
+lcnc_engine = create_engine(LCNC_DATABASE_URL, echo=False)
 
 # 테이블 생성 함수 (없는 경우에만)
 def create_lcnc_tables():

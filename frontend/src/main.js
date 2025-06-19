@@ -82,7 +82,29 @@ window.addEventListener('error', (event) => {
     event.preventDefault();
     return false;
   }
+  
+  // 이미지 로드 오류 무시
+  if (event.target && event.target.tagName === 'IMG') {
+    event.stopPropagation();
+    event.preventDefault();
+    return false;
+  }
 }, true);
+
+// 이미지 오류 로그 차단을 위한 전역 핸들러
+const originalConsoleError = console.error;
+console.error = function(...args) {
+  // 이미지 관련 오류 메시지 필터링
+  const message = args[0];
+  if (typeof message === 'string') {
+    if (message.includes('Failed to load image') || 
+        message.includes('이미지 로드 실패') ||
+        message.includes('data:image/svg+xml')) {
+      return; // 이미지 오류 로그 무시
+    }
+  }
+  originalConsoleError.apply(console, args);
+};
 
 // Vue 프로덕션 하이드레이션 경고 해결
 window.__VUE_PROD_HYDRATION_MISMATCH_DETAILS__ = false

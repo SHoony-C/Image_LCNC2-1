@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from msa1_imageload import router as msa1_router
 from msa2_imageprocess import router as msa2_router
 from msa3_imageanalysis import router as msa3_router
-from msa4_imagestorage import router as msa4_router
+from msa4_LLM import router as msa4_router
 from msa6_imageexport import router as msa6_router
 from msa5_imageLCNC import router as msa5_router
 from msa5_workLCNC import router as msa5_work_router
@@ -141,7 +141,7 @@ app.include_router(msa3_router, prefix="/api/imageanalysis", tags=["msa3"])
 # 추가 라우팅: similar-images API를 imageanalysis 라우터에 연결
 app.include_router(msa3_router, prefix="/api", tags=["msa3"])
 
-app.include_router(msa4_router, prefix="/api/msa2", tags=["msa4"])
+app.include_router(msa4_router, prefix="/api/imagestorage", tags=["msa4"])
 app.include_router(msa5_router, prefix="/api/msa5", tags=["msa5"])
 app.include_router(msa5_work_router, prefix="/api/msa5/work", tags=["msa5_work"])
 app.include_router(msa6_router, prefix="/api/msa6", tags=["msa6"])

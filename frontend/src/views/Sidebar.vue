@@ -21,10 +21,6 @@
           <i class="fas fa-chart-line"></i>
           <span v-if="!isCollapsed">Analysis</span>
         </router-link>
-        <router-link to="/addon" class="nav-item" active-class="active">
-          <i class="fas fa-puzzle-piece"></i>
-          <span v-if="!isCollapsed">Add-on</span>
-        </router-link>
       </nav>
 
       <div v-if="isAdmin" class="section-title">ADMIN</div>

@@ -274,7 +274,7 @@ export default {
         if (newVectors) {
           this.markerSizes = Array(newVectors.length).fill(6);
           this.markerColors = Array(newVectors.length).fill('#1f77b4');
-          this.initializePlot();
+          // this.initializePlot();
         }
       },
       immediate: true
@@ -742,7 +742,7 @@ export default {
           logDebug(`Processed ${topSimilarImages.length} similar images`);
           
           // MSA3로 유사 이미지 데이터 전송
-          this.$root.$emit('similar-images-found', topSimilarImages);
+          this.$eventBus.emit('similar-images-found', topSimilarImages);
           
           // 커스텀 이벤트로도 전달
           const event = new CustomEvent('msa2-to-msa3-similar-images', {
@@ -775,7 +775,7 @@ export default {
               this.similarImages = fallbackImages.fallbackSimilarImages;
               
               // MSA3로 폴백 유사 이미지 데이터 전송
-              this.$root.$emit('similar-images-found', fallbackImages.fallbackSimilarImages);
+              this.$eventBus.emit('similar-images-found', fallbackImages.fallbackSimilarImages);
               
               // 커스텀 이벤트로도 전달
               const event = new CustomEvent('msa2-to-msa3-similar-images', {
@@ -1218,9 +1218,9 @@ export default {
         }
         
         // Plotly 데이터 준비 (여기서 createPlot 호출)
-        console.log("벡터 데이터 처리 완료, 그래프 생성 시작...");
+        // console.log("벡터 데이터 처리 완료, 그래프 생성 시작...");
         this.createPlot();
-        console.log("그래프 생성 완료");
+        // console.log("그래프 생성 완료");
         
         // 데이터 로드 상태 업데이트
         this.isDataLoaded = true;
@@ -1898,7 +1898,7 @@ export default {
       
       try {
         // Vue 이벤트 버스를 통한 전송
-        this.$root.$emit('image-selected', imageData);
+        this.$eventBus.emit('image-selected', imageData);
         
         // DOM 이벤트를 통한 전송
         const event = new CustomEvent('msa2-to-msa3-image-selected', {
@@ -1913,7 +1913,7 @@ export default {
             // 유사 이미지가 있는 경우에만 전송
             if (similarImages && similarImages.length > 0) {
               // Vue 이벤트 버스를 통한 전송
-              this.$root.$emit('similar-images-found', similarImages);
+              this.$eventBus.emit('similar-images-found', similarImages);
               
               // DOM 이벤트를 통한 전송
               const similarEvent = new CustomEvent('msa2-to-msa3-similar-images', {
@@ -2103,7 +2103,7 @@ export default {
         
         Plotly.newPlot(container, data, layout, plotConfig)
           .then(() => {
-            console.log('3D 그래프 생성 완료');
+            // console.log('3D 그래프 생성 완료');
             
             // 8. 클릭 이벤트 등록 - 한 번만 등록하기 위해 기존 이벤트 제거
             container.removeAllListeners && container.removeAllListeners('plotly_click');
@@ -2114,7 +2114,7 @@ export default {
               const customIndex = eventData.points[0].customdata;
               
               if (customIndex !== undefined) {
-                console.log(`포인트 클릭: ${pointIndex} (원본 인덱스: ${customIndex})`);
+                // console.log(`포인트 클릭: ${pointIndex} (원본 인덱스: ${customIndex})`);
                 this.selectImageByIndex(customIndex);
               }
             });
@@ -3108,11 +3108,13 @@ export default {
       });
     };
     
-    // 플롯 초기화
-    this.initializeVisualization();
+    // // 플롯 초기화
+    // this.initializeVisualization();
     
     // MSA3에서 오는 이미지 선택 이벤트 리스너 등록
-    this.$root.$on('select-image-by-filename', this.handleSelectImageByFilename);
+    if (this.$eventBus) {
+      this.$eventBus.on('select-image-by-filename', this.handleSelectImageByFilename);
+    }
   },
   
   beforeDestroy() {
@@ -3137,7 +3139,9 @@ export default {
     }
     
     // 이벤트 리스너 제거
-    this.$root.$off('select-image-by-filename', this.handleSelectImageByFilename);
+    if (this.$eventBus) {
+      this.$eventBus.off('select-image-by-filename', this.handleSelectImageByFilename);
+    }
     
     logDebug('MSA4 event listeners and observers cleaned up');
   },

@@ -1,11 +1,13 @@
-from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+from fastapi import APIRouter, HTTPException, Query
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import random
 import math
 import os
 import pandas as pd
 import numpy as np
+from sqlalchemy import text
+from db_config import lcnc_sql
 
 router = APIRouter()
 
@@ -70,6 +72,7 @@ def generate_defect_data() -> List[Dict[str, Any]]:
             data.append({
                 "item_id": item_id,
                 "subitem_id": f"sub_{j+1}",
+                "lot_wafer": f"demo_lot_{i+1}",  # lot_wafer 필드 추가
                 "date": date,
                 "x": round(defect_x, 3),
                 "y": round(defect_y, 3),
@@ -84,10 +87,155 @@ def get_image_list() -> List[Dict[str, str]]:
     # 5개의 이미지만 반환
     return [{"filename": f"그림{i+1}.png"} for i in range(5)]
 
-@router.get("/data")
-async def get_side2_data():
+def get_real_measurement_data(table_name: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None) -> List[Dict[str, Any]]:
+    """실제 데이터베이스에서 측정 데이터 조회"""
     try:
-        measurement_data = generate_demo_data()
+        conn = lcnc_sql["engine"].connect()
+        
+        # 기본 쿼리
+        query_str = """
+        SELECT 
+            table_name,
+            username,
+            lot_wafer,
+            item_id,
+            subitem_id,
+            value,
+            create_time
+        FROM msa6_result_cd
+        WHERE 1=1
+        """
+        
+        params = {}
+        
+        # 테이블명 필터
+        if table_name:
+            query_str += " AND table_name = :table_name"
+            params["table_name"] = table_name
+        
+        # 날짜 범위 필터
+        if date_from:
+            query_str += " AND DATE(create_time) >= :date_from"
+            params["date_from"] = date_from
+        
+        if date_to:
+            query_str += " AND DATE(create_time) <= :date_to"
+            params["date_to"] = date_to
+        
+        query_str += " ORDER BY create_time DESC LIMIT 100"
+        
+        query = text(query_str)
+        result = conn.execute(query, params)
+        
+        data = []
+        for row in result:
+            # 측정값을 x, y 좌표로 변환 (임시로 value를 기반으로 생성)
+            base_value = float(row.value) if row.value else 0
+            measurements = {
+                "x": base_value * 10 + random.uniform(-5, 5),  # value 기반으로 x 좌표 생성
+                "y": base_value * 15 + random.uniform(-5, 5)   # value 기반으로 y 좌표 생성
+            }
+            
+            # 결과 결정 (value가 특정 임계값 이상이면 양품)
+            result_status = "양품" if base_value > 50 else "불량"
+            
+            data.append({
+                "table_name": row.table_name,
+                "username": row.username,
+                "lot_wafer": row.lot_wafer,
+                "item_id": row.item_id,
+                "subitem_id": row.subitem_id,
+                "date": row.create_time.strftime("%Y-%m-%d %H:%M:%S") if row.create_time else "",
+                "measurements": measurements,
+                "value": base_value,
+                "result": result_status
+            })
+        
+        conn.close()
+        return data
+        
+    except Exception as e:
+        print(f"데이터베이스 조회 오류: {str(e)}")
+        # 오류 발생 시 데모 데이터 반환
+        return generate_demo_data()
+
+def get_real_defect_data(table_name: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None) -> List[Dict[str, Any]]:
+    """실제 데이터베이스에서 불량 감지 데이터 조회"""
+    try:
+        conn = lcnc_sql["engine"].connect()
+        
+        # 불량 감지 테이블에서 데이터 조회
+        query_str = """
+        SELECT 
+            session_id,
+            item_id,
+            sub_item_id,
+            x_pos,
+            y_pos,
+            value,
+            is_bright,
+            is_striated,
+            is_distorted,
+            created_at
+        FROM msa6_result_defect
+        WHERE 1=1
+        """
+        
+        params = {}
+        
+        # 날짜 범위 필터
+        if date_from:
+            query_str += " AND DATE(created_at) >= :date_from"
+            params["date_from"] = date_from
+        
+        if date_to:
+            query_str += " AND DATE(created_at) <= :date_to"
+            params["date_to"] = date_to
+        
+        query_str += " ORDER BY created_at DESC LIMIT 100"
+        
+        query = text(query_str)
+        result = conn.execute(query, params)
+        
+        data = []
+        for row in result:
+            # 불량 점수 계산
+            striation = random.uniform(40, 80) if row.is_striated else random.uniform(20, 50)
+            distortion = random.uniform(40, 80) if row.is_distorted else random.uniform(20, 50)
+            
+            # 결과 결정
+            result_status = "불량" if (row.is_striated or row.is_distorted) else "양품"
+            
+            data.append({
+                "session_id": row.session_id,
+                "item_id": row.item_id,
+                "subitem_id": row.sub_item_id,
+                "lot_wafer": f"lot_{row.session_id}" if row.session_id else "default_lot",  # lot_wafer 필드 추가
+                "date": row.created_at.strftime("%Y-%m-%d %H:%M:%S") if row.created_at else "",
+                "x": float(row.x_pos) if row.x_pos else 0,
+                "y": float(row.y_pos) if row.y_pos else 0,
+                "striation": round(striation, 3),
+                "distortion": round(distortion, 3),
+                "result": result_status
+            })
+        
+        conn.close()
+        return data
+        
+    except Exception as e:
+        print(f"불량 감지 데이터 조회 오류: {str(e)}")
+        # 오류 발생 시 데모 데이터 반환
+        return generate_defect_data()
+
+@router.get("/data")
+async def get_side2_data(
+    table_name: Optional[str] = Query(None, description="테이블명"),
+    date_from: Optional[str] = Query(None, description="시작 날짜 (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="종료 날짜 (YYYY-MM-DD)")
+):
+    try:
+        # 실제 데이터베이스에서 측정 데이터 조회
+        measurement_data = get_real_measurement_data(table_name, date_from, date_to)
         images = get_image_list()
         return {
             "status": "success",
@@ -98,9 +246,14 @@ async def get_side2_data():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/data_defect")
-async def get_side2_defect_data():
+async def get_side2_defect_data(
+    table_name: Optional[str] = Query(None, description="테이블명"),
+    date_from: Optional[str] = Query(None, description="시작 날짜 (YYYY-MM-DD)"),
+    date_to: Optional[str] = Query(None, description="종료 날짜 (YYYY-MM-DD)")
+):
     try:
-        defect_data = generate_defect_data()
+        # 실제 데이터베이스에서 불량 감지 데이터 조회
+        defect_data = get_real_defect_data(table_name, date_from, date_to)
         return {
             "status": "success",
             "data": defect_data

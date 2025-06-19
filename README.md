@@ -1,6 +1,4 @@
- - 측정 결과 ctrl z,y 안돼
- - 측정 결과에서 전후 이미지 전환 기능
- - LLM 기능 구현
+ - analysis 탭 구현
 
 ## To Do List (Out - msa6)
 ```
@@ -23,6 +21,12 @@
 
 ## Done List
 ```
+ - 기준선 기준으로 잘리던거 다시 구현
+ - 기준선 단축키
+ - LLM 기능 async로
+ - LLM 기능 구현
+ - 측정 결과에서 전후 이미지 전환 기능
+ - 측정 결과 ctrl z,y 안돼
  - process start 누르면 결과들 다 초기화
  - (지금 item id 다 유지돼)
  - 초기화 버튼으로 초기화 안돼
@@ -56,3 +60,14 @@ v20.13.1
 10.5.2
 vue --version
 @vue/cli 5.0.8
+
+
+
+
+불량 감지 시작 - 1개 영역
+defectDetection.js:35 전달받은 영역 데이터: Proxy(Array) {0: {…}}
+defectDetection.js:39 영역 1 원본 데이터: Proxy(Object) {id: 1, x: 325.22060340321275, y: 168.96979442431984, width: 1128.7292766860023, height: 537.0143762143729, …}
+defectDetection.js:58 영역 1 검증된 데이터: {id: 1, x: 325.22060340321275, y: 168.96979442431984, width: 1128.7292766860023, height: 537.0143762143729, …}
+defectDetection.js:68 감지 시작: 1개 영역
+defectDetection.js:82 영역 1 처리 시작
+main.js:75 App Error: TypeError: Cannot read properties of undefined (reading 'x')

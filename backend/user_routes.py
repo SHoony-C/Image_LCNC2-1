@@ -553,7 +553,7 @@ async def log_user_action(
         result = db.execute(query, params)
         db.commit()
         
-        print(f"사용자 액션 로그 저장 완료: {username}, {useraction}, {current_time}")
+        # print(f"사용자 액션 로그 저장 완료: {username}, {useraction}, {current_time}")
         return {"status": "success"}
     except Exception as e:
         db.rollback()
@@ -730,7 +730,7 @@ async def log_user_action_noauth(
         result = db.execute(query, params)
         db.commit()
         
-        print(f"사용자 액션 로그 저장 완료 (인증 없음): {username}, {useraction}, {current_time}")
+        # print(f"사용자 액션 로그 저장 완료 (인증 없음): {username}, {useraction}, {current_time}")
         return {"status": "success"}
     except Exception as e:
         db.rollback()

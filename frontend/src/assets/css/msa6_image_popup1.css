@@ -1,0 +1,1085 @@
+.image-measurement-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+  }
+  
+  .measurement-container {
+    background: #f8f9fa;
+    border-radius: 12px;
+    width: 95vw;
+    height: 95vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+    position: relative;
+    height: 100%;
+  }
+  
+  .measurement-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: #7950f2;
+    border-bottom: 1px solid #6741d9;
+    flex-wrap: wrap;
+  }
+  
+  .header-left {
+    display: flex;
+    align-items: center;
+  }
+  
+  .header-title {
+    margin: 0;
+    font-size: 1.25rem;
+    color: #fff;
+    font-weight: 600;
+  }
+  
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  
+  .measurement-options {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.5rem;
+    border-radius: 8px;
+  }
+  
+  .option-group {
+    display: flex;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    margin-right: 0.5rem;
+    margin-bottom: 0.25rem;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+  }
+  
+  .option-group:last-child {
+    border-right: none;
+  }
+  
+  .option-group-label {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin-right: 0.5rem;
+    white-space: nowrap;
+  }
+  
+  .option-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    width: 2.25rem;
+    height: 2.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    margin: 0 0.125rem;
+    transition: all 0.2s;
+    color: #fff;
+  }
+  
+  .option-btn i {
+    font-size: 0.9rem;
+  }
+  
+  .btn-text {
+    margin-left: 0.25rem;
+  }
+  
+  .scale-btn {
+    min-width: 4rem;
+  }
+  
+  .reset-btn, .close-btn {
+    padding: 0.375rem 0.75rem;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  
+  .reset-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #fff;
+  }
+  
+  .close-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #fff;
+  }
+  
+  /* option-btn 클래스 뒤에 hover와 active 상태 스타일 추가 */
+  
+  .option-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  
+  .option-btn.active {
+    background: #fff;
+    color: #7950f2;
+    border-color: #fff;
+  }
+  
+  /* reset-btn 및 close-btn hover 상태 추가 */
+  .reset-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  
+  .close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  
+  .measurement-content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+  
+  .image-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #000;
+  }
+  
+  .measurement-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+  }
+  
+  .right-panel {
+    width: 400px;
+    background: #fff;
+    border-left: 1px solid #e9ecef;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    /* 고정 너비 설정 - 스크롤바 너비(17px) 포함 */
+    min-width: 400px;
+    max-width: 400px;
+    flex-shrink: 0; /* 사이드바 크기 고정 */
+    overflow: hidden; /* 내부 콘텐츠 오버플로우 숨김 처리 */
+  }
+  
+  .results-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* 내부 컨텐츠가 넘칠 경우 숨김 처리 */
+  }
+  
+  .results-table-container {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    overflow: auto;
+    height: 600px;
+    max-height: 65vh;
+    /* 스크롤바 너비를 고려한 width 설정 */
+    width: calc(100% - 2px); /* 테두리 고려 */
+    box-sizing: border-box; /* 테두리와 패딩을 너비에 포함 */
+  }
+  
+  .results-bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    width: 100%;
+    gap: 1.5rem;
+    padding: 1.25rem 1.5rem 1.5rem 1.5rem;
+    background: #fff;
+    border-top: 1px solid #e9ecef;
+    flex-shrink: 0;
+    position: static;
+    margin-top: auto;
+  }
+  
+  .results-bottom-bar .results-summary {
+    margin: 0;
+    padding: 0;
+    background: none;
+    font-size: 1rem;
+    color: #7950f2;
+    font-weight: 600;
+  }
+  
+  .save-measurements-btn {
+    padding: 12px 28px;
+    background-color: #7950f2;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 16px rgba(121, 80, 242, 0.12);
+    transition: background 0.2s, box-shadow 0.2s;
+  }
+  
+  .save-measurements-btn:hover:not(:disabled) {
+    background-color: #6741d9;
+    box-shadow: 0 6px 20px rgba(121, 80, 242, 0.18);
+  }
+  
+  .save-measurements-btn:disabled {
+    background-color: #b197fc;
+    cursor: not-allowed;
+  }
+  
+  .save-measurements-btn i {
+    font-size: 20px;
+  }
+  
+  .panel-section {
+    padding: 1.5rem;
+  }
+  
+  .id-input-panel {
+    background: #f8f0ff;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(121, 80, 242, 0.1);
+  }
+  
+  .id-input-panel h5 {
+    color: #7950f2;
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+  }
+  
+  .id-input-container {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+  
+  .input-group {
+    flex: 1;
+  }
+  
+  .input-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #495057;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  
+  .form-control {
+    width: 100%;
+    padding: 0.625rem;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+  }
+  
+  .form-control:focus {
+    border-color: #7950f2;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(121, 80, 242, 0.1);
+  }
+  
+  .btn-apply {
+    width: 100%;
+    padding: 0.75rem;
+    background: #7950f2;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .btn-apply:hover {
+    background: #6741d9;
+  }
+  
+  .btn-apply:disabled {
+    background: #dee2e6;
+    cursor: not-allowed;
+  }
+  
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .results-table th {
+    background: #f8f0ff;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 2px solid #e9ecef;
+    position: sticky;
+    top: 0;
+  }
+  
+  .results-table td {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    color: #495057;
+  }
+  
+  .selected-row {
+    background-color: #f3f0ff !important;
+  }
+  
+  .results-table tr {
+    cursor: pointer;
+    user-select: none;
+  }
+  
+  .results-table tr:hover {
+    background-color: #f8f0ff;
+  }
+  
+  .total-measurement {
+    background-color: #e6f7ff !important;
+    font-weight: bold;
+  }
+  
+  .total-measurement td {
+    border-bottom: 2px solid #7950f2;
+  }
+  
+  .measurement-controls {
+    position: absolute;
+    bottom: 1.5rem;
+    left: 1.5rem;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    white-space: nowrap;
+    max-width: calc(100% - 3rem);
+    overflow-x: auto;
+    z-index: 1000;
+  }
+  
+  .measurement-controls .option-btn {
+    background: #7950f2;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 120px;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  
+  .measurement-controls .option-btn i {
+    font-size: 1.2rem;
+    color: #fff;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+  }
+  
+  .measurement-controls .option-btn:hover {
+    background: #6741d9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .measurement-controls .option-btn.active {
+    background: #fff;
+    color: #7950f2;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  }
+  
+  .measurement-controls .option-btn.active i {
+    color: #7950f2;
+    text-shadow: none;
+  }
+  
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+  }
+  
+  .control-label {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 500;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+    min-width: max-content;
+  }
+  
+  .threshold-slider {
+    width: 200px;
+    height: 6px;
+    -webkit-appearance: none;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    outline: none;
+  }
+  
+  .threshold-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+  
+  .threshold-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  
+  .results-summary {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    background: #f8f0ff;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #495057;
+    font-weight: 500;
+  }
+  
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #f8f0ff;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #7950f2;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #6741d9;
+  }
+  
+  .measurement-controls .control-group label {
+    color: #fff;
+    font-size: 1rem;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+  }
+  
+  .results-table td.action-buttons .option-btn {
+    color: #7950f2;
+    background: #fff;
+    border: 1px solid #7950f2;
+    padding: 8px 12px;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .results-table td.action-buttons .option-btn i {
+    color: #7950f2;
+    text-shadow: none;
+  }
+  
+  .results-table td.action-buttons .option-btn:hover {
+    background: #7950f2;
+    color: #fff;
+    transform: scale(1.05);
+    transition: all 0.2s ease;
+  }
+  
+  .results-table td.action-buttons .option-btn:hover i {
+    color: #fff;
+  }
+  
+  .circle-options-panel {
+    background: #f8f0ff;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    gap: 1rem;
+  }
+  
+  .circle-option-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border: 1px solid #7950f2;
+    border-radius: 6px;
+    background: #fff;
+    color: #7950f2;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  
+  .circle-option-btn i {
+    font-size: 1.1rem;
+  }
+  
+  .circle-option-btn:hover {
+    background: #f8f0ff;
+  }
+  
+  .circle-option-btn.active {
+    background: #7950f2;
+    color: #fff;
+  }
+  
+  .send-api-btn {
+    background: #2b8a3e;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 140px;
+    white-space: nowrap;
+  }
+  
+  .send-api-btn i {
+    font-size: 1.2rem;
+  }
+  
+  .send-api-btn:hover:not(:disabled) {
+    background-color: #2f9e44;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .send-api-btn:disabled {
+    background: #adb5bd;
+    cursor: not-allowed;
+    transform: none;
+  }
+  
+  .control-input {
+    width: 60px;
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 0.9rem;
+    text-align: center;
+  }
+  
+  .control-input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.2);
+  }
+  
+  .header-input {
+    width: 60px;
+    padding: 4px 8px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    font-size: 0.9rem;
+    text-align: center;
+  }
+  
+  .header-input:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.2);
+  }
+  
+  .header-input.no-spinners::-webkit-inner-spin-button,
+  .header-input.no-spinners::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  
+  .header-input.no-spinners {
+    -moz-appearance: textfield;
+  }
+  
+  .line-count-control {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  .count-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .count-btn i {
+    font-size: 0.8rem;
+  }
+  
+  .count-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  
+  .count-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  .reset-btn {
+    padding: 0 15px;
+    height: 36px;
+    margin-right: 10px;
+    background: #dc3545;
+    color: #fff;
+    border: 1px solid #dc3545;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+  
+  .reset-btn i {
+    margin-right: 6px;
+    font-size: 1rem;
+  }
+  
+  .reset-btn:hover {
+    background: #c82333;
+    border-color: #bd2130;
+  }
+  
+  .color-palette-btn {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .color-palette-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  
+  .color-picker-dropdown {
+    position: absolute;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    padding: 12px;
+    z-index: 1000;
+    margin-top: 5px;
+    border: 1px solid #e9ecef;
+  }
+  
+  .color-options {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  
+  .color-option {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid #dee2e6;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  /* 단축키 도움말 관련 스타일 */
+  .shortcut-help-overlay {
+    position: fixed;
+    top: 0;
+      left: 0;
+    right: 0;
+      bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7);
+    z-index: 9999;
+    display: none;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .shortcut-help-overlay.show {
+    display: flex;
+  }
+  
+  .shortcut-help-content {
+    background-color: #fff;
+    border-radius: 12px;
+    padding: 30px;
+    max-width: 600px;
+    width: 90%;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    transform: translateY(50px);
+      opacity: 0;
+    transition: transform 0.3s, opacity 0.3s;
+    pointer-events: none;
+    }
+  
+  .shortcut-help-content.show {
+    transform: translateY(0);
+      opacity: 1;
+    pointer-events: auto;
+  }
+  
+  .shortcut-help-content h2 {
+    color: #7950f2;
+    margin-top: 0;
+    margin-bottom: 20px;
+    text-align: center;
+    font-size: 1.5rem;
+  }
+  
+  .shortcut-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+  }
+  
+  .shortcut-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 10px;
+    border-radius: 8px;
+    background-color: #f8f0ff;
+  }
+  
+  .shortcut-key {
+    background-color: #7950f2;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-weight: bold;
+    min-width: 40px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  
+  .shortcut-desc {
+    color: #495057;
+    font-size: 0.9rem;
+  }
+  
+  /* 알림 메시지 스타일 개선 */
+  .notification {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 12px 20px;
+    border-radius: 6px;
+    color: white;
+    font-weight: 500;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+    z-index: 99999;
+    max-width: 90%;
+    text-align: center;
+    pointer-events: none;
+    animation: fadeInOut 3s ease-in-out;
+  }
+  
+  .notification.info {
+    background-color: rgba(25, 118, 210, 0.9);
+  }
+  
+  .notification.success {
+    background-color: #4caf50 !important;
+    color: white !important;
+    border-left: 5px solid #2e7d32 !important;
+  }
+  
+  .notification.warning {
+    background-color: rgba(237, 108, 2, 0.9);
+  }
+  
+  .notification.error {
+    background-color: rgba(211, 47, 47, 0.9);
+  }
+  
+  @keyframes fadeInOut {
+    0%, 100% { opacity: 0; }
+    10%, 90% { opacity: 1; }
+  }
+  
+  /* 돋보기 관련 스타일 */
+  .brightness-tooltip {
+    position: absolute;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 1000;
+    pointer-events: none;
+  }
+  
+  .magnifier-container {
+    position: absolute;
+    z-index: 1001;
+    border: 2px solid #ff9900;
+    border-radius: 50%;
+    overflow: hidden;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    background-color: white;
+  }
+  
+  .magnifier-canvas {
+      width: 100%;
+    height: 100%;
+  }
+  
+  .magnifier-crosshair {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  
+  .magnifier-crosshair::before,
+  .magnifier-crosshair::after {
+    content: '';
+    position: absolute;
+    background-color: rgba(255, 0, 0, 0.7);
+  }
+  
+  .magnifier-crosshair::before {
+    top: 50%;
+    left: 0;
+      width: 100%;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+  
+  .magnifier-crosshair::after {
+    top: 0;
+    left: 50%;
+    width: 1px;
+    height: 100%;
+    transform: translateX(-50%);
+  }
+  
+  .magnifier-brightness {
+    position: absolute;
+    bottom: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+  }
+  
+  .notification-container {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 99999;
+    min-width: 300px;
+    max-width: 80%;
+  }
+  
+  .notification-message {
+    padding: 12px 20px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    text-align: center;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 10px;
+  }
+  
+  .notification-message.success {
+    background-color: #4caf50;
+    color: white;
+    border-left: 5px solid #2e7d32;
+  }
+  
+  .notification-message.error {
+    background-color: #f44336;
+    color: white;
+    border-left: 5px solid #c62828;
+  }
+  
+  .notification-message.warning {
+    background-color: #ff9800;
+    color: white;
+    border-left: 5px solid #ef6c00;
+  }
+  
+  .notification-message.info {
+    background-color: #2196f3;
+    color: white;
+    border-left: 5px solid #1565c0;
+  }
+  
+  .notification {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 12px 20px;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 99999;
+    min-width: 300px;
+    max-width: 80%;
+    text-align: center;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 10px;
+  }
+  
+  .notification.info {
+    background-color: #2196f3;
+    color: white;
+    border-left: 5px solid #1565c0;
+  }
+  
+  .notification.success {
+    background-color: #4caf50;
+    color: white;
+    border-left: 5px solid #2e7d32;
+  }
+  
+  .notification.warning {
+    background-color: #ff9800;
+    color: white;
+    border-left: 5px solid #ef6c00;
+  }
+  
+  .notification.error {
+    background-color: #f44336;
+    color: white;
+    border-left: 5px solid #c62828;
+  }
+  
+  .notification.success {
+    background-color: #4caf50 !important;
+    color: white !important;
+    border-left: 5px solid #2e7d32 !important;
+  }
+  
+  .notification.error {
+    background-color: #f44336 !important;
+    color: white !important;
+    border-left: 5px solid #c62828 !important;
+  }
+  
+  /* 수정: !important 추가로 강제 적용 */
+  .notification.error {
+    background-color: #f44336 !important;
+    color: white !important;
+    border-left: 5px solid #c62828 !important;
+  }
+  
+  /* Override notification colors with highest specificity */
+  div.notification.success {
+    background-color: rgb(76, 175, 80) !important;
+    color: white !important;
+    border-left: 5px solid #2e7d32 !important;
+  }
+  div.notification.error {
+    background-color: rgb(244, 67, 54) !important;
+    color: white !important;
+    border-left: 5px solid #c62828 !important;
+  }
+  

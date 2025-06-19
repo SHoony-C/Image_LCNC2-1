@@ -32,11 +32,18 @@
             <MSA1ImageInput class="msa-card msa1" />
             <MSA2VectorPlot class="msa-card msa2" />
             <div class="msa-card msa3-wrapper">
-              <MSA3ImageDisplay v-if="true" class="msa3" />
+              <MSA3ImageDisplay 
+                v-if="true" 
+                class="msa3" 
+                @send-analysis-data="handleAnalysisData"
+              />
             </div>
           </div>
           <div class="bottom-row">
-            <MSA4LLMAnalysis class="msa-card msa4" />
+            <MSA4LLMAnalysis 
+              class="msa-card msa4" 
+              ref="msa4Component"
+            />
             <MSA5ImageLCNC class="msa-card msa5" />
             <MSA6FinalResult class="msa-card msa6" />
           </div>
@@ -345,6 +352,10 @@ export default {
       // Implement profile view functionality
       alert('프로필 기능은 개발 중입니다.');
       this.showUserMenu = false;
+    },
+    handleAnalysisData(data) {
+      // Handle the analysis data from MSA3 and pass it to MSA4
+      this.$refs.msa4Component.handleAnalysisData(data);
     }
   }
 }

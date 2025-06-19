@@ -20,6 +20,10 @@
               <div class="shortcut-desc">단일 선 측정 모드 활성화</div>
             </div>
             <div class="shortcut-item">
+              <div class="shortcut-key">C</div>
+              <div class="shortcut-desc">Cut - 기준선 그리기 모드 활성화</div>
+            </div>
+            <div class="shortcut-item">
               <div class="shortcut-key">D</div>
               <div class="shortcut-desc">선택된 측정 결과 삭제</div>
             </div>
@@ -202,8 +206,9 @@
             </div>
             
             <!-- 이미지 전/후 전환 버튼 추가 -->
-            <div class="image-toggle-controls" v-if="internalInputImageUrl && imageUrl">
+            <div class="image-toggle-controls">
               <button 
+                v-if="internalInputImageUrl && outputImageUrl"
                 class="toggle-image-btn" 
                 @click="toggleBeforeAfterImage" 
                 :title="isShowingInputImage ? '처리 후 이미지 보기' : '처리 전 이미지 보기'"
@@ -216,7 +221,7 @@
               <button 
                 class="download-image-btn" 
                 @click="downloadResultImage" 
-                title="현재 이미지 다운로드"
+                title="측정 결과 포함 이미지 다운로드"
               >
                 <i class="fas fa-download"></i>
                 <span>다운로드</span>
@@ -414,9 +419,17 @@
 </template>
 
 <script>
+import '@/assets/css/msa6_image_popup1.css'
 import LogService from '../utils/logService'
 import TableNameSelector from './TableNameSelector.vue';
 import PopupDebug from '../utils/popupDebug';
+import { createBoundedSegments, createAreaMeasurements  } from '@/utils/msa6_measures.js';
+// 기준선 기반 자르기 기능을 위한 import 추가
+import { 
+  trimMeasurementByReferenceLine, 
+  trimSingleMeasurementByReferenceLine
+} from '@/utils/msa6_reference_trimmer.js';
+
 // 개별 함수를 직접 가져오기
 import { patchDetectScaleBar, showScaleDetectionFailurePopup, createScaleChoicePopup } from '../utils/popupOverride';
 
@@ -466,6 +479,8 @@ export default {
       segmentedMeasurements: [],
       nextId: 1,
       subItemPrefix: 'S',
+      // 기준선용 별도 ID 카운터 추가
+      referenceId: 1,
       brightnessThreshold: 200,
       isReversed: false,
       measurementMode: 'line',
@@ -567,12 +582,12 @@ export default {
     };
   },
   mounted() {
-    console.log('[mounted] 컴포넌트 마운트됨');
+    // console.log('[mounted] 컴포넌트 마운트됨');
     
     
     // 페이지 새로고침 시 수동 스케일바 설정 항상 초기화
     this.manualScaleBarSet = false;
-    console.log('[mounted] 수동 스케일바 설정 초기화: manualScaleBarSet = false');
+    // console.log('[mounted] 수동 스케일바 설정 초기화: manualScaleBarSet = false');
     
     // prop에서 내부 데이터 초기화
     this.internalInputImageUrl = this.inputImageUrl;
@@ -593,14 +608,14 @@ export default {
     if (!this.initialLoadDone) {
       this.$_isInitialLoad = true;
       this.isFirstDetectionAttempt = true;
-      console.log('[mounted] 최초 로드, 초기화 플래그 설정');
+      // console.log('[mounted] 최초 로드, 초기화 플래그 설정');
 
       // 이미 스케일바 값이 있는지 확인 (수동 설정 여부는 고려하지 않음)
       const hasScaleBarValues = this.scaleBarValue && this.scaleBarUnit;
 
       // 스케일바 모드인 경우 스케일바 값이 없을 때만 팝업 표시 - showPopup이 true일 때만 진행
       if (this.scaleMethod === 'scaleBar' && this.showPopup && !hasScaleBarValues) {
-        console.log('[mounted] 스케일바 모드로 첫 마운트, 팝업 표시 시도');
+        // console.log('[mounted] 스케일바 모드로 첫 마운트, 팝업 표시 시도');
         // 팝업 표시를 위한 플래그 설정
         this.showScaleChoicePopup = true;
         
@@ -613,7 +628,7 @@ export default {
             try {
               const popupElement = document.querySelector('.scale-choice-popup');
               if (popupElement) {
-                console.log('[mounted] 팝업 요소에 스타일 직접 적용');
+                // console.log('[mounted] 팝업 요소에 스타일 직접 적용');
                 popupElement.style.display = 'flex';
                 popupElement.style.zIndex = '999999';
               }
@@ -623,48 +638,48 @@ export default {
           });
         }, 100);
       } else if (hasScaleBarValues) {
-        console.log('[mounted] 스케일바 값이 있어 팝업 표시하지 않음:', 
-          'scaleBarValue:', this.scaleBarValue, 
-          'scaleBarUnit:', this.scaleBarUnit,
-          'manualScaleBarSet:', this.manualScaleBarSet);
+        // console.log('[mounted] 스케일바 값이 있어 팝업 표시하지 않음:', 
+          // 'scaleBarValue:', this.scaleBarValue, 
+          // 'scaleBarUnit:', this.scaleBarUnit,
+          // 'manualScaleBarSet:', this.manualScaleBarSet);
       }
     } else {
-      console.log('[mounted] 재마운트, 측정 데이터 유지');
+      // console.log('[mounted] 재마운트, 측정 데이터 유지');
     }
     
     // 디버깅용 전역 변수 설정
     window.imageMeasurement = this;
-    console.log('Component mounted. Use window.imageMeasurement to access component in console');
+    // console.log('Component mounted. Use window.imageMeasurement to access component in console');
     
     // 플래그 초기값 로깅
-    console.log('[mounted] 초기 상태 - showScaleChoicePopup:', this.showScaleChoicePopup);
-    console.log('[mounted] 초기 상태 - isFirstDetectionAttempt:', this.isFirstDetectionAttempt);
-    console.log('[mounted] 초기 상태 - scaleMethod:', this.scaleMethod);
-    console.log('[mounted] 초기 상태 - showPopup:', this.showPopup);
+    // console.log('[mounted] 초기 상태 - showScaleChoicePopup:', this.showScaleChoicePopup);
+    // console.log('[mounted] 초기 상태 - isFirstDetectionAttempt:', this.isFirstDetectionAttempt);
+    // console.log('[mounted] 초기 상태 - scaleMethod:', this.scaleMethod);
+    // console.log('[mounted] 초기 상태 - showPopup:', this.showPopup);
     
     // 디버깅 유틸리티 설정
     window.popupDebug = PopupDebug;
-    console.log('팝업 디버깅 유틸리티가 콘솔에 window.popupDebug로 노출되었습니다.');
+    // console.log('팝업 디버깅 유틸리티가 콘솔에 window.popupDebug로 노출되었습니다.');
     
     // 팝업 오버라이드 함수 전역으로 노출
     window.showScalePopup = () => this.showScaleDetectionFailurePopup();
     
     // detectScaleBar 함수 패치
     setTimeout(() => {
-      console.log('[mounted] 팝업 오버라이드 시스템 적용 시도');
+      // console.log('[mounted] 팝업 오버라이드 시스템 적용 시도');
       const patchResult = patchDetectScaleBar(this);
-      console.log('[mounted] 패치 결과:', patchResult);
+      // console.log('[mounted] 패치 결과:', patchResult);
       
       // 스케일바 자동 감지 시도 (이미 이미지가 로드된 경우) - showPopup이 true일 때만 진행
       if (this.image && this.imageData && this.scaleMethod === 'scaleBar' && this.showPopup && !this.initialLoadDone) {
-        console.log('[mounted] 이미지 로드됨, 스케일바 감지 시도');
+        // console.log('[mounted] 이미지 로드됨, 스케일바 감지 시도');
         this.detectScaleBar();
       }
     }, 500);
   },
   beforeUnmount() {
     // 컴포넌트 언마운트 전에 클린업 수행
-    console.log('[MSA6_ImagePopup] beforeUnmount 호출됨');
+    // console.log('[MSA6_ImagePopup] beforeUnmount 호출됨');
     
     // 모든 이미지 URL 정리
     this.cleanupImageUrls();
@@ -675,7 +690,7 @@ export default {
       if (typeof window !== 'undefined' && window.removeEventListener) {
         if (this.onWindowResize) {
           window.removeEventListener('resize', this.onWindowResize);
-          console.log('[beforeUnmount] resize 이벤트 리스너 제거됨');
+          // console.log('[beforeUnmount] resize 이벤트 리스너 제거됨');
         }
       }
       
@@ -683,13 +698,13 @@ export default {
       if (typeof window !== 'undefined' && window.removeEventListener) {
         if (this.handleKeyDown) {
           window.removeEventListener('keydown', this.handleKeyDown);
-          console.log('[beforeUnmount] keydown 이벤트 리스너 제거됨');
+          // console.log('[beforeUnmount] keydown 이벤트 리스너 제거됨');
         }
         
         if (this.keydownHandler) {
           document.removeEventListener('keydown', this.keydownHandler);
           this.keydownHandler = null;
-          console.log('[beforeUnmount] document keydown 이벤트 리스너 제거됨');
+          // console.log('[beforeUnmount] document keydown 이벤트 리스너 제거됨');
         }
       }
       
@@ -697,7 +712,7 @@ export default {
       if (typeof window !== 'undefined' && window.removeEventListener) {
         if (this.handleKeyUp) {
           window.removeEventListener('keyup', this.handleKeyUp);
-          console.log('[beforeUnmount] keyup 이벤트 리스너 제거됨');
+          // console.log('[beforeUnmount] keyup 이벤트 리스너 제거됨');
         }
       }
       
@@ -706,13 +721,13 @@ export default {
         if (this.handleMSA5ImageProcessed) {
           window.removeEventListener('msa5-image-processed', this.handleMSA5ImageProcessed);
           window.removeEventListener('msa6:imageProcessed', this.handleMSA5ImageProcessed);
-          console.log('[beforeUnmount] MSA5 이미지 처리 이벤트 리스너 제거됨');
+          // console.log('[beforeUnmount] MSA5 이미지 처리 이벤트 리스너 제거됨');
         }
         
         // MSA5 프로세스 시작 이벤트 리스너 제거
         if (this.handleMSA5ProcessStart) {
           window.removeEventListener('msa5-process-start', this.handleMSA5ProcessStart);
-          console.log('[beforeUnmount] MSA5 프로세스 시작 이벤트 리스너 제거됨');
+          // console.log('[beforeUnmount] MSA5 프로세스 시작 이벤트 리스너 제거됨');
         }
       }
     } catch (error) {
@@ -722,28 +737,28 @@ export default {
   computed: {
     filteredMeasurements() {
       // 먼저 전체 측정값 로깅
-      console.log(`[filteredMeasurements] 모든 세그먼트 측정값: ${this.segmentedMeasurements.length}개`);
+      // console.log(`[filteredMeasurements] 모든 세그먼트 측정값: ${this.segmentedMeasurements.length}개`);
       
       // 각 측정값 카테고리별 수 계산
       const brightCount = this.segmentedMeasurements.filter(s => s.isBright).length;
       const darkCount = this.segmentedMeasurements.filter(s => !s.isBright).length;
       const totalCount = this.segmentedMeasurements.filter(s => s.isTotal).length;
       
-      console.log(`[filteredMeasurements] 측정값 카테고리: 밝은 영역=${brightCount}, 어두운 영역=${darkCount}, 전체 선=${totalCount}`);
+      // console.log(`[filteredMeasurements] 측정값 카테고리: 밝은 영역=${brightCount}, 어두운 영역=${darkCount}, 전체 선=${totalCount}`);
       
       // 원래 필터링 로직에 isTotal이 아닌 항목만 포함하도록 수정
       const filtered = this.segmentedMeasurements.filter(segment => 
         (this.isReversed ? !segment.isBright : segment.isBright) && !segment.isTotal
       );
       
-      console.log(`[filteredMeasurements] 필터링된 측정값: ${filtered.length}개`);
+      // console.log(`[filteredMeasurements] 필터링된 측정값: ${filtered.length}개`);
       
       // 필터링된 측정값의 ID와 값 간략히 로깅
       filtered.forEach((segment, idx) => {
         if (idx < 10 || idx >= filtered.length - 5) { // 처음 10개와 마지막 5개만 로깅
-          console.log(`  측정값 #${idx+1}: ID=${segment.itemId}, SubID=${segment.subItemId}, 값=${segment.value?.toFixed(2)}`);
+          // console.log(`  측정값 #${idx+1}: ID=${segment.itemId}, SubID=${segment.subItemId}, 값=${segment.value?.toFixed(2)}`);
         } else if (idx === 10) {
-          console.log(`  ... 중간 ${filtered.length - 15}개 생략 ...`);
+          // console.log(`  ... 중간 ${filtered.length - 15}개 생략 ...`);
         }
       });
       
@@ -775,22 +790,22 @@ export default {
       immediate: true,
       handler(newUrl) {
         if (newUrl) {
-          console.log('[watch:imageUrl] 이미지 URL 변경:', newUrl);
+          // console.logconsole.log('[watch:imageUrl] 이미지 URL 변경:', newUrl);
           this.$nextTick(() => {
             this.loadImage(newUrl);
             
             // 이미지 로드 후 스케일바 감지 시도 (지연 적용)
             if (this.scaleMethod === 'scaleBar') {
               setTimeout(() => {
-                console.log('[watch:imageUrl] 이미지 URL 변경 후 스케일바 감지 시도');
+                // console.log('[watch:imageUrl] 이미지 URL 변경 후 스케일바 감지 시도');
                 this.detectScaleBar();
               }, 1000);
             }
           });
         } else {
           // imageUrl이 없는 경우 이미지 초기화 (추가)
-          console.log('[watch:imageUrl] 이미지 URL 없음, 이미지 초기화');
-          this.clearImage();
+          // console.log('[watch:imageUrl] 이미지 URL 없음, 이미지 초기화');
+          // this.clearImage();
         }
       }
     },
@@ -798,11 +813,11 @@ export default {
     inputImageUrl: {
       immediate: true,
       handler(newUrl) {
-        console.log('[watch:inputImageUrl] 입력 이미지 URL 변경:', newUrl);
+        // console.log('[watch:inputImageUrl] 입력 이미지 URL 변경:', newUrl);
         if (newUrl) {
           // 내부 데이터 속성 업데이트
           this.internalInputImageUrl = newUrl;
-          console.log('[watch:inputImageUrl] 내부 입력 이미지 URL 업데이트됨');
+          // console.log('[watch:inputImageUrl] 내부 입력 이미지 URL 업데이트됨');
         }
       }
     },
@@ -815,7 +830,7 @@ export default {
     showPopup: {
       immediate: true,
       handler(newVal) {
-        console.log('[watch:showPopup] 팝업 표시 상태 변경:', newVal);
+        // console.log('[watch:showPopup] 팝업 표시 상태 변경:', newVal);
         this.isVisible = newVal;
         
         if (newVal) {
@@ -828,7 +843,7 @@ export default {
           }
         } else {
           // 팝업이 닫힐 때
-          console.log('[watch:showPopup] 팝업 닫힘, 데이터 유지');
+          // console.log('[watch:showPopup] 팝업 닫힘, 데이터 유지');
           // closePopup은 호출하지 않음 - 사용자가 닫기 버튼을 통해 닫을 때만 호출됨
         }
       }
@@ -836,12 +851,12 @@ export default {
     // 스케일바 감지 상태 감시
     scaleBarDetected: {
       handler(detected) {
-        console.log('[watch:scaleBarDetected] 스케일바 감지 상태 변경:', detected);
+        // console.log('[watch:scaleBarDetected] 스케일바 감지 상태 변경:', detected);
         
         // 자동 감지 시 수동 설정 플래그를 변경하지 않도록 수정
         // 스케일바가 감지되었을 때 manualScaleBarSet을 true로 설정하지 않음
         if (detected) {
-          console.log('[watch:scaleBarDetected] 스케일바가 감지됨, 설정 저장');
+          // console.log('[watch:scaleBarDetected] 스케일바가 감지됨, 설정 저장');
           
           // 설정 즉시 저장
           this.saveScaleBarSettings();
@@ -853,10 +868,10 @@ export default {
         
         // 이미 수동 스케일바가 설정되어 있는 경우 팝업 표시하지 않음 - 조건 강화
         if (this.manualScaleBarSet && this.scaleBarValue && this.scaleBarUnit) {
-          console.log('[watch:scaleBarDetected] 수동 스케일바가 이미 설정되어 있어 팝업을 표시하지 않음:',
-            'manualScaleBarSet:', this.manualScaleBarSet,
-            'scaleBarValue:', this.scaleBarValue,
-            'scaleBarUnit:', this.scaleBarUnit);
+          // console.log('[watch:scaleBarDetected] 수동 스케일바가 이미 설정되어 있어 팝업을 표시하지 않음:',
+          //   'manualScaleBarSet:', this.manualScaleBarSet,
+          //   'scaleBarValue:', this.scaleBarValue,
+          //   'scaleBarUnit:', this.scaleBarUnit);
           
           // 팝업 플래그 명시적으로 false로 설정
           this.showScaleChoicePopup = false;
@@ -865,7 +880,7 @@ export default {
         
         // 감지 실패 시 팝업 표시 (수동 설정이 없는 경우에만)
         if (!detected && this.scaleMethod === 'scaleBar') {
-          console.log('[watch:scaleBarDetected] 감지 실패, 선택 팝업 표시');
+          // console.log('[watch:scaleBarDetected] 감지 실패, 선택 팝업 표시');
           
           // 세션 스토리지에서 팝업 자동 표시 방지 플래그 확인
           const noAutoPopup = sessionStorage.getItem('msa6_no_auto_popup') === 'true';
@@ -876,7 +891,7 @@ export default {
             this.showScaleDetectionFailurePopup();
           this.showNotification('스케일바 자동 감지에 실패했습니다. 측정 방식을 선택해주세요.', 'warning');
           } else {
-            console.log('[watch:scaleBarDetected] 자동 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
+            // console.log('[watch:scaleBarDetected] 자동 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
           }
         }
       }
@@ -890,8 +905,13 @@ export default {
     },
   },
   methods: {
+    createAreaMeasurements,
+    createBoundedSegments,
+    // 기준선 기반 자르기 유틸리티 함수들 추가
+    trimMeasurementByReferenceLine,
+    trimSingleMeasurementByReferenceLine,
     async loadImage(url) {
-      console.log('[loadImage] 이미지 로드 시작:', url);
+      // console.log('[loadImage] 이미지 로드 시작:', url);
       
       if (!url) {
         console.error('[loadImage] 유효한 URL이 제공되지 않음');
@@ -904,7 +924,7 @@ export default {
       // 이전 이미지 제거
       if (this.image) {
         // this.image.src = ''; // 이전 이미지 로드 취소
-        console.log('[loadImage] 이전 이미지 정리');
+        // console.log('[loadImage] 이전 이미지 정리');
       }
       
       // 새 이미지 객체 생성
@@ -920,15 +940,15 @@ export default {
         
       // 수동 스케일바 설정이 있고 유효한 경우에만 scaleBarDetected를 true로 설정
       if (hasValidManualScaleBar) {
-        console.log('[loadImage] 유효한 수동 스케일바 설정 확인:', 
-          'scaleBarValue:', this.scaleBarValue, 
-          'scaleBarUnit:', this.scaleBarUnit);
+        // console.log('[loadImage] 유효한 수동 스케일바 설정 확인:', 
+          // 'scaleBarValue:', this.scaleBarValue, 
+          // 'scaleBarUnit:', this.scaleBarUnit);
         this.scaleBarDetected = true;
       }
       
       // 비동기로 이미지 로드 처리
       this.image.onload = async () => {
-          console.log('[loadImage] 이미지 로드 완료');
+          // console.log('[loadImage] 이미지 로드 완료');
           // 이미지 로드 후 캔버스 크기 업데이트
           this.updateCanvasSize();
           
@@ -954,17 +974,17 @@ export default {
         this.imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
           
         // 팝업 표시 여부 결정 - 수동 스케일바가 설정되어 있는지 정확히 확인
-        console.log('[loadImage] 수동 스케일바 설정 상태 확인:', 
-          'manualScaleBarSet:', this.manualScaleBarSet, 
-          'scaleBarValue:', this.scaleBarValue, 
-          'scaleBarUnit:', this.scaleBarUnit,
-          '유효한 설정:', hasValidManualScaleBar);
+        // console.log('[loadImage] 수동 스케일바 설정 상태 확인:', 
+        //   'manualScaleBarSet:', this.manualScaleBarSet, 
+        //   'scaleBarValue:', this.scaleBarValue, 
+        //   'scaleBarUnit:', this.scaleBarUnit,
+        //   '유효한 설정:', hasValidManualScaleBar);
         
         // ⚠️ 주의: 이 부분은 MSA5 프로세스 시작 시 스케일바 팝업 방지를 위한 핵심 로직입니다. 수정 시 주의하세요! ⚠️
         // 스케일바 자동 감지 팝업 방지 플래그 확인
         const noScalePopup = sessionStorage.getItem('msa6_no_scale_popup') === 'true';
         if (noScalePopup) {
-          console.log('[loadImage] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
+          // console.log('[loadImage] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
           // 플래그 제거 (일회성)
           sessionStorage.removeItem('msa6_no_scale_popup');
           return;
@@ -972,26 +992,26 @@ export default {
         
         // 수동 스케일바가 설정되어 있고 유효한 경우 팝업 표시하지 않음
         if (hasValidManualScaleBar) {
-          console.log('[loadImage] 유효한 수동 스케일바가 이미 설정되어 있어 팝업 표시하지 않음');
+          // console.log('[loadImage] 유효한 수동 스케일바가 이미 설정되어 있어 팝업 표시하지 않음');
         }
         // 스케일바 모드이고 수동 설정이 안 된 경우에만 자동 감지 시도
         else if (this.scaleMethod === 'scaleBar' && this.showPopup) {
-          console.log('[loadImage] 스케일바 자동 감지 시도');
+          // console.log('[loadImage] 스케일바 자동 감지 시도');
         // 약간의 지연 후 detectScaleBar 호출 (DOM이 완전히 업데이트되도록)
         setTimeout(() => {
             // 자동 감지 실행 - 감지 성공 여부는 detectScaleBar 내에서 처리
             this.detectScaleBar(true); // true = 감지 실패 시 팝업 표시 강제
         }, 300);
         } else {
-          console.log('[loadImage] 자동 감지 미실행:', 
-            '방식:', this.scaleMethod, 
-            '팝업표시:', this.showPopup, 
-            '수동설정여부:', this.manualScaleBarSet);
+          // console.log('[loadImage] 자동 감지 미실행:', 
+            // '방식:', this.scaleMethod, 
+            // '팝업표시:', this.showPopup, 
+            // '수동설정여부:', this.manualScaleBarSet);
       }
       
       // 이미지가 로드된 후 기존 측정값 렌더링
       if (this.initialLoadDone && this.measurements.length > 0) {
-        console.log('[loadImage] 기존 측정값 렌더링');
+        // console.log('[loadImage] 기존 측정값 렌더링');
         this.$nextTick(() => this.render());
       }
       
@@ -1019,13 +1039,13 @@ export default {
       // Get the image element from the event or reference
       const img = event.target || this.$refs.sourceImage;
       
-      console.log('[handleImageLoad] 이미지 로드 완료 - 크기:', img.naturalWidth, 'x', img.naturalHeight);
+      // console.log('[handleImageLoad] 이미지 로드 완료 - 크기:', img.naturalWidth, 'x', img.naturalHeight);
       this.image = img;
       
       // 전환 중인지 확인 (toggleBeforeAfterImage에서 호출된 경우)
       const isToggling = this.isToggling;
       if (isToggling) {
-        console.log('[handleImageLoad] 이미지 전환 중, 측정 데이터 유지');
+        // console.log('[handleImageLoad] 이미지 전환 중, 측정 데이터 유지');
         return; // 전환 중이면 추가 처리하지 않음 (toggleBeforeAfterImage에서 처리)
       }
       
@@ -1044,15 +1064,15 @@ export default {
       this.updateCanvasSize();
       
       // 수동 스케일바 설정 여부 정확히 확인
-      console.log('[handleImageLoad] 수동 스케일바 설정 상태 확인:', 
-        'manualScaleBarSet:', this.manualScaleBarSet, 
-        'scaleBarValue:', this.scaleBarValue, 
-        'scaleBarUnit:', this.scaleBarUnit);
+      // console.log('[handleImageLoad] 수동 스케일바 설정 상태 확인:', 
+      //   'manualScaleBarSet:', this.manualScaleBarSet, 
+      //   'scaleBarValue:', this.scaleBarValue, 
+      //   'scaleBarUnit:', this.scaleBarUnit);
       
       // 스케일바 자동 감지 팝업 방지 플래그 확인
       const noScalePopup = sessionStorage.getItem('msa6_no_scale_popup') === 'true';
       if (noScalePopup) {
-        console.log('[handleImageLoad] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
+        // console.log('[handleImageLoad] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
         // 플래그 제거 (일회성)
         sessionStorage.removeItem('msa6_no_scale_popup');
         return;
@@ -1061,7 +1081,7 @@ export default {
       // 스케일바 모드이고 수동 스케일바가 설정되어 있지 않은 경우에만 팝업 표시
       if (this.scaleMethod === 'scaleBar' && this.showPopup && 
           !(this.manualScaleBarSet && this.scaleBarValue && this.scaleBarUnit)) {
-          console.log('[handleImageLoad] 스케일바 모드, 수동 스케일바 없음, 선택 팝업 표시');
+          // console.log('[handleImageLoad] 스케일바 모드, 수동 스케일바 없음, 선택 팝업 표시');
           
           // 여기서 직접 팝업 표시
           this.showScaleChoicePopup = true;
@@ -1075,7 +1095,7 @@ export default {
               try {
                 const popupElement = document.querySelector('.scale-choice-popup');
                 if (popupElement) {
-                  console.log('[handleImageLoad] 팝업 요소에 스타일 직접 적용');
+                  // console.log('[handleImageLoad] 팝업 요소에 스타일 직접 적용');
                   popupElement.style.display = 'flex';
                   popupElement.style.zIndex = '999999';
                 }
@@ -1085,14 +1105,14 @@ export default {
             });
           }, 100);
         } else {
-          console.log('[handleImageLoad] 수동 스케일바가 이미 설정되어 있어 팝업 표시하지 않음:', 
-          this.scaleBarValue, this.scaleBarUnit, 'manualScaleBarSet:', this.manualScaleBarSet);
+          // console.log('[handleImageLoad] 수동 스케일바가 이미 설정되어 있어 팝업 표시하지 않음:', 
+          // this.scaleBarValue, this.scaleBarUnit, 'manualScaleBarSet:', this.manualScaleBarSet);
       }
       
       // 스케일바 자동 감지 시도 - 최초 로드 시에만 시도, 그리고 수동 스케일바가 없는 경우에만
       if (this.scaleMethod === 'scaleBar' && !this.initialLoadDone && 
           !(this.manualScaleBarSet && this.scaleBarValue && this.scaleBarUnit)) {
-        console.log('[handleImageLoad] 이미지 로드 완료, 스케일바 감지 시도, 초기 로드 상태:', this.$_isInitialLoad);
+        // console.log('[handleImageLoad] 이미지 로드 완료, 스케일바 감지 시도, 초기 로드 상태:', this.$_isInitialLoad);
         this.detectScaleBar();
       }
       
@@ -1108,7 +1128,7 @@ export default {
         });
     },
     updateCanvasSize() {
-      console.log('[updateCanvasSize] 캔버스 크기 조정 시작');
+      // console.log('[updateCanvasSize] 캔버스 크기 조정 시작');
       const container = this.$refs.container;
       if (!container) {
         console.error('[updateCanvasSize] 캔버스 컨테이너 참조 없음');
@@ -1127,7 +1147,7 @@ export default {
       let imgWidth = img ? img.clientWidth : 0;
       let imgHeight = img ? img.clientHeight : 0;
       
-      console.log(`[updateCanvasSize] 이미지 크기: ${imgWidth}x${imgHeight}, 컨테이너 크기: ${container.clientWidth}x${container.clientHeight}`);
+      // console.log(`[updateCanvasSize] 이미지 크기: ${imgWidth}x${imgHeight}, 컨테이너 크기: ${container.clientWidth}x${container.clientHeight}`);
       
       // 컨테이너 크기에 맞게 캔버스 크기 조정
       const canvasWidth = container.clientWidth;
@@ -1165,7 +1185,7 @@ export default {
       // 모든 측정 데이터 렌더링
       this.render();
       
-      console.log('[updateCanvasSize] 캔버스 크기 조정 완료');
+      // console.log('[updateCanvasSize] 캔버스 크기 조정 완료');
     },
     adjustMeasurements(scaleX, scaleY) {
       if (!isFinite(scaleX) || !isFinite(scaleY)) return;
@@ -1223,22 +1243,22 @@ export default {
         // 픽셀 거리에 스케일 적용
         value = (distance / scaleBarPixelLength) * scaleBarRealLength;
         
-        console.log(`[calculateValue] 스케일바 기반 계산: 
-          거리=${distance.toFixed(4)} 픽셀,
-          스케일바=${scaleBarPixelLength.toFixed(2)} 픽셀 = ${this.scaleBarValue} ${this.scaleBarUnit},
-          비율=${(scaleBarRealLength / scaleBarPixelLength).toFixed(4)} ${this.scaleBarUnit === 'μm' ? 'nm' : this.scaleBarUnit}/픽셀,
-          최종값=${value.toFixed(2)} nm`);
+        // console.log(`[calculateValue] 스케일바 기반 계산: 
+          // 거리=${distance.toFixed(4)} 픽셀,
+          // 스케일바=${scaleBarPixelLength.toFixed(2)} 픽셀 = ${this.scaleBarValue} ${this.scaleBarUnit},
+          // 비율=${(scaleBarRealLength / scaleBarPixelLength).toFixed(4)} ${this.scaleBarUnit === 'μm' ? 'nm' : this.scaleBarUnit}/픽셀,
+          // 최종값=${value.toFixed(2)} nm`);
       } else {
         // 배율 기반 측정 (기존 코드)
         value = distance * this.magnification;
         
-        console.log(`[calculateValue] 배율 기반 계산: 
-        시작점=(${startX.toFixed(2)}, ${startY.toFixed(2)}), 
-        끝점=(${endX.toFixed(2)}, ${endY.toFixed(2)}), 
-        dx=${dx.toFixed(2)}, dy=${dy.toFixed(2)}, 
-        거리=${distance.toFixed(4)},
-        배율=${this.magnification}, 
-        최종값=${value.toFixed(2)}`);
+        // console.log(`[calculateValue] 배율 기반 계산: 
+        // 시작점=(${startX.toFixed(2)}, ${startY.toFixed(2)}), 
+        // 끝점=(${endX.toFixed(2)}, ${endY.toFixed(2)}), 
+        // dx=${dx.toFixed(2)}, dy=${dy.toFixed(2)}, 
+        // 거리=${distance.toFixed(4)},
+        // 배율=${this.magnification}, 
+        // 최종값=${value.toFixed(2)}`);
       }
       
       // 결과값을 그대로 반환 (반올림하지 않음)
@@ -1404,7 +1424,7 @@ export default {
               start: { ...this.areaSelectionStart },
               end: { ...this.areaSelectionEnd }
             };
-            console.log('Selected area rect set:', this.selectedAreaRect);
+            // console.log('Selected area rect set:', this.selectedAreaRect);
           }
         }
         this.areaSelectionStart = null;
@@ -1434,7 +1454,7 @@ export default {
           
           // 중요: 수동 스케일바 설정 플래그를 즉시 true로 설정
           this.manualScaleBarSet = true;
-          console.log('[endMeasurement] 수동 스케일바 설정 완료, manualScaleBarSet을 true로 설정');
+          // console.log('[endMeasurement] 수동 스케일바 설정 완료, manualScaleBarSet을 true로 설정');
           
           // 캔버스 좌표를 이미지 좌표로 변환
           const img = this.$refs.sourceImage;
@@ -1456,8 +1476,8 @@ export default {
             unit: this.scaleBarUnit
           };
           
-          console.log(`[endMeasurement] 스케일바 측정값 저장:`, JSON.stringify(this.scaleBarMeasurement));
-          console.log(`[endMeasurement] 스케일바 픽셀 길이: ${pixelLength}, 단위: ${this.scaleBarUnit}`);
+          // console.log(`[endMeasurement] 스케일바 측정값 저장:`, JSON.stringify(this.scaleBarMeasurement));
+          // console.log(`[endMeasurement] 스케일바 픽셀 길이: ${pixelLength}, 단위: ${this.scaleBarUnit}`);
           
           // 스케일바 감지 상태 업데이트
           this.scaleBarDetected = true;
@@ -1474,7 +1494,7 @@ export default {
           this.measurementMode = 'line';
           
           // 로그 기록 추가
-          console.log(`[endMeasurement] 수동 스케일바 설정 완료, 픽셀 길이: ${pixelLength}, 자동으로 선 측정 모드로 전환`);
+          // console.log(`[endMeasurement] 수동 스케일바 설정 완료, 픽셀 길이: ${pixelLength}, 자동으로 선 측정 모드로 전환`);
           
           // 상태 변경 알림 표시
           this.showNotification('수동 스케일바 설정 완료. 선 측정 모드로 전환되었습니다.', 'info');
@@ -1492,23 +1512,43 @@ export default {
         const height = Math.abs(this.currentMeasurement.end.y - this.currentMeasurement.start.y);
         
         if (width > 10 || height > 10) {
-          const measurement = {
+          let measurement = {
             ...this.currentMeasurement,
-            itemId: this.nextId.toString(),
-            subItemId: `${this.nextId}-${this.subItemPrefix}1`,
             isReference: this.measurementMode === 'reference',
             color: this.referenceLineColor,
             value: this.calculateValue(this.currentMeasurement.start, this.currentMeasurement.end)
           };
           
           if (this.measurementMode === 'reference') {
+            // 기준선에는 별도의 ID 체계 사용
+            measurement.itemId = `REF-${this.referenceId}`;
+            measurement.subItemId = `REF-${this.referenceId}-1`;
             this.referenceLines.push(measurement);
             this.activeReferenceLine = measurement;
+            this.referenceId++; // 기준선 ID만 증가
           } else {
+            // 측정선에는 기존 nextId 사용
+            measurement.itemId = this.nextId.toString();
+            measurement.subItemId = `${this.nextId}-${this.subItemPrefix}1`;
+            
+            // 단일 선 측정 - 기준선 기반 자르기 기능 복원
+            if (this.activeReferenceLine) {
+              measurement = this.trimSingleMeasurementByReferenceLine(measurement, this.activeReferenceLine);
+              // 자른 후 값 다시 계산
+              measurement.value = this.calculateValue(measurement.start, measurement.end);
+              measurement.relativeToReference = this.activeReferenceLine.itemId;
+            }
+            
             this.$emit('measurement-added', measurement); // 부모에게 이벤트 발생
             this.createBoundedSegments(measurement); // 선 측정 분할 처리
+            
+            // 측정값 추가를 히스토리에 저장
+            this.$nextTick(() => {
+              const segments = this.segmentedMeasurements.filter(s => s.itemId === measurement.itemId);
+              this.addToHistory('add', measurement, segments);
+            });
+            this.nextId++; // 측정선 ID만 증가
           }
-          this.nextId++;
         }
       } else if (this.areaStart && this.areaEnd) {
         const width = Math.abs(this.areaEnd.x - this.areaStart.x);
@@ -1521,12 +1561,12 @@ export default {
           };
           
           if (this.measurementMode === 'defect') {
-            console.log('Defect mode - Setting selectedAreaRect');
+            // console.log('Defect mode - Setting selectedAreaRect');
             this.selectedAreaRect = {
               start: { ...this.areaStart },
               end: { ...this.areaEnd }
             };
-            console.log('selectedAreaRect after setting:', this.selectedAreaRect);
+            // console.log('selectedAreaRect after setting:', this.selectedAreaRect);
           } else if (this.measurementMode === 'circle') {
             const measurement = {
               start: { ...this.areaStart },
@@ -1545,10 +1585,35 @@ export default {
             // this.measurements.push(measurement); // prop이므로 직접 수정 불가
             this.$emit('measurement-added', measurement); // 부모에게 이벤트 발생
             this.segmentedMeasurements.push(measurement);
+            
+            // 측정값 추가를 히스토리에 저장
+            this.$nextTick(() => {
+              const segments = this.segmentedMeasurements.filter(s => s.itemId === measurement.itemId);
+              this.addToHistory('add', measurement, segments);
+            });
+            
             this.nextId++;
           } else if (this.measurementMode.startsWith('area')) {
-            console.log(`[endMeasurement] 영역 측정 완료, 영역 측정 생성 시작 - 모드: ${this.measurementMode}, 기준선 있음: ${!!this.activeReferenceLine}`);
+            // console.log(`[endMeasurement] 영역 측정 완료, 영역 측정 생성 시작 - 모드: ${this.measurementMode}, 기준선 있음: ${!!this.activeReferenceLine}`);
+            
+            // 영역 측정 생성 전 현재 측정값 개수 저장
+            const beforeCount = this.measurements.length;
+            
             this.createAreaMeasurements();
+            
+            // 영역 측정 완료 후 추가된 모든 측정값을 하나의 히스토리 그룹으로 저장
+            this.$nextTick(() => {
+              const addedMeasurements = this.measurements.slice(beforeCount);
+              if (addedMeasurements.length > 0) {
+                // 영역 측정의 경우 여러 측정값을 하나의 그룹으로 히스토리에 저장
+                this.addToHistory('add-area', {
+                  measurements: addedMeasurements,
+                  areaStart: { ...this.areaStart },
+                  areaEnd: { ...this.areaEnd },
+                  mode: this.measurementMode
+                });
+              }
+            });
           }
         }
       }
@@ -1628,400 +1693,7 @@ export default {
         y: (e.clientY - rect.top) * scaleY
       };
     },
-    createAreaMeasurements() {
-      console.log(`[createAreaMeasurements] >>> 시작 - 모드: ${this.measurementMode}, 기준선 있음: ${!!this.activeReferenceLine}`);
-      
-      // 기존 측정값 초기화 코드 제거 - 누적 측정을 위해
-      
-      const startX = Math.min(this.areaStart.x, this.areaEnd.x);
-      const endX = Math.max(this.areaStart.x, this.areaEnd.x);
-      const startY = Math.min(this.areaStart.y, this.areaEnd.y);
-      const endY = Math.max(this.areaStart.y, this.areaEnd.y);
-      
-      console.log('Creating area measurements:', 
-                 `mode=${this.measurementMode}`, 
-                 `hasReferenceLine=${!!this.activeReferenceLine}`,
-                 `lineCount=${this.lineCount}`,
-                 `area=(${startX.toFixed(0)},${startY.toFixed(0)})-(${endX.toFixed(0)},${endY.toFixed(0)})`);
-      
-      // 기준선 기반 측정인 경우
-      if (this.activeReferenceLine) {
-        console.log(`[createAreaMeasurements] 기준선 기반 영역 측정 처리 - 모드: ${this.measurementMode}`);
-        
-        // 기존 회전 로직 제거하고 직사각형 박스 사용
-        // 항상 직사각형으로 고정 (기준선 방향 무시)
-        console.log(`[createAreaMeasurements] 직사각형 영역 사용 (회전 없음)`);
-        
-        // 기존 코드와 동일하게 직사각형 코너 포인트 사용
-        const cornerPoints = [
-          { x: startX, y: startY }, // 좌상
-          { x: endX, y: startY },   // 우상
-          { x: endX, y: endY },     // 우하
-          { x: startX, y: endY }    // 좌하
-        ];
-        
-        console.log(`Rectangle corners:`, 
-          `좌상(${cornerPoints[0].x.toFixed(0)},${cornerPoints[0].y.toFixed(0)})`,
-          `우상(${cornerPoints[1].x.toFixed(0)},${cornerPoints[1].y.toFixed(0)})`,
-          `우하(${cornerPoints[2].x.toFixed(0)},${cornerPoints[2].y.toFixed(0)})`,
-          `좌하(${cornerPoints[3].x.toFixed(0)},${cornerPoints[3].y.toFixed(0)})`);
-        
-        if (this.measurementMode === 'area-vertical') {
-          console.log(`[createAreaMeasurements] 수직 방향 영역 측정 생성 (with reference, 회전 없음)`);
-          
-          // 수직 방향 측정 - 기준선 없을 때와 동일하게 구현
-          const width = endX - startX;
-          const spacing = width / (this.lineCount - 1);
-          
-          for (let i = 0; i < this.lineCount; i++) {
-            const x = startX + (spacing * i);
-            const rawMeasurement = {
-              start: { x, y: startY },
-              end: { x, y: endY },
-              itemId: this.nextId.toString(),
-              subItemId: `${this.nextId}-${this.subItemPrefix}${i + 1}`,
-              brightness: 0,
-              relativeToReference: this.activeReferenceLine.itemId
-            };
-            
-            // 객체 경계에 맞게 선 조정
-            const trimmedMeasurement = this.trimMeasurementToObjectBoundaries(rawMeasurement);
-            
-            // 값 계산
-            trimmedMeasurement.value = this.calculateValue(
-              trimmedMeasurement.start,
-              trimmedMeasurement.end
-            );
-            
-            // this.measurements.push(trimmedMeasurement); // prop이므로 직접 수정 불가
-            this.$emit('measurement-added', trimmedMeasurement); // 부모에게 이벤트 발생
-            this.createBoundedSegments(trimmedMeasurement);
-          }
-        } else if (this.measurementMode === 'area-horizontal') {
-          console.log(`[createAreaMeasurements] 수평 방향 영역 측정 생성 (with reference, 회전 없음)`);
-          
-          // 수평 방향 측정 - 기준선 없을 때와 동일하게 구현
-          const height = endY - startY;
-          const spacing = height / (this.lineCount - 1);
-          
-          for (let i = 0; i < this.lineCount; i++) {
-            const y = startY + (spacing * i);
-            
-            if (i === 0 || i === this.lineCount - 1) {
-              console.log(`Horizontal Line ${i}: (${startX.toFixed(0)},${y.toFixed(0)})-(${endX.toFixed(0)},${y.toFixed(0)})`);
-            }
-            
-            const rawMeasurement = {
-              start: { x: startX, y },
-              end: { x: endX, y },
-              itemId: this.nextId.toString(),
-              subItemId: `${this.nextId}-${this.subItemPrefix}${i + 1}`,
-              brightness: 0,
-              relativeToReference: this.activeReferenceLine.itemId,
-              isHorizontal: true // 수평 방향 표시 추가
-            };
-            
-            // 객체 경계에 맞게 선 조정
-            const trimmedMeasurement = this.trimMeasurementToObjectBoundaries(rawMeasurement);
-            trimmedMeasurement.isHorizontal = true; // 수평 방향 표시 유지
-            
-            // 값 계산
-            trimmedMeasurement.value = this.calculateValue(
-              trimmedMeasurement.start,
-              trimmedMeasurement.end
-            );
-            
-            // this.measurements.push(trimmedMeasurement); // prop이므로 직접 수정 불가
-            this.$emit('measurement-added', trimmedMeasurement); // 부모에게 이벤트 발생
-            this.createBoundedSegments(trimmedMeasurement);
-          }
-        }
-        
-        this.nextId++;
-      } else {
-        // 기준선 없는 일반 영역 측정
-        console.log(`[createAreaMeasurements] 기준선 없는 일반 영역 측정 처리 - 모드: ${this.measurementMode}`);
-        
-        if (this.measurementMode === 'area-vertical') {
-          console.log(`[createAreaMeasurements] 수직 방향 영역 측정 생성 (without reference)`);
-          const width = endX - startX;
-          const spacing = width / (this.lineCount - 1);
-          
-          for (let i = 0; i < this.lineCount; i++) {
-            const x = startX + (spacing * i);
-            const rawMeasurement = {
-              start: { x, y: startY },
-              end: { x, y: endY },
-              itemId: this.nextId.toString(),
-              subItemId: `${this.nextId}-${this.subItemPrefix}${i + 1}`,
-              brightness: 0
-            };
-            
-            // 객체 경계에 맞게 선 조정
-            const trimmedMeasurement = this.trimMeasurementToObjectBoundaries(rawMeasurement);
-            
-            // 값 계산
-            trimmedMeasurement.value = this.calculateValue(
-              trimmedMeasurement.start,
-              trimmedMeasurement.end
-            );
-            
-            // this.measurements.push(trimmedMeasurement); // prop이므로 직접 수정 불가
-            this.$emit('measurement-added', trimmedMeasurement); // 부모에게 이벤트 발생
-            this.createBoundedSegments(trimmedMeasurement);
-          }
-          this.nextId++;
-        } else if (this.measurementMode === 'area-horizontal') {
-          console.log(`[createAreaMeasurements] 수평 방향 영역 측정 생성 (without reference)`);
-          const height = endY - startY;
-          const spacing = height / (this.lineCount - 1);
-          
-          for (let i = 0; i < this.lineCount; i++) {
-            const y = startY + (spacing * i);
-            
-            if (i === 0 || i === this.lineCount - 1) {
-              console.log(`Line ${i}: (${startX.toFixed(0)},${y.toFixed(0)})-(${endX.toFixed(0)},${y.toFixed(0)})`);
-            }
-            
-            const rawMeasurement = {
-              start: { x: startX, y },
-              end: { x: endX, y },
-              itemId: this.nextId.toString(),
-              subItemId: `${this.nextId}-${this.subItemPrefix}${i + 1}`,
-              brightness: 0,
-              isHorizontal: true // 수평 방향 표시 추가
-            };
-            
-            // 객체 경계에 맞게 선 조정
-            const trimmedMeasurement = this.trimMeasurementToObjectBoundaries(rawMeasurement);
-            trimmedMeasurement.isHorizontal = true; // 수평 방향 표시 유지
-            
-            // 값 계산
-            trimmedMeasurement.value = this.calculateValue(
-              trimmedMeasurement.start,
-              trimmedMeasurement.end
-            );
-            
-            // this.measurements.push(trimmedMeasurement); // prop이므로 직접 수정 불가
-            this.$emit('measurement-added', trimmedMeasurement); // 부모에게 이벤트 발생
-            this.createBoundedSegments(trimmedMeasurement);
-          }
-          this.nextId++;
-        }
-      }
-      
-      console.log(`[createAreaMeasurements] <<< 종료 - 생성된 측정값: ${this.measurements.length}개`);
-    },
     
-    // 새로운 함수: 경계가 있는 세그먼트 생성
-    createBoundedSegments(measurement) {
-      const samples = 3000; // 샘플링 포인트 수
-      const segments = [];
-      
-      console.log(`[createBoundedSegments] 시작 - 측정값 ID: ${measurement.itemId}, 기존 세그먼트 수: ${this.segmentedMeasurements.length}`);
-      
-      // 포인트 및 밝기 샘플링
-      const points = [];
-      for (let i = 0; i <= samples; i++) {
-        const t = i / samples;
-        const point = {
-          x: measurement.start.x + (measurement.end.x - measurement.start.x) * t,
-          y: measurement.start.y + (measurement.end.y - measurement.start.y) * t
-        };
-        const brightness = this.calculateBrightness(point.x, point.y);
-        points.push({ ...point, brightness, t });
-      }
-      
-      // 이동 평균으로 노이즈 제거
-      const windowSize = 5;
-      const smoothedPoints = points.map((point, i) => {
-        if (i < windowSize/2 || i > points.length - windowSize/2 - 1) return point;
-        
-        let sum = 0;
-        for (let j = -Math.floor(windowSize/2); j <= Math.floor(windowSize/2); j++) {
-          sum += points[i + j].brightness;
-        }
-        return { ...point, brightness: sum / windowSize };
-      });
-      
-      // 밝기 변경 지점 찾기
-      const transitions = [];
-      let prevIsBright = null;
-      
-      smoothedPoints.forEach((point, index) => {
-        const isBright = point.brightness > this.brightnessThreshold;
-        
-        if (prevIsBright === null) {
-          prevIsBright = isBright;
-        } else if (isBright !== prevIsBright) {
-          transitions.push({
-            index,
-            point,
-            fromBright: prevIsBright,
-            toBright: isBright
-          });
-          prevIsBright = isBright;
-        }
-      });
-      
-      console.log(`[createBoundedSegments] Found ${transitions.length} brightness transitions`);
-      
-      // 전체 선 측정값 계산 - 정확한 계산을 위해 직접 계산 함수 호출
-      const totalValue = this.calculateValue(measurement.start, measurement.end);
-      console.log(`[createBoundedSegments] 전체 선 측정값: ${totalValue}`);
-      
-      // 전체 선 길이 측정값 저장 코드 제거 (total 값 생성 안함)
-      
-      // 세그먼트 생성
-      if (transitions.length === 0) {
-        // 밝기 변화가 없는 경우 전체 라인이 하나의 세그먼트
-        const isBright = smoothedPoints[0]?.brightness > this.brightnessThreshold;
-        
-        // 세그먼트 측정값은 전체 선 길이와 동일하게 설정
-        const segmentValue = totalValue;
-        console.log(`[createBoundedSegments] 단일 세그먼트 측정값: ${segmentValue} (전체와 동일)`);
-        
-        const subItemId = `s${isBright ? this.brightSubIdCounter++ : this.darkSubIdCounter++}`;
-        
-        segments.push({
-          start: { ...measurement.start },
-          end: { ...measurement.end },
-          brightness: isBright ? 255 : 0,
-          isBright: isBright,
-          itemId: measurement.itemId,
-          subItemId: subItemId,
-          value: segmentValue
-        });
-      } else {
-        // 첫 세그먼트 (시작점부터 첫 전환점까지)
-        const firstTransition = transitions[0];
-        const firstIsBright = firstTransition.fromBright;
-        
-        // 거리에 비례하여 측정값 계산
-        const firstSegmentLength = this.getDistanceRatio(
-          measurement.start, 
-          { x: firstTransition.point.x, y: firstTransition.point.y },
-          measurement.start,
-          measurement.end
-        );
-        const firstSegmentValue = totalValue * firstSegmentLength;
-        
-        console.log(`[createBoundedSegments] 첫 세그먼트 측정값: ${firstSegmentValue} (비율: ${firstSegmentLength.toFixed(4)})`);
-        
-        const firstSubItemId = `s${firstIsBright ? this.brightSubIdCounter++ : this.darkSubIdCounter++}`;
-        
-        segments.push({
-          start: { ...measurement.start },
-          end: { 
-            x: firstTransition.point.x, 
-            y: firstTransition.point.y 
-          },
-          brightness: firstIsBright ? 255 : 0,
-          isBright: firstIsBright,
-          itemId: measurement.itemId,
-          subItemId: firstSubItemId,
-          value: firstSegmentValue
-        });
-        
-        // 중간 세그먼트들
-        for (let i = 0; i < transitions.length - 1; i++) {
-          const currentTransition = transitions[i];
-          const nextTransition = transitions[i + 1];
-          const isBright = currentTransition.toBright;
-          
-          // 세그먼트 시작/끝점
-          const segmentStart = { x: currentTransition.point.x, y: currentTransition.point.y };
-          const segmentEnd = { x: nextTransition.point.x, y: nextTransition.point.y };
-          
-          // 거리에 비례하여 측정값 계산
-          const segmentLength = this.getDistanceRatio(
-            segmentStart, 
-            segmentEnd,
-            measurement.start,
-            measurement.end
-          );
-          const segmentValue = totalValue * segmentLength;
-          
-          console.log(`[createBoundedSegments] 중간 세그먼트 #${i+1} 측정값: ${segmentValue} (비율: ${segmentLength.toFixed(4)})`);
-          
-          const subItemId = `s${isBright ? this.brightSubIdCounter++ : this.darkSubIdCounter++}`;
-          
-          segments.push({
-            start: segmentStart,
-            end: segmentEnd,
-            brightness: isBright ? 255 : 0,
-            isBright: isBright,
-            itemId: measurement.itemId,
-            subItemId: subItemId,
-            value: segmentValue
-          });
-        }
-        
-        // 마지막 세그먼트 (마지막 전환점부터 끝점까지)
-        const lastTransition = transitions[transitions.length - 1];
-        const lastIsBright = lastTransition.toBright;
-        
-        // 거리에 비례하여 측정값 계산
-        const lastSegmentLength = this.getDistanceRatio(
-          { x: lastTransition.point.x, y: lastTransition.point.y },
-          measurement.end,
-          measurement.start,
-          measurement.end
-        );
-        const lastSegmentValue = totalValue * lastSegmentLength;
-        
-        console.log(`[createBoundedSegments] 마지막 세그먼트 측정값: ${lastSegmentValue} (비율: ${lastSegmentLength.toFixed(4)})`);
-        
-        const lastSubItemId = `s${lastIsBright ? this.brightSubIdCounter++ : this.darkSubIdCounter++}`;
-        
-        segments.push({
-          start: { x: lastTransition.point.x, y: lastTransition.point.y },
-          end: { ...measurement.end },
-          brightness: lastIsBright ? 255 : 0,
-          isBright: lastIsBright,
-          itemId: measurement.itemId,
-          subItemId: lastSubItemId,
-          value: lastSegmentValue
-        });
-      }
-      
-      // 기준선 관련 속성 복사
-      segments.forEach(segment => {
-        if (measurement.relativeToReference) {
-          segment.relativeToReference = measurement.relativeToReference;
-        }
-        // 수평/수직 방향 속성 유지
-        if (measurement.isHorizontal) {
-          segment.isHorizontal = true;
-        }
-      });
-      
-      // 총 세그먼트 값의 합과 전체 선 값 비교 (디버깅용)
-      const segmentsSum = segments.reduce((sum, segment) => sum + segment.value, 0);
-      console.log(`[createBoundedSegments] 세그먼트 값 합계: ${segmentsSum.toFixed(2)}, 전체 선 값: ${totalValue.toFixed(2)}, 차이: ${(totalValue - segmentsSum).toFixed(2)}`);
-      
-      // 세그먼트 합계가 전체 값과 약간 다를 경우 보정
-      if (Math.abs(totalValue - segmentsSum) > 0.01 && segments.length > 0) {
-        // 마지막 세그먼트 보정
-        const correction = totalValue - segmentsSum;
-        const lastSegment = segments[segments.length - 1];
-        lastSegment.value += correction;
-        
-        console.log(`[createBoundedSegments] 보정 적용 - 마지막 세그먼트에 ${correction.toFixed(4)} 추가됨`);
-        
-        // 보정 후 합계 재확인
-        const newSum = segments.reduce((sum, segment) => sum + segment.value, 0);
-        console.log(`[createBoundedSegments] 보정 후 세그먼트 합계: ${newSum.toFixed(2)}`);
-      }
-      
-      this.segmentedMeasurements.push(...segments);
-      console.log(`[createBoundedSegments] 종료 - 세그먼트 ${segments.length}개 생성, 총 ${this.segmentedMeasurements.length}개`);
-      
-      // 생성된 세그먼트 정보 요약 로깅
-      segments.forEach((segment, idx) => {
-        console.log(`  세그먼트 #${idx+1}: ID=${segment.itemId}, SubID=${segment.subItemId}, 값=${segment.value.toFixed(2)}, 밝기=${segment.isBright ? '밝음' : '어두움'}`);
-      });
-    },
     
     // 두 점 사이의 거리 비율 계산 (전체 선 길이에 대한 비율)
     getDistanceRatio(start, end, lineStart, lineEnd) {
@@ -2045,13 +1717,13 @@ export default {
       }
 
       try {
-        console.log('[render] 이미지 상태:', {
-          image: this.image ? '있음' : '없음',
-          canvas: this.$refs.canvas ? '있음' : '없음',
-          ctx: this.ctx ? '있음' : '없음',
-          canvasWidth: this.$refs.canvas?.width,
-          canvasHeight: this.$refs.canvas?.height
-        });
+        // console.log('[render] 이미지 상태:', {
+        //   image: this.image ? '있음' : '없음',
+        //   canvas: this.$refs.canvas ? '있음' : '없음',
+        //   ctx: this.ctx ? '있음' : '없음',
+        //   canvasWidth: this.$refs.canvas?.width,
+        //   canvasHeight: this.$refs.canvas?.height
+        // });
 
         // 캔버스 지우기
         this.ctx.clearRect(0, 0, this.$refs.canvas.width, this.$refs.canvas.height);
@@ -2063,12 +1735,12 @@ export default {
             this.ctx.drawImage(this.image, 0, 0, this.$refs.canvas.width, this.$refs.canvas.height);
           } catch (drawError) {
             console.error('[render] 이미지 그리기 오류:', drawError);
-            console.log('[render] 오류 발생한 이미지 정보:', {
-              src: this.image.src.substring(0, 30) + '...',
-              complete: this.image.complete,
-              naturalWidth: this.image.naturalWidth,
-              naturalHeight: this.image.naturalHeight
-            });
+            // console.log('[render] 오류 발생한 이미지 정보:', {
+            //   src: this.image.src.substring(0, 30) + '...',
+            //   complete: this.image.complete,
+            //   naturalWidth: this.image.naturalWidth,
+            //   naturalHeight: this.image.naturalHeight
+            // });
             
             // 이미지가 로드되지 않은 경우 에러 메시지 표시
             this.ctx.fillStyle = '#f8f9fa';
@@ -2141,18 +1813,18 @@ export default {
         }
 
         // 디버깅 정보 콘솔에 출력
-        console.log('Render - mode:', this.measurementMode);
-        console.log('Render - referenceLines:', this.referenceLines.length);
-        console.log('Render - isMeasuring:', this.isMeasuring);
+        // console.log('Render - mode:', this.measurementMode);
+        // console.log('Render - referenceLines:', this.referenceLines.length);
+        // console.log('Render - isMeasuring:', this.isMeasuring);
         
         // 기준선 먼저 그리기
         if (this.referenceLines.length > 0) {
-          console.log('Drawing reference lines:', this.referenceLines.length);
+          // console.log('Drawing reference lines:', this.referenceLines.length);
           
           this.referenceLines.forEach((refLine, index) => {
-            console.log(`Drawing reference line ${index}:`, 
-              `시작(${refLine.start.x.toFixed(0)}, ${refLine.start.y.toFixed(0)})`, 
-              `끝(${refLine.end.x.toFixed(0)}, ${refLine.end.y.toFixed(0)})`);
+            // console.log(`Drawing reference line ${index}:`, 
+            //   `시작(${refLine.start.x.toFixed(0)}, ${refLine.start.y.toFixed(0)})`, 
+            //   `끝(${refLine.end.x.toFixed(0)}, ${refLine.end.y.toFixed(0)})`);
             
             this.ctx.beginPath();
             this.ctx.strokeStyle = refLine.color || this.referenceLineColor; // 저장된 색상 또는 기본 색상 사용
@@ -2168,8 +1840,8 @@ export default {
 
         // 측정된 선들 그리기
         if (this.measurementMode !== 'defect') {
-          console.log(`Drawing ${this.segmentedMeasurements.length} segmented measurements`);
-          console.log(`Measurements count: ${this.measurements.length}, segmented count: ${this.segmentedMeasurements.length}`);
+          // console.log(`Drawing ${this.segmentedMeasurements.length} segmented measurements`);
+          // console.log(`Measurements count: ${this.measurements.length}, segmented count: ${this.segmentedMeasurements.length}`);
           
           // 먼저 중복된 측정값이 있는지 체크
           const uniqueIds = new Set();
@@ -2342,7 +2014,7 @@ export default {
 
         // 선택된 영역 그리기 (불량 감지 모드에서만)
         if (this.measurementMode === 'defect' && this.selectedAreaRect) {
-          console.log('Drawing selected area rect:', this.selectedAreaRect);
+          // console.log('Drawing selected area rect:', this.selectedAreaRect);
           this.ctx.beginPath();
           this.ctx.strokeStyle = 'red';
           this.ctx.setLineDash([]); // 실선
@@ -2382,10 +2054,12 @@ export default {
           this.selectedRows = [];
           this.selectedSegment = null;
           this.nextId = 1;
+          this.referenceId = 1;
+          this.brightSubIdCounter = 1;
         }
       }
       
-      console.log('모드 변경:', mode);
+      // console.log('모드 변경:', mode);
       this.debugInfo.lastAction = `모드 변경: ${mode}`;
       this.measurementMode = mode;
       
@@ -2410,7 +2084,7 @@ export default {
       this.isSettingReference = !this.isSettingReference;
     },
     closePopup() {
-      console.log('[closePopup] MSA6 이미지 팝업 닫기');
+      // console.log('[closePopup] MSA6 이미지 팝업 닫기');
         
       // 팝업 닫기 전에 현재 스케일바 설정 저장
       this.saveScaleBarSettings();
@@ -2433,17 +2107,17 @@ export default {
       try {
         // 저장 처리 중인지 확인
         if (this.isSaving) {
-          console.log('[handleSave] 이미 저장 중입니다.');
+          // console.log('[handleSave] 이미 저장 중입니다.');
           return;
         }
         
         // 저장 처리 중 상태로 설정
         this.isSaving = true;
-        console.log('[handleSave] 저장 시작');
+        // console.log('[handleSave] 저장 시작');
         
         // 저장할 데이터가 있는지 확인
         if (!this.measurements || this.measurements.length === 0) {
-          console.log('[handleSave] 저장할 측정값이 없습니다.');
+          // console.log('[handleSave] 저장할 측정값이 없습니다.');
           this.showNotification('저장할 측정값이 없습니다.', 'warning');
           this.isSaving = false;
           return;
@@ -2454,16 +2128,16 @@ export default {
         
         // 저장 결과 처리
         if (result && result.success) {
-          console.log('[handleSave] 저장 성공:', result);
+          // console.log('[handleSave] 저장 성공:', result);
           // 팝업 닫기
           this.closePopup();
         } else if (result && !result.success) {
-          console.log('[handleSave] 저장 실패:', result.error || '알 수 없는 오류');
+          // console.log('[handleSave] 저장 실패:', result.error || '알 수 없는 오류');
         } else {
-          console.log('[handleSave] 저장 취소됨');
+          // console.log('[handleSave] 저장 취소됨');
         }
       } catch (error) {
-        console.log('[handleSave] 저장 중 오류:', error.message);
+        // console.log('[handleSave] 저장 중 오류:', error.message);
         this.showNotification(`저장 중 오류가 발생했습니다: ${error.message}`, 'error');
       } finally {
         // 저장 처리 완료 상태로 설정
@@ -2473,32 +2147,32 @@ export default {
     
     async openTableNameSelector() {
       return new Promise((resolve) => {
-        console.log('[openTableNameSelector] 테이블 선택기 열기');
+        // console.log('[openTableNameSelector] 테이블 선택기 열기');
         
         // 테이블 선택기 컴포넌트 표시
         this.$refs.tableNameSelector.open({
           onSelect: async (selectedTable) => {
             if (!selectedTable) {
-              console.log('[openTableNameSelector] 선택된 테이블 없음, 취소됨');
+              // console.log('[openTableNameSelector] 선택된 테이블 없음, 취소됨');
               resolve(null);
               return;
             }
             
-            console.log('[openTableNameSelector] 테이블 선택됨:', selectedTable);
+            // console.log('[openTableNameSelector] 테이블 선택됨:', selectedTable);
             
             try {
               // 저장 처리
               const result = await this.blobToBase64SaveWithTableName(selectedTable);
-              console.log('[openTableNameSelector] 저장 결과:', result);
+              // console.log('[openTableNameSelector] 저장 결과:', result);
               resolve(result);
             } catch (error) {
-              console.log('[openTableNameSelector] 저장 처리 중 오류:', error.message);
+              // console.log('[openTableNameSelector] 저장 처리 중 오류:', error.message);
               this.showNotification(`저장 중 오류가 발생했습니다: ${error.message}`, 'error');
               resolve({ success: false, error: error.message });
             }
           },
           onCancel: () => {
-            console.log('[openTableNameSelector] 사용자가 취소함');
+            // console.log('[openTableNameSelector] 사용자가 취소함');
             resolve(null);
           }
         });
@@ -2523,31 +2197,29 @@ export default {
       });
       
       // 상태 저장 및 로그 기록
-      console.log(`[applySelectedIds] ID 적용 완료 - Item ID: ${this.newItemId || '변경 없음'}, Sub ID: ${this.newSubId || '변경 없음'}`);
+      // console.log(`[applySelectedIds] ID 적용 완료 - Item ID: ${this.newItemId || '변경 없음'}, Sub ID: ${this.newSubId || '변경 없음'}`);
       
       this.render();
     },
     editSegment(segment) {
       // 세그먼트 편집 로직 구현
-      console.log('Editing segment:', segment);
+      // console.log('Editing segment:', segment);
     },
     deleteSegment(segment) {
       const index = this.segmentedMeasurements.indexOf(segment);
       if (index > -1) {
         // 관련된 모든 세그먼트와 측정값 삭제
         const itemId = segment.itemId;
-        this.segmentedMeasurements = this.segmentedMeasurements.filter(s => s.itemId !== itemId);
-        this.measurements = this.measurements.filter(m => m.itemId !== itemId);
         
-        // 삭제된 항목을 실행 취소 기록에 추가
+        // 삭제 전에 히스토리에 저장
         const relatedSegments = this.segmentedMeasurements.filter(s => s.itemId === itemId);
         const measurement = this.measurements.find(m => m.itemId === itemId);
         if (measurement) {
-          this.undoHistory.push({
-            measurement: measurement,
-            segments: relatedSegments
-          });
+          this.addToHistory('delete', measurement, relatedSegments);
         }
+        
+        this.segmentedMeasurements = this.segmentedMeasurements.filter(s => s.itemId !== itemId);
+        this.measurements = this.measurements.filter(m => m.itemId !== itemId);
         
         this.render();
       }
@@ -2582,6 +2254,9 @@ export default {
           e.preventDefault();
           this.toggleDeleteMode();
         }
+      } else if (e.key === 'c' || e.key === 'C') {
+        // 기준선 그리기 모드로 전환
+        this.setMode('reference');
       } else if (e.key === 'a' || e.key === 'A') {
         // 영역 측정 모드 전환
         if (this.measurementMode === 'area-vertical') {
@@ -2592,6 +2267,12 @@ export default {
       } else if (e.key === 's' || e.key === 'S') {
         // 단일 선 측정 모드로 전환
         this.setMode('line');
+      } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        this.undoLastMeasurement();
+      } else if (e.key === 'y' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        this.redoLastMeasurement();
       }
     },
     handleKeyUp(e) {
@@ -2603,35 +2284,86 @@ export default {
       }
     },
     undoLastMeasurement() {
-      if (this.measurements.length > 0) {
-        // const lastMeasurement = this.measurements.pop(); // prop이므로 직접 수정 불가
-        const lastMeasurement = this.measurements[this.measurements.length - 1];
-        this.$emit('measurement-removed', lastMeasurement); // 부모에게 삭제 이벤트 발생
-        this.undoHistory.push(lastMeasurement);
-        
-        // 관련된 세그먼트들도 함께 저장하고 삭제
-        const relatedSegments = this.segmentedMeasurements.filter(
-          segment => segment.itemId === lastMeasurement.itemId
-        );
-        this.redoHistory.push({
-          measurement: lastMeasurement,
-          segments: relatedSegments
-        });
-        
-        this.segmentedMeasurements = this.segmentedMeasurements.filter(
-          segment => segment.itemId !== lastMeasurement.itemId
-        );
-        
+      if (this.undoHistory.length > 0) {
+        const lastState = this.undoHistory.pop();
+        if (lastState.action === 'add') {
+          // 측정값 추가 작업 실행 취소
+          const index = this.measurements.findIndex(m => m.itemId === lastState.measurement.itemId);
+          if (index !== -1) {
+            this.measurements.splice(index, 1);
+          }
+          this.segmentedMeasurements = this.segmentedMeasurements.filter(s => s.itemId !== lastState.measurement.itemId);
+        } else if (lastState.action === 'add-area') {
+          // 영역 측정 추가 작업 실행 취소
+          lastState.measurement.measurements.forEach(measurement => {
+            const index = this.measurements.findIndex(m => m.itemId === measurement.itemId);
+            if (index !== -1) {
+              this.measurements.splice(index, 1);
+            }
+            this.segmentedMeasurements = this.segmentedMeasurements.filter(s => s.itemId !== measurement.itemId);
+          });
+        } else if (lastState.action === 'delete') {
+          // 측정값 삭제 작업 실행 취소
+          this.measurements.push(lastState.measurement);
+          this.segmentedMeasurements.push(...lastState.segments);
+        } else if (lastState.action === 'delete-defect') {
+          // 불량 측정 삭제 작업 실행 취소
+          this.defectMeasurements.push(lastState.measurement);
+        }
+        this.redoHistory.push(lastState);
         this.render();
       }
     },
     redoLastMeasurement() {
       if (this.redoHistory.length > 0) {
         const lastState = this.redoHistory.pop();
-        this.measurements.push(lastState.measurement);
-        this.segmentedMeasurements.push(...lastState.segments);
+        if (lastState.action === 'add') {
+          // 측정값 추가 작업 복구
+          this.measurements.push(lastState.measurement);
+          this.segmentedMeasurements.push(...lastState.segments);
+        } else if (lastState.action === 'add-area') {
+          // 영역 측정 추가 작업 복구
+          lastState.measurement.measurements.forEach(measurement => {
+            this.measurements.push(measurement);
+            const segments = this.segmentedMeasurements.filter(s => s.itemId === measurement.itemId);
+            this.segmentedMeasurements.push(...segments);
+          });
+        } else if (lastState.action === 'delete') {
+          // 측정값 삭제 작업 복구
+          const index = this.measurements.findIndex(m => m.itemId === lastState.measurement.itemId);
+          if (index !== -1) {
+            this.measurements.splice(index, 1);
+          }
+          this.segmentedMeasurements = this.segmentedMeasurements.filter(s => s.itemId !== lastState.measurement.itemId);
+        } else if (lastState.action === 'delete-defect') {
+          // 불량 측정 삭제 작업 복구
+          const index = this.defectMeasurements.findIndex(m => m.itemId === lastState.measurement.itemId);
+          if (index !== -1) {
+            this.defectMeasurements.splice(index, 1);
+          }
+        }
+        this.undoHistory.push(lastState);
         this.render();
       }
+    },
+    // 히스토리에 액션 추가하는 통합 메서드
+    addToHistory(action, measurement, segments = []) {
+      // 측정값 추가 시 관련 세그먼트 찾기
+      if (action === 'add' && segments.length === 0) {
+        segments = this.segmentedMeasurements.filter(s => s.itemId === measurement.itemId);
+      }
+      
+      this.undoHistory.push({
+        action: action,
+        measurement: measurement,
+        segments: [...segments]
+      });
+      
+      // redo 히스토리 초기화 (새로운 액션 후)
+      this.redoHistory = [];
+      
+      const logId = action === 'add-area' ? `${measurement.measurements.length}개 영역 측정` : measurement.itemId;
+      // console.log(`[addToHistory] ${action} 액션이 히스토리에 저장됨:`, logId);
     },
     updateAllMeasurements() {
       // 모든 측정값에 배율 적용
@@ -2727,6 +2459,7 @@ export default {
     deleteDefect(defect) {
       const index = this.defectMeasurements.indexOf(defect);
       if (index > -1) {
+        this.addToHistory('delete-defect', defect);
         this.defectMeasurements.splice(index, 1);
         this.render();
       }
@@ -2736,18 +2469,22 @@ export default {
       this.selectedImages[image.id] = selected;
     },
     saveMeasurementsToLCNC() {
-      if (this.isSaving || (this.measurementMode === 'defect' ? this.defectMeasurements.length === 0 : this.filteredMeasurements.length === 0)) return;
+      if (this.isSaving || (this.measurementMode === 'defect' ? this.defectMeasurements.length === 0 : this.segmentedMeasurements.length === 0)) return;
       
       this.isSaving = true;
       
       console.log('[saveMeasurementsToLCNC] 측정 결과 저장 시작...');
+      console.log('[saveMeasurementsToLCNC] measurements (prop):', this.measurements.length, '개');
+      console.log('[saveMeasurementsToLCNC] segmentedMeasurements:', this.segmentedMeasurements.length, '개');
+      console.log('[saveMeasurementsToLCNC] measurements 샘플:', this.measurements.slice(0, 3));
+      console.log('[saveMeasurementsToLCNC] segmentedMeasurements 샘플:', this.segmentedMeasurements.slice(0, 3));
       
       // 로그 저장 - 측정 결과 저장
       LogService.logAction('save_measurements', {
         mode: this.measurementMode,
         count: this.measurementMode === 'defect' 
           ? this.defectMeasurements.length 
-          : this.filteredMeasurements.length
+          : this.segmentedMeasurements.length
       })
       
       // 세션 ID 가져오기 (localStorage에서)
@@ -2759,10 +2496,10 @@ export default {
         return;
       }
       
-      // 측정 데이터 준비
+      // 측정 데이터 준비 - segmentedMeasurements 사용
       const measurementData = {
         session_id: sessionId,
-        measurements: this.measurementMode === 'defect' ? this.defectMeasurements : this.filteredMeasurements,
+        measurements: this.measurementMode === 'defect' ? this.defectMeasurements : this.segmentedMeasurements,
         measurement_mode: this.measurementMode,
         measurement_config: {
           magnification: this.magnification,
@@ -2780,6 +2517,7 @@ export default {
         세션ID: sessionId,
         측정모드: this.measurementMode,
         데이터개수: measurementData.measurements.length,
+        실제데이터샘플: measurementData.measurements.slice(0, 3)
       });
       
       // API 호출 - LCNC 스키마에 데이터 저장
@@ -2841,7 +2579,7 @@ export default {
       // 기준선이 없으면 아무 것도 하지 않음
       if (!this.activeReferenceLine) return measurement;
       
-      console.log(`[applyReferenceToMeasurement] 기준선 적용 - 모드: ${this.measurementMode}, 측정값 ID: ${measurement.itemId}`);
+      // console.log(`[applyReferenceToMeasurement] 기준선 적용 - 모드: ${this.measurementMode}, 측정값 ID: ${measurement.itemId}`);
       
       // 기준선에 상대적인 측정값 설정
       measurement.relativeToReference = this.activeReferenceLine.itemId;
@@ -2849,7 +2587,7 @@ export default {
       // 가로/세로 방향 설정 유지
       if (this.measurementMode === 'area-horizontal') {
         measurement.isHorizontal = true;
-        console.log(`[applyReferenceToMeasurement] 수평 방향 표시 추가`);
+        // console.log(`[applyReferenceToMeasurement] 수평 방향 표시 추가`);
       }
       
       return measurement;
@@ -2862,9 +2600,9 @@ export default {
       if (angleDiff > 180) angleDiff = 360 - angleDiff;
       return parseFloat(angleDiff.toFixed(2));
     },
-    // 측정선을 객체 경계에 맞게 조정하는 함수
+    // 측정선을 객체 경계에 맞게 조정하는 함수 - 기준선 기반 자르기 기능 제거
     trimMeasurementToObjectBoundaries(measurement) {
-      console.log(`[trimMeasurementToObjectBoundaries] 호출 - 방향: ${measurement.isHorizontal ? '수평' : '수직'}, 기준선 관련: ${!!measurement.relativeToReference}`);
+      // console.log(`[trimMeasurementToObjectBoundaries] 호출 - 방향: ${measurement.isHorizontal ? '수평' : '수직'}, 기준선 관련: ${!!measurement.relativeToReference}`);
       
       const result = {
         ...measurement,
@@ -2872,57 +2610,56 @@ export default {
         end: { ...measurement.end }
       };
       
-      // 기준선이 있는 경우에만 교차점 계산 및 적용
-      // 밝기 변화 감지 로직은 제거하여 여러 영역을 한 번에 측정 가능하게 함
-      if (this.activeReferenceLine) {
-        // 기준선을 직선으로 가정하고 교차점 계산
-        const refLine = this.activeReferenceLine;
-        
-        // 선분 교차점 계산
-        const det = (measurement.end.x - measurement.start.x) * (refLine.end.y - refLine.start.y) - 
-                    (measurement.end.y - measurement.start.y) * (refLine.end.x - refLine.start.x);
-        
-        if (det !== 0) {  // 평행하지 않은 경우만
-          const t = ((refLine.start.x - measurement.start.x) * (refLine.end.y - refLine.start.y) - 
-                    (refLine.start.y - measurement.start.y) * (refLine.end.x - refLine.start.x)) / det;
-          
-          const u = -((measurement.start.x - measurement.end.x) * (measurement.start.y - refLine.start.y) - 
-                    (measurement.start.y - measurement.end.y) * (measurement.start.x - refLine.start.x)) / det;
-          
-          if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
-            // 교차점 좌표
-            const intersectionPoint = {
-              x: measurement.start.x + t * (measurement.end.x - measurement.start.x),
-              y: measurement.start.y + t * (measurement.end.y - measurement.start.y)
-            };
-            
-            console.log(`[trimMeasurementToObjectBoundaries] 기준선 교차점 발견: (${intersectionPoint.x.toFixed(0)}, ${intersectionPoint.y.toFixed(0)})`);
-            
-            // 시작점과 끝점 중 교차점에 더 가까운 쪽을 교차점으로 설정
-            const distToStart = Math.hypot(
-              intersectionPoint.x - measurement.start.x,
-              intersectionPoint.y - measurement.start.y
-            );
-            const distToEnd = Math.hypot(
-              intersectionPoint.x - measurement.end.x,
-              intersectionPoint.y - measurement.end.y
-            );
-            
-            if (distToStart < distToEnd) {
-              // 교차점이 시작점에 더 가까우면
-              result.start = intersectionPoint;
-            } else {
-              // 교차점이 끝점에 더 가까우면
-              result.end = intersectionPoint;
-            }
-            
-            
-            console.log('[trimMeasurementToObjectBoundaries] 기준선 기준 측정선 조정:', 
-              `Start: (${result.start.x.toFixed(0)}, ${result.start.y.toFixed(0)})`, 
-              `End: (${result.end.x.toFixed(0)}, ${result.end.y.toFixed(0)})`);
-          }
-        }
-      }
+      // 기준선 기반 자르기 로직 제거 - 원본 측정값 그대로 반환
+      // if (this.activeReferenceLine) {
+      //   // 기준선을 직선으로 가정하고 교차점 계산
+      //   const refLine = this.activeReferenceLine;
+      //   
+      //   // 선분 교차점 계산
+      //   const det = (measurement.end.x - measurement.start.x) * (refLine.end.y - refLine.start.y) - 
+      //               (measurement.end.y - measurement.start.y) * (refLine.end.x - refLine.start.x);
+      //   
+      //   if (det !== 0) {  // 평행하지 않은 경우만
+      //     const t = ((refLine.start.x - measurement.start.x) * (refLine.end.y - refLine.start.y) - 
+      //               (refLine.start.y - measurement.start.y) * (refLine.end.x - refLine.start.x)) / det;
+      //     
+      //     const u = -((measurement.start.x - measurement.end.x) * (measurement.start.y - refLine.start.y) - 
+      //               (measurement.start.y - measurement.end.y) * (measurement.start.x - refLine.start.x)) / det;
+      //     
+      //     if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+      //       // 교차점 좌표
+      //       const intersectionPoint = {
+      //         x: measurement.start.x + t * (measurement.end.x - measurement.start.x),
+      //         y: measurement.start.y + t * (measurement.end.y - measurement.start.y)
+      //       };
+      //       
+      //       // console.log(`[trimMeasurementToObjectBoundaries] 기준선 교차점 발견: (${intersectionPoint.x.toFixed(0)}, ${intersectionPoint.y.toFixed(0)})`);
+      //       
+      //       // 시작점과 끝점 중 교차점에 더 가까운 쪽을 교차점으로 설정
+      //       const distToStart = Math.hypot(
+      //         intersectionPoint.x - measurement.start.x,
+      //         intersectionPoint.y - measurement.start.y
+      //       );
+      //       const distToEnd = Math.hypot(
+      //         intersectionPoint.x - measurement.end.x,
+      //         intersectionPoint.y - measurement.end.y
+      //       );
+      //       
+      //       if (distToStart < distToEnd) {
+      //         // 교차점이 시작점에 더 가까우면
+      //         result.start = intersectionPoint;
+      //       } else {
+      //         // 교차점이 끝점에 더 가까우면
+      //         result.end = intersectionPoint;
+      //       }
+      //       
+      //       
+      //       // console.log('[trimMeasurementToObjectBoundaries] 기준선 기준 측정선 조정:', 
+      //         // `Start: (${result.start.x.toFixed(0)}, ${result.start.y.toFixed(0)})`, 
+      //         // `End: (${result.end.x.toFixed(0)}, ${result.end.y.toFixed(0)})`);
+      //     }
+      //   }
+      // }
       
       // 수평/수직 방향 속성 유지
       if (measurement.isHorizontal) {
@@ -2951,7 +2688,7 @@ export default {
         this.selectedArea = null;
         this.selectedAreaRect = null;
         
-        console.log('모든 측정 결과가 초기화되었습니다.');
+        // console.log('모든 측정 결과가 초기화되었습니다.');
         this.render();
         
         // 로그 저장 - 측정 결과 초기화
@@ -2982,6 +2719,9 @@ export default {
      */
     async saveWithTableName(selectedTable) {
       try {
+        console.log('🔥🔥🔥 msa6_image_popup1.vue saveWithTableName 함수 호출됨! 🔥🔥🔥');
+        console.log('전달받은 selectedTable:', selectedTable);
+        
         // 테이블 정보 확인
         if (!selectedTable || typeof selectedTable !== 'object') {
           console.log('[saveWithTableName] 테이블 정보가 유효하지 않습니다:', selectedTable);
@@ -2996,52 +2736,149 @@ export default {
           return { success: false, error: '테이블 이름과 Lot/Wafer 정보가 필요합니다.' };
         }
         
-        console.log('[saveWithTableName] 저장 시작, 테이블:', selectedTable);
+        this.isSaving = true;
+        console.log('테이블명으로 저장 시작:', selectedTable.table_name);
+
+        // 현재 상태 저장
+        const currentIsShowingInputImage = this.isShowingInputImage;
         
-        // 사용자 정보 추출 시도
+        let beforeImageBase64 = '';
+        let afterImageBase64 = '';
+        
+        console.log('측정선이 포함된 이미지 생성 시작');
+        
+        try {
+          // Before 이미지 (원본 이미지 + 측정선)
+          if (this.internalInputImageUrl) {
+            console.log('Before 이미지 생성 중 (원본 이미지 + 측정선)...');
+            
+            // Before 모드로 전환 (입력 이미지 표시)
+            this.isShowingInputImage = true;
+            
+            // 캔버스 렌더링 강제 실행
+            await this.$nextTick();
+            this.render();
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // 캔버스에서 측정선이 포함된 이미지 캡처
+            if (this.$refs.canvas) {
+              beforeImageBase64 = await new Promise((resolve, reject) => {
+                this.$refs.canvas.toBlob((blob) => {
+                  if (blob) {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                  } else {
+                    reject(new Error('Before 이미지 캡처 실패'));
+                  }
+                }, 'image/png');
+              });
+              console.log('Before 이미지 Base64 생성 완료 (원본 + 측정선)');
+            }
+          }
+          
+          // After 이미지 (처리 후 이미지 + 측정선)
+          if (this.outputImageUrl) {
+            console.log('After 이미지 생성 중 (처리 후 이미지 + 측정선)...');
+            
+            // After 모드로 전환 (출력 이미지 표시)
+            this.isShowingInputImage = false;
+            
+            // 캔버스 렌더링 강제 실행
+            await this.$nextTick();
+            this.render();
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // 캔버스에서 측정선이 포함된 이미지 캡처
+            if (this.$refs.canvas) {
+              afterImageBase64 = await new Promise((resolve, reject) => {
+                this.$refs.canvas.toBlob((blob) => {
+                  if (blob) {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                  } else {
+                    reject(new Error('After 이미지 캡처 실패'));
+                  }
+                }, 'image/png');
+              });
+              console.log('After 이미지 Base64 생성 완료 (처리 후 + 측정선)');
+            }
+          }
+          
+          // 원래 상태 복원
+          this.isShowingInputImage = currentIsShowingInputImage;
+          await this.$nextTick();
+          this.render();
+          
+        } catch (imageError) {
+          console.error('이미지 생성 중 오류:', imageError);
+          // 원래 상태 복원
+          this.isShowingInputImage = currentIsShowingInputImage;
+          await this.$nextTick();
+          this.render();
+          throw imageError;
+        }
+
+        // 2. 8000포트 API로 이미지 저장
+        console.log('8000포트 API로 이미지 저장 시작');
+        const imageResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          mode: 'cors',
+          credentials: 'include',
+          body: JSON.stringify({
+            title: selectedTable.table_name,
+            description: `MSA6 측정 결과 - ${selectedTable.table_name}`,
+            before_image: beforeImageBase64,
+            after_image: afterImageBase64,
+            table_name: selectedTable.table_name,
+            lot_wafer: selectedTable.lot_wafer,
+            is_result: true, // MSA6는 results_images에 저장
+            tags: ['msa6', '측정', '결과']
+          })
+        });
+
+        if (!imageResponse.ok) {
+          const errorText = await imageResponse.text();
+          console.error('이미지 저장 API 오류:', errorText);
+          throw new Error(`이미지 저장 실패: ${imageResponse.status}`);
+        }
+
+        const imageResult = await imageResponse.json();
+        console.log('이미지 저장 성공:', imageResult);
+
+        // 3. 측정 데이터 저장 (기존 로직 유지)
+        // 사용자 정보 추출
         let userName = '측정사용자';
         try {
-          // 객체에서 사용자 이름 추출하는 헬퍼 함수
-          const extractUserNameFromObject = (userObject) => {
-            if (!userObject || typeof userObject !== 'object') {
-              return '측정사용자';
-            }
-            
-            // 객체에서 이름 관련 필드 확인
-            const nameFields = ['name', 'userName', 'username', 'loginId', 'id', 'email'];
-            for(const field of nameFields) {
-              if(userObject[field]) {
-                return userObject[field];
-              }
-            }
-            return '측정사용자';
-          };
-          
-          // localStorage에서 사용자 정보 찾기
           const userKeys = ['userName', 'user_name', 'username', 'user', 'loginId', 'login_id', 'id', 'email'];
           
           for(const key of userKeys) {
             const value = localStorage.getItem(key);
             if(value && value !== 'undefined' && value !== 'null') {
               try {
-                // JSON 데이터 파싱 시도
                 const parsed = JSON.parse(value);
-                
-                // 객체인 경우 필드 확인
                 if(typeof parsed === 'object' && parsed !== null) {
-                  userName = extractUserNameFromObject(parsed);
-                  console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
-                  break;
+                  const nameFields = ['name', 'userName', 'username', 'loginId', 'id', 'email'];
+                  for(const field of nameFields) {
+                    if(parsed[field]) {
+                      userName = parsed[field];
+                      break;
+                    }
+                  }
                 } else if(typeof parsed === 'string') {
                   userName = parsed;
-                  console.log(`[saveWithTableName] localStorage[${key}]에서 사용자 이름 찾음: ${userName}`);
-                  break;
                 }
+                break;
               } catch(e) {
-                // JSON 파싱 실패하면 문자열로 처리
                 if(typeof value === 'string') {
                   userName = value;
-                  console.log(`[saveWithTableName] localStorage[${key}] 문자열로 사용자 이름 찾음: ${userName}`);
                   break;
                 }
               }
@@ -3051,230 +2888,64 @@ export default {
           // 이메일에서 사용자 이름만 추출
           if(userName && typeof userName === 'string' && userName.includes('@')) {
             userName = userName.split('@')[0];
-            console.log(`[saveWithTableName] 이메일에서 사용자 이름 추출: ${userName}`);
           }
-          
-          console.log(`[saveWithTableName] 최종 결정된 사용자 이름: ${userName}`);
         } catch (userError) {
-          console.warn('[saveWithTableName] 사용자 정보 추출 중 오류:', userError);
-          // 기본값 사용
+          console.warn('사용자 정보 추출 중 오류:', userError);
         }
-        
-        // 1. 먼저 이미지 저장 (항상 실행)
-        let beforeImageBase64 = '';
-        let afterImageBase64 = '';
-        
-        // 이미지 URL이 존재하는지 확인
-        const hasBeforeImage = !!this.inputImageUrl;
-        const hasAfterImage = !!this.imageUrl;
-        console.log('[saveWithTableName] 이미지 확인 - before:', hasBeforeImage ? '있음' : '없음', 'after:', hasAfterImage ? '있음' : '없음');
-        
-        // Base64로 변환
-        try {
-          console.log('[saveWithTableName] 이미지를 Base64로 변환 시작');
-          if (hasBeforeImage) {
-            beforeImageBase64 = await this.blobToBase64(this.inputImageUrl);
-          }
-          
-          if (hasAfterImage) {
-            afterImageBase64 = await this.blobToBase64(this.imageUrl);
-          }
-          
-          console.log('[saveWithTableName] 이미지 변환 완료:');
-          console.log('  Before 이미지:', beforeImageBase64 ? (beforeImageBase64.substring(0, 30) + '...') : '없음');
-          console.log('  After 이미지:', afterImageBase64 ? (afterImageBase64.substring(0, 30) + '...') : '없음');
-        } catch (conversionError) {
-          console.error('[saveWithTableName] 이미지 변환 중 오류:', conversionError);
-          // 변환 실패해도 계속 진행
-        }
-        
-        // 이미지 저장 API 호출 (이미지가 있는 경우에만)
-        if (beforeImageBase64 || afterImageBase64) {
-          try {
-            // 이미지 저장 요청 데이터 구성
-            const imageRequestData = {
-              title: `${selectedTable.table_name}_${selectedTable.lot_wafer}`,
-              description: `${selectedTable.table_name}에 저장된 ${selectedTable.lot_wafer} 측정 이미지`,
-              before_image: beforeImageBase64 || '',
-              after_image: afterImageBase64 || '',
-              workflow_id: '',
-              tags: ['msa6', '측정'],
-              is_result: true,
-              table_name: selectedTable.table_name,
-              lot_wafer: selectedTable.lot_wafer
-            };
-            
-            console.log('[saveWithTableName] 이미지 저장 API 호출 시작');
-            
-            // 이미지 저장 API 직접 호출 (fetch API 사용)
-            const imageResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-              },
-              body: JSON.stringify(imageRequestData)
-            });
-            
-            if (!imageResponse) {
-              console.error('[saveWithTableName] 이미지 저장 API 응답이 없습니다');
-            } else {
-              const imageResponseText = await imageResponse.text();
-              console.log('[saveWithTableName] 이미지 저장 API 응답:', imageResponse.status, imageResponseText);
-              
-              if (imageResponse.ok) {
-                try {
-                  const imageResult = JSON.parse(imageResponseText);
-                  console.log('[saveWithTableName] 이미지 저장 성공:', imageResult);
-                } catch (e) {
-                  console.error('[saveWithTableName] 이미지 저장 응답 파싱 오류:', e);
-                }
-              } else {
-                console.error('[saveWithTableName] 이미지 저장 실패:', imageResponse.status, imageResponseText);
-              }
-            }
-          } catch (imageError) {
-            console.error('[saveWithTableName] 이미지 저장 API 호출 중 오류:', imageError);
-            // 이미지 저장 실패해도 계속 진행
-          }
-        } else {
-          console.warn('[saveWithTableName] 저장할 이미지가 없습니다. 이미지 저장 건너뜀.');
-        }
-        
-        // 2. 측정 데이터 저장
-        console.log('[saveWithTableName] 측정 데이터 저장 시작');
-        if (!this.measurements) {
-          console.error('[saveWithTableName] 측정 데이터가 없습니다');
-          this.showNotification('저장할 측정 데이터가 없습니다.', 'error');
-          return;
-        }
-        
-        const displayedMeasurements = this.measurements.filter(m => m && m.visible !== false);
-        console.log(`[saveWithTableName] 전체 측정값: ${this.measurements.length}개, 화면 표시값: ${displayedMeasurements.length}개`);
-        
-        if (displayedMeasurements.length === 0) {
-          console.warn('[saveWithTableName] 표시된 측정값이 없습니다');
-          this.showNotification('저장할 측정값이 없습니다.', 'warning');
-          // 그래도 계속 진행
-        }
-        
-        // 측정값 처리
-        const processedMeasurements = displayedMeasurements.map((measurement, idx) => {
-          if (!measurement) {
-            console.warn(`[saveWithTableName] 측정값 #${idx+1}이 null입니다`);
-            return {
-              measurement_id: `unknown_${idx}`,
-              item_id: 0,
-              sub_item_id: 0,
-              value: 0,
-              value_text: '0',
-              label: '',
-              sequence: idx + 1
-            };
-          }
-          
-          // 측정값 변환 (숫자형으로)
-          const originalValue = measurement.value || '0';
-          let value = 0;
-          try {
-            value = parseFloat(originalValue);
-            if (isNaN(value)) {
-              value = 0;
-            }
-          } catch (e) {
-            value = 0;
-          }
-          
-          // 아이템 ID 처리
-          const subItemId = measurement.subItemId || measurement.sequenceId || 0;
-          
-          return {
-            measurement_id: measurement.id || `${measurement.itemId || 'unknown'}_${subItemId}`,
-            item_id: measurement.itemId || 0,
-            sub_item_id: subItemId,
-            value: value,
-            value_text: originalValue,
-            label: measurement.label || '',
-            sequence: idx + 1
-          };
-        });
-        
-        // API 요청 데이터 구성
-        const requestData = {
+
+        const measurementData = {
           table_name: selectedTable.table_name,
-          department: selectedTable.department || null,
+          username: userName,
           lot_wafer: selectedTable.lot_wafer,
-          is_result: selectedTable.is_result || false,
-          measurements: processedMeasurements,
-          image_urls: {
-            before_url: this.inputImageUrl || '',
-            after_url: this.imageUrl || ''
-          },
-          user_name: userName
+          measurements: this.filteredMeasurements.map(m => ({
+            itemId: m.itemId,
+            subItemId: m.subItemId,
+            value: m.value
+          })),
+          before_image_data: beforeImageBase64,
+          after_image_data: afterImageBase64
         };
-        
-        console.log(`[saveWithTableName] 측정 데이터 저장 API 요청 시작: http://localhost:8000/api/msa6/save-with-table-name`);
-        
-        // API 호출
+
+        console.log('🔥🔥🔥 저장할 데이터 확인 🔥🔥🔥');
+        console.log('this.measurements 개수:', this.measurements.length);
+        console.log('this.segmentedMeasurements 개수:', this.segmentedMeasurements.length);
+        console.log('this.filteredMeasurements 개수:', this.filteredMeasurements.length);
+        console.log('현재 모드 (isReversed):', this.isReversed ? '어두운 영역' : '밝은 영역');
+        console.log('실제 저장되는 measurements:', measurementData.measurements);
+        console.log('측정 데이터 저장 요청:', {
+          ...measurementData,
+          before_image_data: beforeImageBase64 ? '있음' : '없음',
+          after_image_data: afterImageBase64 ? '있음' : '없음'
+        });
+
         const response = await fetch('http://localhost:8000/api/msa6/save-with-table-name', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Access-Control-Allow-Origin': '*'
           },
-          body: JSON.stringify(requestData)
+          body: JSON.stringify(measurementData)
         });
-        
-        if (!response) {
-          throw new Error('서버 응답이 없습니다');
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('측정 데이터 저장 오류:', errorText);
+          throw new Error(`측정 데이터 저장 실패: ${response.status}`);
         }
+
+        const result = await response.json();
+        console.log('측정 데이터 저장 성공:', result);
+
+        this.showNotification(`테이블명 "${selectedTable.table_name}"으로 저장되었습니다.`, 'success');
         
-        // 응답 처리
-        const text = await response.text();
-        let apiResult;
-        try {
-          apiResult = JSON.parse(text);
-        } catch (e) {
-          throw new Error(`서버 응답을 파싱할 수 없습니다: ${text}`);
-        }
-        
-        // 결과 처리
-        if (apiResult && (apiResult.success || apiResult.status === 'success')) {
-          // 성공 메시지를 화면에 표시 (에러로 throw하지 않고 알림만 표시)
-          const successMessage = `${processedMeasurements.length}개의 측정 데이터가 성공적으로 '${selectedTable.table_name}' 테이블 이름으로 저장되었습니다.`;
-          console.log(`[saveWithTableName] 저장 성공: ${successMessage}`);
-          this.showNotification(successMessage, 'success');
-          
-          // 이벤트 발생
-          this.$emit('saved', {
-            table_name: selectedTable.table_name,
-            lot_wafer: selectedTable.lot_wafer,
-            record_id: apiResult.record_id || 0
-          });
-          
-          // 성공 결과 반환
-          return apiResult.success ? apiResult : { ...apiResult, success: true };
-        } else {
-          // 오류 메시지 확인
-          if (apiResult && apiResult.error && apiResult.error.includes('permission')) {
-            console.log('[saveWithTableName] 권한 오류:', apiResult.message);
-            this.showNotification(`저장 권한이 없습니다: ${apiResult.message}`, 'error');
-            return { success: false, error: `저장 권한이 없습니다: ${apiResult.message}` };
-          } else {
-            const errorMessage = (apiResult && apiResult.message) || '알 수 없는 오류가 발생했습니다.';
-            console.log('[saveWithTableName] 저장 실패:', errorMessage);
-            this.showNotification(errorMessage, 'error');
-            return { success: false, error: errorMessage };
-          }
-        }
+        // 성공 결과 반환
+        return { success: true, ...result };
+
       } catch (error) {
-        console.log('[saveWithTableName] 오류 발생:', error.message);
-        // 사용자에게 오류 표시
+        console.error('저장 중 오류 발생:', error);
         this.showNotification(`저장 중 오류가 발생했습니다: ${error.message}`, 'error');
-        // 오류를 throw 하지 않고 반환하여 처리 흐름 유지
         return { success: false, error: error.message };
+      } finally {
+        this.isSaving = false;
       }
     },
     
@@ -3282,7 +2953,7 @@ export default {
      * 알림 메시지 표시
      */
     showNotification(message, type = 'info') {
-      console.log(`[알림] ${type.toUpperCase()}: ${message}`);
+      // console.log(`[알림] ${type.toUpperCase()}: ${message}`);
       
       // 기존 타임아웃 정리
       if (this.notification.timeout) {
@@ -3339,21 +3010,21 @@ export default {
     },
     // 스케일바 감지 함수 업데이트
     detectScaleBar(forceShowPopup = false) {
-      console.log('[detectScaleBar] 스케일바 자동 감지 시작, 강제팝업:', forceShowPopup);
+      // console.log('[detectScaleBar] 스케일바 자동 감지 시작, 강제팝업:', forceShowPopup);
       
       // ⚠️ 주의: 이 부분은 스케일바 감지 및 팝업 표시의 핵심 로직입니다. 수정 시 주의하세요! ⚠️
       // 다른 부분과의 충돌을 막기 위해 popupOverride.js와 동기화해야 합니다.
       
       // 팝업이 열려있지 않은 경우 아무 작업도 하지 않음
       if (!this.isVisible) {
-        console.log('[detectScaleBar] 팝업이 열려있지 않아 스케일바 감지를 수행하지 않음');
+        // console.log('[detectScaleBar] 팝업이 열려있지 않아 스케일바 감지를 수행하지 않음');
         return;
       }
       
       // 스케일바 자동 감지 팝업 방지 플래그 확인
       const noScalePopup = sessionStorage.getItem('msa6_no_scale_popup') === 'true';
       if (noScalePopup) {
-        console.log('[detectScaleBar] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
+        // console.log('[detectScaleBar] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
         // 플래그 제거 (일회성)
         sessionStorage.removeItem('msa6_no_scale_popup');
         return;
@@ -3372,10 +3043,10 @@ export default {
       
       // 이미 유효한 수동 스케일바가 설정되어 있는 경우 팝업 표시하지 않음
       if (hasValidManualScaleBar) {
-        console.log('[detectScaleBar] 유효한 수동 스케일바가 이미 설정되어 있어 감지를 수행하지 않음:', 
-          'manualScaleBarSet:', this.manualScaleBarSet,
-          'scaleBarValue:', this.scaleBarValue, 
-          'scaleBarUnit:', this.scaleBarUnit);
+        // console.log('[detectScaleBar] 유효한 수동 스케일바가 이미 설정되어 있어 감지를 수행하지 않음:', 
+          // 'manualScaleBarSet:', this.manualScaleBarSet,
+          // 'scaleBarValue:', this.scaleBarValue, 
+          // 'scaleBarUnit:', this.scaleBarUnit);
         
         // 팝업 플래그도 확실히 false로 설정
         this.showScaleChoicePopup = false;
@@ -3391,7 +3062,7 @@ export default {
       this.scaleBarDetected = false;
       
       // 팝업 표시 - 감지 실패 시
-      console.log('[detectScaleBar] 스케일바 감지 실패, 선택 팝업 표시');
+      // console.log('[detectScaleBar] 스케일바 감지 실패, 선택 팝업 표시');
       
       // 팝업 표시 플래그 설정
       this.showScaleChoicePopup = true;
@@ -3403,18 +3074,18 @@ export default {
     },
     // 스케일바 감지 실패 팝업 표시 메서드 개선
     showScaleDetectionFailurePopup() {
-      console.log('[showScaleDetectionFailurePopup] 스케일바 감지 실패 팝업 표시');
+      // console.log('[showScaleDetectionFailurePopup] 스케일바 감지 실패 팝업 표시');
       
       // 팝업이 열려있지 않으면 표시하지 않음
       if (!this.isVisible) {
-        console.log('[showScaleDetectionFailurePopup] 팝업이 열려있지 않아 스케일바 감지 실패 팝업을 표시하지 않음');
+        // console.log('[showScaleDetectionFailurePopup] 팝업이 열려있지 않아 스케일바 감지 실패 팝업을 표시하지 않음');
         return;
       }
       
       // 스케일바 자동 감지 팝업 방지 플래그 확인
       const noScalePopup = sessionStorage.getItem('msa6_no_scale_popup') === 'true';
       if (noScalePopup) {
-        console.log('[showScaleDetectionFailurePopup] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
+        // console.log('[showScaleDetectionFailurePopup] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
         // 플래그 제거 (일회성)
         sessionStorage.removeItem('msa6_no_scale_popup');
         return;
@@ -3425,10 +3096,10 @@ export default {
       
       // 유효한 수동 스케일바가 이미 설정되어 있는 경우 팝업 표시하지 않음
       if (hasValidManualScaleBar) {
-        console.log('[showScaleDetectionFailurePopup] 유효한 수동 스케일바가 이미 설정되어 있어 팝업을 표시하지 않음:', 
-          'manualScaleBarSet:', this.manualScaleBarSet,
-          'scaleBarValue:', this.scaleBarValue,
-          'scaleBarUnit:', this.scaleBarUnit);
+        // console.log('[showScaleDetectionFailurePopup] 유효한 수동 스케일바가 이미 설정되어 있어 팝업을 표시하지 않음:', 
+          // 'manualScaleBarSet:', this.manualScaleBarSet,
+          // 'scaleBarValue:', this.scaleBarValue,
+          // 'scaleBarUnit:', this.scaleBarUnit);
         
         // 팝업 플래그도 확실히 false로 설정
         this.showScaleChoicePopup = false;
@@ -3437,7 +3108,7 @@ export default {
       
       // 팝업 표시 전에 방식을 scaleBar로 변경 (선택 팝업이 관련성을 가지도록)
       if (this.scaleMethod !== 'scaleBar') {
-        console.log('[showScaleDetectionFailurePopup] 현재 방식이 scaleBar가 아님, scaleBar로 변경:', this.scaleMethod);
+        // console.log('[showScaleDetectionFailurePopup] 현재 방식이 scaleBar가 아님, scaleBar로 변경:', this.scaleMethod);
       this.scaleMethod = 'scaleBar';
       }
       
@@ -3462,17 +3133,17 @@ export default {
     // 스케일바 설정 저장 함수 개선
     saveScaleBarSettings() {
       try {
-        console.log('[saveScaleBarSettings] 스케일바 설정 저장 시작');
+        // console.log('[saveScaleBarSettings] 스케일바 설정 저장 시작');
         
         // 현재 상태 로깅
-        console.log('[saveScaleBarSettings] 현재 설정 상태:', {
-          scaleMethod: this.scaleMethod,
-          scaleBarValue: this.scaleBarValue,
-          scaleBarUnit: this.scaleBarUnit,
-          manualScaleBarSet: this.manualScaleBarSet,
-          scaleBarDetected: this.scaleBarDetected,
-          magnification: this.magnification
-        });
+        // console.log('[saveScaleBarSettings] 현재 설정 상태:', {
+        //   scaleMethod: this.scaleMethod,
+        //   scaleBarValue: this.scaleBarValue,
+        //   scaleBarUnit: this.scaleBarUnit,
+        //   manualScaleBarSet: this.manualScaleBarSet,
+        //   scaleBarDetected: this.scaleBarDetected,
+        //   magnification: this.magnification
+        // });
         
         // 디버깅: manualScaleBarSet이 false인 경우 호출 스택 로깅
         if (!this.manualScaleBarSet && this.scaleMethod === 'scaleBar' && this.scaleBarDetected) {
@@ -3490,7 +3161,7 @@ export default {
           savedAt: new Date().toISOString()
         };
         
-        console.log('[saveScaleBarSettings] 저장할 데이터:', settings);
+        // console.log('[saveScaleBarSettings] 저장할 데이터:', settings);
         
         // 이미지 키 생성 (URL에서 파일명 추출)
         let imageKey = 'default';
@@ -3500,15 +3171,15 @@ export default {
           imageKey = fileName.split('.')[0]; // 확장자 제거
         }
         
-        console.log(`[saveScaleBarSettings] 이미지 키: ${imageKey}`);
+        // console.log(`[saveScaleBarSettings] 이미지 키: ${imageKey}`);
         
         // 1. 현재 이미지에 대한 설정 저장
         localStorage.setItem(`msa6_scalebar_${imageKey}`, JSON.stringify(settings));
-        console.log(`[saveScaleBarSettings] 현재 이미지 설정 저장 완료 -> localStorage[msa6_scalebar_${imageKey}]`);
+        // console.log(`[saveScaleBarSettings] 현재 이미지 설정 저장 완료 -> localStorage[msa6_scalebar_${imageKey}]`);
         
         // 2. 마지막 사용 이미지 키 저장 (다른 이미지에서 재사용하기 위함)
         localStorage.setItem('msa6_last_image_key', imageKey);
-        console.log(`[saveScaleBarSettings] 마지막 이미지 키 저장 완료 -> localStorage[msa6_last_image_key] = ${imageKey}`);
+        // console.log(`[saveScaleBarSettings] 마지막 이미지 키 저장 완료 -> localStorage[msa6_last_image_key] = ${imageKey}`);
         
         // 3. 전역 설정에도 마지막 사용 설정 저장
         const globalSettings = {
@@ -3521,21 +3192,21 @@ export default {
         };
         
         localStorage.setItem('msa6_scalebar_global', JSON.stringify(globalSettings));
-        console.log(`[saveScaleBarSettings] 전역 설정 저장 완료 -> localStorage[msa6_scalebar_global]`);
+        // console.log(`[saveScaleBarSettings] 전역 설정 저장 완료 -> localStorage[msa6_scalebar_global]`);
         
         // 4. 저장된 데이터 검증
         const savedImageSettings = JSON.parse(localStorage.getItem(`msa6_scalebar_${imageKey}`));
         const savedGlobalSettings = JSON.parse(localStorage.getItem('msa6_scalebar_global'));
         
-        console.log('[saveScaleBarSettings] 저장된 이미지별 설정:', savedImageSettings);
-        console.log('[saveScaleBarSettings] 저장된 전역 설정:', savedGlobalSettings);
+        // console.log('[saveScaleBarSettings] 저장된 이미지별 설정:', savedImageSettings);
+        // console.log('[saveScaleBarSettings] 저장된 전역 설정:', savedGlobalSettings);
         
         // 저장된 manualScaleBarSet 값 확인
         if (savedImageSettings.manualScaleBarSet !== this.manualScaleBarSet) {
           console.error(`[saveScaleBarSettings] 오류: 저장된 manualScaleBarSet 값(${savedImageSettings.manualScaleBarSet})이 현재 값(${this.manualScaleBarSet})과 다릅니다.`);
         }
         
-        console.log('[saveScaleBarSettings] 스케일바 설정 저장 완료');
+        // console.log('[saveScaleBarSettings] 스케일바 설정 저장 완료');
         return true;
       } catch (e) {
         console.error('[saveScaleBarSettings] 저장 오류:', e);
@@ -3546,7 +3217,7 @@ export default {
     // 스케일바 설정 복원 함수 개선
     restoreScaleBarSettings() {
         try {
-            console.log('[restoreScaleBarSettings] 스케일바 설정 복원 시작');
+            // console.log('[restoreScaleBarSettings] 스케일바 설정 복원 시작');
             
             // 현재 이미지 키 생성
             let currentImageKey = 'default';
@@ -3559,11 +3230,11 @@ export default {
             // 마지막으로 사용한 이미지 키 가져오기
             const lastImageKey = localStorage.getItem('msa6_last_image_key');
             
-            console.log(`[restoreScaleBarSettings] 현재 이미지 키: ${currentImageKey}`);
-            console.log(`[restoreScaleBarSettings] 마지막 이미지 키: ${lastImageKey || '없음'}`);
+            // console.log(`[restoreScaleBarSettings] 현재 이미지 키: ${currentImageKey}`);
+            // console.log(`[restoreScaleBarSettings] 마지막 이미지 키: ${lastImageKey || '없음'}`);
             
             // 복원 시도할 스토리지 키 목록
-            console.log('[restoreScaleBarSettings] 복원 시도 순서: 1) 현재 이미지 설정 -> 2) 마지막 이미지 설정 -> 3) 전역 설정');
+            // console.log('[restoreScaleBarSettings] 복원 시도 순서: 1) 현재 이미지 설정 -> 2) 마지막 이미지 설정 -> 3) 전역 설정');
             
             // 저장된 설정이 있는지 확인
             let savedSettings = null;
@@ -3574,7 +3245,7 @@ export default {
             
             if (savedSettings) {
                 const settings = JSON.parse(savedSettings);
-                console.log(`[restoreScaleBarSettings] 1) 현재 이미지 설정 찾음 -> localStorage[${currentImageStorageKey}]`, settings);
+                // console.log(`[restoreScaleBarSettings] 1) 현재 이미지 설정 찾음 -> localStorage[${currentImageStorageKey}]`, settings);
                 
                 // 저장된 측정 방식, 값, 단위 복원
                 this.scaleMethod = settings.scaleMethod || 'scaleBar';
@@ -3587,7 +3258,7 @@ export default {
                 
                 // 중요: 저장된 manualScaleBarSet 값을 그대로 복원
                 this.manualScaleBarSet = !!settings.manualScaleBarSet;
-                console.log(`[restoreScaleBarSettings] 저장된 manualScaleBarSet 값 복원: ${this.manualScaleBarSet}`);
+                // console.log(`[restoreScaleBarSettings] 저장된 manualScaleBarSet 값 복원: ${this.manualScaleBarSet}`);
                 
                 // 배율 설정 복원
                 if (settings.magnification) this.magnification = settings.magnification;
@@ -3595,19 +3266,19 @@ export default {
                 // manualScaleBarSet이 true인 경우 scaleBarDetected도 true로 설정
                 this.scaleBarDetected = this.manualScaleBarSet;
                 
-                console.log(`[restoreScaleBarSettings] 현재 이미지 설정 복원 완료:`, {
-                    scaleMethod: this.scaleMethod,
-                    scaleBarValue: this.scaleBarValue,
-                    scaleBarUnit: this.scaleBarUnit,
-                    manualScaleBarSet: this.manualScaleBarSet,
-                    scaleBarDetected: this.scaleBarDetected,
-                    magnification: this.magnification
-                });
+                // console.log(`[restoreScaleBarSettings] 현재 이미지 설정 복원 완료:`, {
+                //     scaleMethod: this.scaleMethod,
+                //     scaleBarValue: this.scaleBarValue,
+                //     scaleBarUnit: this.scaleBarUnit,
+                //     manualScaleBarSet: this.manualScaleBarSet,
+                //     scaleBarDetected: this.scaleBarDetected,
+                //     magnification: this.magnification
+                // });
                 
                 
                 return true;
       } else {
-                console.log(`[restoreScaleBarSettings] 1) 현재 이미지 설정 없음 -> localStorage[${currentImageStorageKey}]`);
+                // console.log(`[restoreScaleBarSettings] 1) 현재 이미지 설정 없음 -> localStorage[${currentImageStorageKey}]`);
             }
             
             // 2. 마지막 이미지 설정 확인 (현재 이미지와 다른 경우)
@@ -3617,7 +3288,7 @@ export default {
                 
                 if (savedSettings) {
                     const settings = JSON.parse(savedSettings);
-                    console.log(`[restoreScaleBarSettings] 2) 마지막 이미지 설정 찾음 -> localStorage[${lastImageStorageKey}]`, settings);
+                    // console.log(`[restoreScaleBarSettings] 2) 마지막 이미지 설정 찾음 -> localStorage[${lastImageStorageKey}]`, settings);
                     
                     // 저장된 측정 방식, 값, 단위 복원
                     this.scaleMethod = settings.scaleMethod || 'scaleBar';
@@ -3626,7 +3297,7 @@ export default {
                     
                     // 중요: 저장된 manualScaleBarSet 값을 그대로 복원
                     this.manualScaleBarSet = !!settings.manualScaleBarSet;
-                    console.log(`[restoreScaleBarSettings] 마지막 이미지의 manualScaleBarSet 값 복원: ${this.manualScaleBarSet}`);
+                    // console.log(`[restoreScaleBarSettings] 마지막 이미지의 manualScaleBarSet 값 복원: ${this.manualScaleBarSet}`);
                     
                     // 배율 설정 복원
                     if (settings.magnification) this.magnification = settings.magnification;
@@ -3634,31 +3305,31 @@ export default {
                     // manualScaleBarSet이 true인 경우 scaleBarDetected도 true로 설정
                     this.scaleBarDetected = this.manualScaleBarSet;
                     
-                    console.log(`[restoreScaleBarSettings] 마지막 이미지 설정 복원 완료:`, {
-                        scaleMethod: this.scaleMethod,
-                        scaleBarValue: this.scaleBarValue,
-                        scaleBarUnit: this.scaleBarUnit,
-                        manualScaleBarSet: this.manualScaleBarSet,
-                        scaleBarDetected: this.scaleBarDetected,
-                        magnification: this.magnification
-                    });
+                    // console.log(`[restoreScaleBarSettings] 마지막 이미지 설정 복원 완료:`, {
+                    //     scaleMethod: this.scaleMethod,
+                    //     scaleBarValue: this.scaleBarValue,
+                    //     scaleBarUnit: this.scaleBarUnit,
+                    //     manualScaleBarSet: this.manualScaleBarSet,
+                    //     scaleBarDetected: this.scaleBarDetected,
+                    //     magnification: this.magnification
+                    // });
                     
                     // 현재 이미지 키를 사용하여 설정 저장 (다음에 열 때 이 설정 사용)
                     this.saveScaleBarSettings();
                     
                     return true;
                 } else {
-                    console.log(`[restoreScaleBarSettings] 2) 마지막 이미지 설정 없음 -> localStorage[${lastImageStorageKey}]`);
+                    // console.log(`[restoreScaleBarSettings] 2) 마지막 이미지 설정 없음 -> localStorage[${lastImageStorageKey}]`);
                 }
             } else {
-                console.log(`[restoreScaleBarSettings] 2) 마지막 이미지 키가 없거나 현재 이미지와 동일하여 확인 건너뜀`);
+                // console.log(`[restoreScaleBarSettings] 2) 마지막 이미지 키가 없거나 현재 이미지와 동일하여 확인 건너뜀`);
             }
             
             // 3. 전역 설정 확인
             const globalSettings = localStorage.getItem('msa6_scalebar_global');
             if (globalSettings) {
                 const settings = JSON.parse(globalSettings);
-                console.log('[restoreScaleBarSettings] 3) 전역 설정 찾음 -> localStorage[msa6_scalebar_global]', settings);
+                // console.log('[restoreScaleBarSettings] 3) 전역 설정 찾음 -> localStorage[msa6_scalebar_global]', settings);
                 
                 // 저장된 측정 방식, 값, 단위 복원
                 this.scaleMethod = settings.lastScaleMethod || 'scaleBar';
@@ -3667,7 +3338,7 @@ export default {
                 
                 // 중요: 전역 설정에서도 manualScaleBarSet 값 복원
                 this.manualScaleBarSet = !!settings.lastManualScaleBarSet;
-                console.log(`[restoreScaleBarSettings] 전역 설정의 manualScaleBarSet 값 복원: ${this.manualScaleBarSet}`);
+                // console.log(`[restoreScaleBarSettings] 전역 설정의 manualScaleBarSet 값 복원: ${this.manualScaleBarSet}`);
                 
                 // 배율 설정 복원
                 if (settings.lastMagnification) this.magnification = settings.lastMagnification;
@@ -3675,19 +3346,19 @@ export default {
                 // manualScaleBarSet이 true인 경우 scaleBarDetected도 true로 설정
                 this.scaleBarDetected = this.manualScaleBarSet;
                 
-                console.log(`[restoreScaleBarSettings] 전역 설정 복원 완료:`, {
-                    scaleMethod: this.scaleMethod,
-                    scaleBarValue: this.scaleBarValue,
-                    scaleBarUnit: this.scaleBarUnit,
-                    manualScaleBarSet: this.manualScaleBarSet,
-                    scaleBarDetected: this.scaleBarDetected,
-                    magnification: this.magnification
-                });
+                // console.log(`[restoreScaleBarSettings] 전역 설정 복원 완료:`, {
+                //     scaleMethod: this.scaleMethod,
+                //     scaleBarValue: this.scaleBarValue,
+                //     scaleBarUnit: this.scaleBarUnit,
+                //     manualScaleBarSet: this.manualScaleBarSet,
+                //     scaleBarDetected: this.scaleBarDetected,
+                //     magnification: this.magnification
+                // });
                 
                 
                 return true;
             } else {
-                console.log(`[restoreScaleBarSettings] 3) 전역 설정 없음 -> localStorage[msa6_scalebar_global]`);
+                // console.log(`[restoreScaleBarSettings] 3) 전역 설정 없음 -> localStorage[msa6_scalebar_global]`);
             }
             
             // 설정이 없는 경우 기본값 설정
@@ -3697,13 +3368,13 @@ export default {
             this.manualScaleBarSet = false;
         this.scaleBarDetected = false;
             
-            console.log('[restoreScaleBarSettings] 저장된 설정 없음, 기본값 설정:', {
-                scaleMethod: this.scaleMethod,
-                scaleBarValue: this.scaleBarValue,
-                scaleBarUnit: this.scaleBarUnit,
-                manualScaleBarSet: this.manualScaleBarSet,
-                scaleBarDetected: this.scaleBarDetected
-            });
+            // console.log('[restoreScaleBarSettings] 저장된 설정 없음, 기본값 설정:', {
+            //     scaleMethod: this.scaleMethod,
+            //     scaleBarValue: this.scaleBarValue,
+            //     scaleBarUnit: this.scaleBarUnit,
+            //     manualScaleBarSet: this.manualScaleBarSet,
+            //     scaleBarDetected: this.scaleBarDetected
+            // });
             return false;
         } catch (e) {
             console.error('[restoreScaleBarSettings] 복원 오류:', e);
@@ -3715,14 +3386,14 @@ export default {
         this.manualScaleBarSet = false;
             this.scaleBarDetected = false;
             
-            console.log('[restoreScaleBarSettings] 오류 발생으로 기본값 설정');
+            // console.log('[restoreScaleBarSettings] 오류 발생으로 기본값 설정');
             return false;
       }
     },
     
     // 스케일 방식 선택 메서드 수정
     selectScaleMethod(method) {
-      console.log(`[selectScaleMethod] 사용자가 선택한 측정 방식: ${method}, 이전 방식: ${this.scaleMethod}`);
+      // console.log(`[selectScaleMethod] 사용자가 선택한 측정 방식: ${method}, 이전 방식: ${this.scaleMethod}`);
       
       // 선택 팝업 닫기 - showScaleChoicePopup 플래그 설정
       this.showScaleChoicePopup = false;
@@ -3732,7 +3403,7 @@ export default {
         const popupElement = document.querySelector('.scale-choice-popup');
         if (popupElement) {
           popupElement.style.display = 'none';
-          console.log('[selectScaleMethod] 팝업 요소 직접 숨김 처리');
+          // console.log('[selectScaleMethod] 팝업 요소 직접 숨김 처리');
         }
       });
       
@@ -3775,7 +3446,7 @@ export default {
     
     // 스케일바 값 입력 다이얼로그 핸들링 수정
     handleScaleBarValueInput() {
-        console.log('[handleScaleBarValueInput] 스케일바 값 입력 처리');
+        // console.log('[handleScaleBarValueInput] 스케일바 값 입력 처리');
         
         const numValue = parseFloat(this.tempScaleBarValue);
         if (isNaN(numValue) || numValue <= 0) {
@@ -3783,7 +3454,7 @@ export default {
             return;
         }
         
-        console.log(`[handleScaleBarValueInput] 입력값: ${numValue} ${this.tempScaleBarUnit}`);
+        // console.log(`[handleScaleBarValueInput] 입력값: ${numValue} ${this.tempScaleBarUnit}`);
         
         // 스케일바 값 설정
         this.scaleBarValue = numValue;
@@ -3793,31 +3464,31 @@ export default {
         // 수동 스케일바 설정 플래그 업데이트 - 사용자가 직접 그린 경우에만 true로 설정
         if (this.manualScaleBar) {
             this.manualScaleBarSet = true;
-            console.log(`[handleScaleBarValueInput] 사용자가 직접 그린 스케일바에 대해 manualScaleBarSet 플래그를 true로 설정`);
+            // console.log(`[handleScaleBarValueInput] 사용자가 직접 그린 스케일바에 대해 manualScaleBarSet 플래그를 true로 설정`);
             
             // 스케일바 감지 상태도 true로 설정
             this.scaleBarDetected = true;
         } else {
-            console.log(`[handleScaleBarValueInput] 사용자가 직접 그린 스케일바가 없어 manualScaleBarSet 플래그를 변경하지 않음`);
+            // console.log(`[handleScaleBarValueInput] 사용자가 직접 그린 스케일바가 없어 manualScaleBarSet 플래그를 변경하지 않음`);
         }
         
         // 현재 상태 확인 로깅
-        console.log(`[handleScaleBarValueInput] 저장 전 상태 확인:`, {
-          scaleMethod: this.scaleMethod,
-          scaleBarValue: this.scaleBarValue,
-          scaleBarUnit: this.scaleBarUnit,
-            manualScaleBarSet: this.manualScaleBarSet,
-            scaleBarDetected: this.scaleBarDetected
-        });
+        // console.log(`[handleScaleBarValueInput] 저장 전 상태 확인:`, {
+        //   scaleMethod: this.scaleMethod,
+        //   scaleBarValue: this.scaleBarValue,
+        //   scaleBarUnit: this.scaleBarUnit,
+        //     manualScaleBarSet: this.manualScaleBarSet,
+        //     scaleBarDetected: this.scaleBarDetected
+        // });
         
         // 설정 저장
-        console.log(`[handleScaleBarValueInput] saveScaleBarSettings 호출하여 설정 저장`);
+        // console.log(`[handleScaleBarValueInput] saveScaleBarSettings 호출하여 설정 저장`);
         this.saveScaleBarSettings();
         
         // 저장 후 상태 확인 로깅
-        console.log(`[handleScaleBarValueInput] 설정 저장 후 manualScaleBarSet: ${this.manualScaleBarSet}`);
+        // console.log(`[handleScaleBarValueInput] 설정 저장 후 manualScaleBarSet: ${this.manualScaleBarSet}`);
         
-        console.log('[handleScaleBarValueInput] 스케일바 값 설정 완료:', this.scaleBarValue, this.scaleBarUnit);
+        // console.log('[handleScaleBarValueInput] 스케일바 값 설정 완료:', this.scaleBarValue, this.scaleBarUnit);
         this.showNotification(`스케일바 값이 ${this.scaleBarValue} ${this.scaleBarUnit}로 설정되었습니다.`, 'success');
         
         // 측정 모드로 전환 (중요: scaleMethod는 'scaleBar'로 유지하면서 measurementMode만 'line'으로 변경)
@@ -3827,16 +3498,16 @@ export default {
         // 추가 알림 표시 - 선 측정 모드 전환 안내
         this.showNotification('선 측정 모드로 자동 전환되었습니다.', 'info');
         
-        console.log('[handleScaleBarValueInput] 선 측정 모드로 자동 전환:', 
-            'scaleMethod:', this.scaleMethod,
-            'measurementMode:', this.measurementMode);
+        // console.log('[handleScaleBarValueInput] 선 측정 모드로 자동 전환:', 
+            // 'scaleMethod:', this.scaleMethod,
+            // 'measurementMode:', this.measurementMode);
         
         // 캔버스 다시 그리기
         this.render();
     },
     // 스케일바 값 입력 다이얼로그 표시 메소드 추가
     showScaleBarValueDialog() {
-        console.log('[showScaleBarValueDialog] 스케일바 값 입력 다이얼로그 표시');
+        // console.log('[showScaleBarValueDialog] 스케일바 값 입력 다이얼로그 표시');
         
         // 임시 입력값 초기화
         this.tempScaleBarValue = this.scaleBarValue || 500;
@@ -3931,7 +3602,7 @@ export default {
       }
     },
     handleMSA5ImageProcessed(event) {
-      console.log('[handleMSA5ImageProcessed] MSA5 이미지 처리 완료 이벤트 수신', event.type);
+      // console.log('[handleMSA5ImageProcessed] MSA5 이미지 처리 완료 이벤트 수신', event.type);
       
       try {
         // 이벤트 데이터 추출
@@ -3946,7 +3617,7 @@ export default {
         // 중요: MSA5 프로세스 시작 시 manualScaleBarSet 플래그 초기화
         // 이를 통해 스케일바 자동 감지가 다시 가능하도록 함
         if (this.manualScaleBarSet) {
-          console.log('[handleMSA5ImageProcessed] MSA5 프로세스 시작 감지됨, manualScaleBarSet 초기화 (true -> false)');
+          // console.log('[handleMSA5ImageProcessed] MSA5 프로세스 시작 감지됨, manualScaleBarSet 초기화 (true -> false)');
           this.manualScaleBarSet = false;
           this.scaleBarDetected = false;
           
@@ -3958,7 +3629,7 @@ export default {
         }
       
         // 측정 결과 초기화 - Process Start 버튼 누를 때 측정 결과도 함께 초기화
-        console.log('[handleMSA5ImageProcessed] 측정 결과 초기화');
+        // console.log('[handleMSA5ImageProcessed] 측정 결과 초기화');
         this.measurements = [];
         this.segmentedMeasurements = [];
         this.defectMeasurements = [];
@@ -3979,7 +3650,7 @@ export default {
         this.darkSubIdCounter = 1;
         // 이력 초기화
         this.undoHistory = [];
-        this.redoHistory = [];
+      this.redoHistory = [];
         
         // 테이블 데이터 초기화를 위한 이벤트 발생
         this.$nextTick(() => {
@@ -3988,7 +3659,7 @@ export default {
           
           // 캔버스 초기화 (다음 이미지 로드 시 자동으로 다시 그려짐)
           if (this.ctx) {
-            console.log('[handleMSA5ImageProcessed] 캔버스 초기화');
+            // console.log('[handleMSA5ImageProcessed] 캔버스 초기화');
             this.render();
           }
         });
@@ -3997,7 +3668,7 @@ export default {
         const noPopup = data.noPopup || sessionStorage.getItem('msa6_no_auto_popup') === 'true';
         
         if (noPopup) {
-          console.log('[handleMSA5ImageProcessed] 자동 팝업 열림 방지 플래그가 설정되어 있어 팝업을 열지 않습니다');
+          // console.log('[handleMSA5ImageProcessed] 자동 팝업 열림 방지 플래그가 설정되어 있어 팝업을 열지 않습니다');
           // 이미지 URL만 저장하고 팝업은 열지 않음
           this.outputImageUrl = data.imageUrl;
           
@@ -4011,7 +3682,7 @@ export default {
         
         // 이미지 형식 확인
         let imageFormat = data.imageFormat || 'png'; // 이벤트에서 형식 정보 가져오기, 없으면 기본값 png
-        console.log(`[handleMSA5ImageProcessed] 이미지 형식: ${imageFormat}`);
+        // console.log(`[handleMSA5ImageProcessed] 이미지 형식: ${imageFormat}`);
         
         // 세션 스토리지에 이미지 형식 저장
         sessionStorage.setItem('msa5_end_image_format', imageFormat);
@@ -4020,7 +3691,7 @@ export default {
         // 중요: 스케일바 자동 감지 팝업 방지 플래그 설정
         // MSA5 프로세스 시작 시에는 자동으로 스케일바 감지 팝업이 표시되지 않도록 함
         sessionStorage.setItem('msa6_no_scale_popup', 'true');
-        console.log('[handleMSA5ImageProcessed] 스케일바 자동 감지 팝업 방지 플래그 설정');
+        // console.log('[handleMSA5ImageProcessed] 스케일바 자동 감지 팝업 방지 플래그 설정');
         
         // 팝업 열기
         this.openPopup(imageUrl);
@@ -4031,7 +3702,7 @@ export default {
           
           // 토글 이미지가 가능한지 확인
           if (this.internalInputImageUrl && this.outputImageUrl) {
-            console.log('[handleMSA5ImageProcessed] 시작/종료 이미지가 모두 있어 토글 가능');
+            // console.log('[handleMSA5ImageProcessed] 시작/종료 이미지가 모두 있어 토글 가능');
             
             // 이미지 형식 정보 표시
             this.showNotification(`이미지가 로드되었습니다. 형식: ${imageFormat}`, 'info');
@@ -4045,6 +3716,9 @@ export default {
     // 이미지 다운로드 함수 추가
     downloadResultImage() {
       try {
+        // console.log('[downloadResultImage] 측정 결과 포함 이미지 다운로드 시작');
+        
+        // 현재 표시된 이미지 URL 가져오기
         // 현재 표시된 이미지 URL 가져오기
         const imageUrl = this.isShowingInputImage ? this.internalInputImageUrl : this.outputImageUrl;
         
@@ -4055,29 +3729,45 @@ export default {
         
         // 이미지 형식 확인
         let imageFormat = sessionStorage.getItem('msa5_end_image_format') || 'png';
-        console.log(`[downloadResultImage] 이미지 형식: ${imageFormat}`);
+        // console.log(`[downloadResultImage] 이미지 형식: ${imageFormat}`);
         
         // 파일명 생성
         const timestamp = new Date().toISOString().replace(/[-:.]/g, '').substring(0, 14);
         const fileName = `image_result_${timestamp}.${imageFormat}`;
         
-        // 다운로드 링크 생성
-        const link = document.createElement('a');
-        link.href = imageUrl;
-        link.download = fileName;
-        link.style.display = 'none';
+        // 캔버스를 blob으로 변환하여 다운로드
+        const canvas = this.$refs.canvas;
+        if (!canvas) {
+          this.showNotification('캔버스를 찾을 수 없습니다.', 'error');
+          return;
+        }
         
-        // 링크를 DOM에 추가하고 클릭
-        document.body.appendChild(link);
-        link.click();
-        
-        // 링크 제거
-        setTimeout(() => {
-          document.body.removeChild(link);
-        }, 100);
-        
-        this.showNotification(`이미지가 ${fileName} 파일로 다운로드되었습니다.`, 'success');
-        console.log(`[downloadResultImage] 이미지 다운로드 완료: ${fileName}`);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            this.showNotification('이미지 생성에 실패했습니다.', 'error');
+            return;
+          }
+          
+          // 다운로드 링크 생성
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = fileName;
+          link.style.display = 'none';
+          
+          // 링크를 DOM에 추가하고 클릭
+          document.body.appendChild(link);
+          link.click();
+          
+          // 링크 제거 및 URL 해제
+          setTimeout(() => {
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+          }, 100);
+          
+          this.showNotification(`측정 결과가 포함된 이미지가 ${fileName} 파일로 다운로드되었습니다.`, 'success');
+          // console.log(`[downloadResultImage] 이미지 다운로드 완료: ${fileName}`);
+        }, `image/${imageFormat}`, 0.95);
       } catch (error) {
         console.error('[downloadResultImage] 이미지 다운로드 중 오류:', error);
         this.showNotification('이미지 다운로드 중 오류가 발생했습니다.', 'error');
@@ -4085,7 +3775,7 @@ export default {
     },
     // 이미지 팝업을 열기 위한 메소드 수정
     openPopup(imageUrl) {
-      console.log('[openPopup] 함수 호출됨, 이미지 URL:', imageUrl);
+      // console.log('[openPopup] 함수 호출됨, 이미지 URL:', imageUrl);
       
       // Use the local variable instead of the prop directly
       this.isVisible = true;
@@ -4096,7 +3786,7 @@ export default {
       // 세션 스토리지에서 팝업 자동 표시 방지 플래그 확인 및 초기화
       const noAutoPopup = sessionStorage.getItem('msa6_no_auto_popup') === 'true';
       if (noAutoPopup) {
-        console.log('[openPopup] 자동 팝업 방지 플래그가 설정되어 있음, 초기화함');
+        // console.log('[openPopup] 자동 팝업 방지 플래그가 설정되어 있음, 초기화함');
         sessionStorage.removeItem('msa6_no_auto_popup');
       }
       
@@ -4111,14 +3801,14 @@ export default {
       
       // 팝업 강제 표시 - 직접 DOM 요소 찾아서 표시
       this.$nextTick(() => {
-        console.log('[openPopup] $nextTick 실행');
+        // console.log('[openPopup] $nextTick 실행');
         
         // 팝업 요소들 직접 찾아서 표시
         const measurementPopup = document.querySelector('.image-measurement-popup');
         if (measurementPopup) {
           measurementPopup.style.display = 'flex';
           measurementPopup.style.visibility = 'visible';
-          console.log('[openPopup] 측정 팝업 요소 표시 설정 완료');
+          // console.log('[openPopup] 측정 팝업 요소 표시 설정 완료');
         } else {
           console.warn('[openPopup] 측정 팝업 요소를 찾을 수 없음');
         }
@@ -4128,7 +3818,7 @@ export default {
         teleportElements.forEach(element => {
           element.style.display = 'block';
           element.style.visibility = 'visible';
-          console.log('[openPopup] Teleport 컨테이너 표시 처리');
+          // console.log('[openPopup] Teleport 컨테이너 표시 처리');
         });
         
         // 팝업 열림 이벤트 발생 (다른 컴포넌트에 알림)
@@ -4147,14 +3837,14 @@ export default {
       let endImage = sessionStorage.getItem(endImageKey);
       let imageFormat = sessionStorage.getItem(formatKey) || 'png';
       
-      console.log('[fetchMSA5Images] 세션 스토리지에서 이미지 확인:', 
-        '시작=', startImage ? startImage.substring(0, 20) + '...' : '없음', 
-        '종료=', endImage ? endImage.substring(0, 20) + '...' : '없음',
-        '형식=', imageFormat);
+      // console.log('[fetchMSA5Images] 세션 스토리지에서 이미지 확인:', 
+        // '시작=', startImage ? startImage.substring(0, 20) + '...' : '없음', 
+        // '종료=', endImage ? endImage.substring(0, 20) + '...' : '없음',
+        // '형식=', imageFormat);
       
       // 세션 스토리지에서 이미지가 없는 경우 로컬 스토리지 확인
       if (!startImage) {
-        console.log('[fetchMSA5Images] 세션 스토리지에 시작 이미지 없음, 로컬 스토리지 확인');
+        // console.log('[fetchMSA5Images] 세션 스토리지에 시작 이미지 없음, 로컬 스토리지 확인');
         
         // MSA5 컴포넌트의 processedImages['start'] 값을 찾아야 함
         // 로컬 스토리지에서 워크플로우 데이터를 찾아 시작 이미지 추출
@@ -4168,7 +3858,7 @@ export default {
               const latestWorkflow = workflows[workflows.length - 1];
               if (latestWorkflow.inputImage) {
                 startImage = latestWorkflow.inputImage;
-                console.log('[fetchMSA5Images] 로컬 스토리지에서 시작 이미지 찾음');
+                // console.log('[fetchMSA5Images] 로컬 스토리지에서 시작 이미지 찾음');
               }
             }
           } catch (e) {
@@ -4186,16 +3876,16 @@ export default {
       this.internalInputImageUrl = startImage || this.inputImageUrl;
       this.outputImageUrl = endImage || this.imageUrl;
       
-      console.log('[fetchMSA5Images] 이미지 URL 설정 - 입력:', 
-        this.internalInputImageUrl ? this.internalInputImageUrl.substring(0, 20) + '...' : '없음', 
-        '출력:', this.outputImageUrl ? this.outputImageUrl.substring(0, 20) + '...' : '없음',
-        '형식:', imageFormat);
+      // console.log('[fetchMSA5Images] 이미지 URL 설정 - 입력:', 
+        // this.internalInputImageUrl ? this.internalInputImageUrl.substring(0, 20) + '...' : '없음', 
+        // '출력:', this.outputImageUrl ? this.outputImageUrl.substring(0, 20) + '...' : '없음',
+        // '형식:', imageFormat);
       
       // 전환 버튼 표시 여부 결정
       if (this.internalInputImageUrl && this.outputImageUrl) {
-        console.log('[fetchMSA5Images] 전환 버튼 표시 가능');
+        // console.log('[fetchMSA5Images] 전환 버튼 표시 가능');
       } else {
-        console.log('[fetchMSA5Images] 전환 버튼 표시 불가 - 이미지 부족');
+        // console.log('[fetchMSA5Images] 전환 버튼 표시 불가 - 이미지 부족');
       }
     },
     // 수동 스케일바 설정이 유효한지 검증하는 도우미 함수
@@ -4243,7 +3933,7 @@ export default {
     toggleScaleBarDrawing() {
       this.isDrawingScaleBar = !this.isDrawingScaleBar;
       
-      console.log(`[toggleScaleBarDrawing] 스케일바 그리기 모드 ${this.isDrawingScaleBar ? '활성화' : '비활성화'}`);
+      // console.log(`[toggleScaleBarDrawing] 스케일바 그리기 모드 ${this.isDrawingScaleBar ? '활성화' : '비활성화'}`);
       
       if (this.isDrawingScaleBar) {
         // 스케일바 그리기 모드 활성화 시 측정 모드도 변경
@@ -4252,7 +3942,7 @@ export default {
         // this.showNotification('수동 스케일바 그리기 모드가 활성화되었습니다. 이미지의 스케일바 위에 선을 그려주세요.', 'info');
         
         // 기존 설정 유지 (그리기 시작 전에 manualScaleBarSet을 변경하지 않음)
-        console.log(`[toggleScaleBarDrawing] 그리기 모드 활성화 - 현재 manualScaleBarSet: ${this.manualScaleBarSet}`);
+        // console.log(`[toggleScaleBarDrawing] 그리기 모드 활성화 - 현재 manualScaleBarSet: ${this.manualScaleBarSet}`);
       } else {
         // 스케일바 그리기 모드 비활성화 시 일반 선 측정 모드로 전환
         this.measurementMode = 'line';
@@ -4261,14 +3951,14 @@ export default {
       }
         
         // 캔버스 다시 그리기
-        this.render();
+      this.render();
     },
     // 돋보기 숨기는 함수 추가
     hideMagnifier() {
       // 돋보기를 숨기는 로직 구현
       // 이미 showBrightnessTooltip = false로 설정되어 있어서 
       // 돋보기는 자동으로 숨겨지므로 여기서는 추가 작업 필요 없음
-      console.log('돋보기 숨기기');
+      // console.log('돋보기 숨기기');
     },
     // 1. First, add the blobToBase64 helper function before the saveWithTableName method
     /**
@@ -4278,17 +3968,17 @@ export default {
       try {
         // 입력값이 없으면 빈 문자열 반환
         if (!blobUrl) {
-          console.log('[blobToBase64] 입력 URL이 없습니다');
+          // console.log('[blobToBase64] 입력 URL이 없습니다');
           return '';
         }
         
         // 이미 data URL이면 변환하지 않음
         if (typeof blobUrl === 'string' && blobUrl.startsWith('data:')) {
-          console.log('[blobToBase64] 이미 Data URL 형식입니다. 변환 불필요');
+          // console.log('[blobToBase64] 이미 Data URL 형식입니다. 변환 불필요');
           return blobUrl;
         }
         
-        console.log('[blobToBase64] Blob URL을 Base64로 변환 시작:', typeof blobUrl === 'string' ? blobUrl.substring(0, 50) + '...' : 'non-string');
+        // console.log('[blobToBase64] Blob URL을 Base64로 변환 시작:', typeof blobUrl === 'string' ? blobUrl.substring(0, 50) + '...' : 'non-string');
         
         // URL이 유효한지 확인
         if (typeof blobUrl !== 'string' || !blobUrl.startsWith('blob:')) {
@@ -4308,11 +3998,11 @@ export default {
           return '';
         }
         
-        console.log('[blobToBase64] Blob 정보:', {
-          type: blob.type || 'unknown',
-          size: blob.size + ' bytes',
-          lastModified: blob.lastModified ? new Date(blob.lastModified).toISOString() : 'N/A'
-        });
+        // console.log('[blobToBase64] Blob 정보:', {
+        //   type: blob.type || 'unknown',
+        //   size: blob.size + ' bytes',
+        //   lastModified: blob.lastModified ? new Date(blob.lastModified).toISOString() : 'N/A'
+        // });
         
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -4324,7 +4014,7 @@ export default {
             }
             
             const result = reader.result;
-            console.log('[blobToBase64] Base64 변환 완료 (길이):', result.length);
+            // console.log('[blobToBase64] Base64 변환 완료 (길이):', result.length);
             
             // MIME 타입이 없는 경우 추가
             if (typeof result === 'string' && !result.startsWith('data:') && blob.type) {
@@ -4348,36 +4038,36 @@ export default {
 
     // 2. Now update the saveWithTableName method to use base64 conversion
     async blobToBase64SaveWithTableName(selectedTable) {
-      console.log('[blobToBase64SaveWithTableName] 시작');
+      // console.log('[blobToBase64SaveWithTableName] 시작');
       
       try {
         // 테이블 데이터 유효성 검사
         if (!selectedTable) {
-          console.log('[blobToBase64SaveWithTableName] 테이블 데이터가 없습니다');
+          // console.log('[blobToBase64SaveWithTableName] 테이블 데이터가 없습니다');
           this.showNotification('테이블 정보가 없습니다.', 'warning');
           return;
         }
         
         // 테이블 객체인 경우 (객체 경우)
         if (typeof selectedTable === 'object') {
-          console.log('[blobToBase64SaveWithTableName] 테이블 객체 정보:', selectedTable);
+          // console.log('[blobToBase64SaveWithTableName] 테이블 객체 정보:', selectedTable);
           
           // saveWithTableName 함수 호출
           const result = await this.saveWithTableName(selectedTable);
           
           // 성공 여부에 따라 다르게 처리
           if (result && result.success) {
-            console.log('[blobToBase64SaveWithTableName] 저장 성공:', result);
+            // console.log('[blobToBase64SaveWithTableName] 저장 성공:', result);
             return result;
           } else if (result && !result.success) {
-            console.log('[blobToBase64SaveWithTableName] 저장 실패:', result.error || '알 수 없는 오류');
+            // console.log('[blobToBase64SaveWithTableName] 저장 실패:', result.error || '알 수 없는 오류');
             this.showNotification(`저장 실패: ${result.error || '알 수 없는 오류'}`, 'error');
             return result;
           }
         } 
         // URL 문자열인 경우 (레거시 코드 호환)
         else if (typeof selectedTable === 'string' && selectedTable.startsWith('http')) {
-          console.log('[blobToBase64SaveWithTableName] URL 문자열로 호출됨:', selectedTable);
+          // console.log('[blobToBase64SaveWithTableName] URL 문자열로 호출됨:', selectedTable);
           // 테이블 URL이 주어진 경우 (레거시 코드 호환)
           const tableUrl = selectedTable;
           const fetchResponse = await fetch(tableUrl);
@@ -4387,7 +4077,7 @@ export default {
           }
           
           const tableData = await fetchResponse.json();
-          console.log('[blobToBase64SaveWithTableName] 테이블 데이터 가져옴:', tableData);
+          // console.log('[blobToBase64SaveWithTableName] 테이블 데이터 가져옴:', tableData);
           
           // 가져온 테이블 정보로 저장 함수 호출
           return await this.saveWithTableName(tableData);
@@ -4395,14 +4085,14 @@ export default {
           throw new Error('유효하지 않은 테이블 정보 형식입니다.');
         }
       } catch (error) {
-        console.log('[blobToBase64SaveWithTableName] 오류 발생:', error.message);
+        // console.log('[blobToBase64SaveWithTableName] 오류 발생:', error.message);
         this.showNotification(`저장 중 오류: ${error.message}`, 'error');
         return { success: false, error: error.message };
       }
     },
     cleanupImageUrls() {
       // 생성된 Blob URL 정리
-      console.log('[cleanupImageUrls] 이미지 URL 정리 시작');
+      // console.log('[cleanupImageUrls] 이미지 URL 정리 시작');
       try {
         // Blob URL 정리
         const urlsToRevoke = [
@@ -4416,12 +4106,12 @@ export default {
         // 중복 제거
         const uniqueUrls = [...new Set(urlsToRevoke)];
         
-        console.log(`[cleanupImageUrls] ${uniqueUrls.length}개의 Blob URL 정리 중`);
+        // console.log(`[cleanupImageUrls] ${uniqueUrls.length}개의 Blob URL 정리 중`);
         
         uniqueUrls.forEach(url => {
           try {
             URL.revokeObjectURL(url);
-            console.log(`[cleanupImageUrls] URL 정리됨: ${url.substring(0, 30)}...`);
+            // (`[cleanupImageUrls] URL 정리됨: ${url.substring(0, 30)}...`);
           } catch (e) {
             console.warn(`[cleanupImageUrls] URL 정리 중 오류: ${e.message}`);
           }
@@ -4435,13 +4125,13 @@ export default {
       this.inputImageUrl = null;
       this.resultImageUrl = null;
       
-      console.log('[cleanupImageUrls] 이미지 URL 정리 완료');
+      // console.log('[cleanupImageUrls] 이미지 URL 정리 완료');
     },
     // 임시 드래그 선 그리기 메서드
     drawTempDragLine() {
       if (!this.ctx || !this.isDKeyPressed || !this.tempDragLine) return;
       
-      console.log('drawTempDragLine 호출됨:', this.tempDragLine);
+      // console.log('drawTempDragLine 호출됨:', this.tempDragLine);
       
       // 교차하는 선 찾기
       const intersectingLines = this.findIntersectingLines(this.tempDragLine);
@@ -4507,8 +4197,8 @@ export default {
       }
     },
     toggleDeleteMode() {
-      const canvas = this.$refs.canvas;
-      if (!canvas) {
+        const canvas = this.$refs.canvas;
+        if (!canvas) {
         console.warn('[toggleDeleteMode] Canvas element not found');
         return;
       }
@@ -4542,6 +4232,21 @@ export default {
 
       // 교차하는 측정선들 삭제
       if (intersectingMeasurements.length > 0) {
+        // 삭제될 각 측정값에 대해 히스토리 저장
+        const itemIdsToDelete = new Set(intersectingMeasurements.map(m => m.itemId));
+        
+        itemIdsToDelete.forEach(itemId => {
+          const relatedSegments = this.segmentedMeasurements.filter(s => s.itemId === itemId);
+          const measurement = this.measurements.find(m => m.itemId === itemId);
+          
+          if (measurement && relatedSegments.length > 0) {
+            this.addToHistory('delete', measurement, relatedSegments);
+          }
+        });
+        
+        // redo 히스토리 초기화 (새로운 액션 후)
+        this.redoHistory = [];
+        
         // 먼저 segmentedMeasurements에서 삭제
         intersectingMeasurements.forEach(segment => {
           const index = this.segmentedMeasurements.findIndex(s => 
@@ -4553,8 +4258,6 @@ export default {
         });
 
         // 관련된 measurements도 삭제
-        const itemIdsToDelete = new Set(intersectingMeasurements.map(m => m.itemId));
-        
         // 부모 컴포넌트에 삭제 이벤트 발생
         this.$emit('delete-measurements', itemIdsToDelete);
 
@@ -4584,19 +4287,16 @@ export default {
       return (t >= 0 && t <= 1 && u >= 0 && u <= 1);
     },
     initializeMeasurements() {
-      // Initialize local measurements from props to avoid prop mutation
-      if (this.$props.measurements && Array.isArray(this.$props.measurements)) {
-        this.measurements = JSON.parse(JSON.stringify(this.$props.measurements));
-        console.log('[initializeMeasurements] Initialized local measurements:', this.measurements.length);
-      } else {
-        this.measurements = [];
-        console.log('[initializeMeasurements] No prop measurements, initialized empty array');
-      }
+      // measurements prop을 무시하고 항상 빈 배열로 초기화
+      // 실제 측정 데이터는 segmentedMeasurements에서 관리
+      this.measurements = [];
+      console.log('[initializeMeasurements] measurements prop 무시, 빈 배열로 초기화');
+      console.log('[initializeMeasurements] 실제 데이터는 segmentedMeasurements에서 관리됩니다.');
     },
     
     // 측정 결과 초기화 메서드 (MSA5 프로세스 시작 시 호출)
     clearMeasurements() {
-      console.log('[clearMeasurements] 측정 결과 초기화 시작');
+      // console.log('[clearMeasurements] 측정 결과 초기화 시작');
       
       try {
         // 내부 데이터만 초기화 (prop이 아닌 것들)
@@ -4624,7 +4324,7 @@ export default {
         this.undoHistory = [];
         this.redoHistory = [];
         
-        console.log('[clearMeasurements] 측정 결과 초기화 완료');
+        // console.log('[clearMeasurements] 측정 결과 초기화 완료');
         
         // 부모 컴포넌트에 측정 결과 초기화 이벤트 발생
         this.$emit('measurements-cleared');
@@ -4634,9 +4334,9 @@ export default {
           // 측정 결과 테이블 업데이트를 위한 이벤트 발생
           window.dispatchEvent(new CustomEvent('msa6-measurements-cleared'));
           
-          // 캔버스 재렌더링
+          // 캔버스 초기화 (다음 이미지 로드 시 자동으로 다시 그려짐)
           if (this.ctx) {
-            console.log('[clearMeasurements] 캔버스 재렌더링');
+            // console.log('[clearMeasurements] 캔버스 초기화');
             this.render();
           }
         });
@@ -4650,28 +4350,28 @@ export default {
     
     // MSA5 프로세스 시작 이벤트 핸들러
     handleMSA5ProcessStart(event) {
-      console.log('[handleMSA5ProcessStart] MSA5 프로세스 시작 이벤트 수신');
+      // console.log('[handleMSA5ProcessStart] MSA5 프로세스 시작 이벤트 수신');
       
       try {
         // 이벤트 데이터 확인
         const data = event.detail;
         
         if (data && data.action === 'clear_measurements') {
-          console.log('[handleMSA5ProcessStart] 측정 결과 초기화 요청 수신');
+          // console.log('[handleMSA5ProcessStart] 측정 결과 초기화 요청 수신');
           
           // 측정 결과 초기화
           this.clearMeasurements();
           
           // 삭제 모드 비활성화
           if (this.isDeleteMode) {
-            console.log('[handleMSA5ProcessStart] 삭제 모드 비활성화');
+            // console.log('[handleMSA5ProcessStart] 삭제 모드 비활성화');
             this.isDeleteMode = false;
             this.deleteStart = null;
             this.deleteEnd = null;
           }
           
           // 측정 모드를 선 측정 모드로 변경
-          console.log('[handleMSA5ProcessStart] 측정 모드를 선 측정 모드로 변경');
+          // console.log('[handleMSA5ProcessStart] 측정 모드를 선 측정 모드로 변경');
           this.measurementMode = 'line';
           
           // 이전 측정 모드도 선 측정으로 설정
@@ -4682,10 +4382,95 @@ export default {
             this.render();
           }
           
-          console.log('[handleMSA5ProcessStart] MSA5 프로세스 시작 처리 완료 - 삭제 모드 비활성화, 선 측정 모드로 변경');
+          // console.log('[handleMSA5ProcessStart] MSA5 프로세스 시작 처리 완료 - 삭제 모드 비활성화, 선 측정 모드로 변경');
         }
       } catch (error) {
         console.error('[handleMSA5ProcessStart] MSA5 프로세스 시작 이벤트 처리 중 오류:', error);
+      }
+    },
+    // 전후 이미지 전환 메서드 추가
+    toggleBeforeAfterImage() {
+      try {
+        // console.log('[toggleBeforeAfterImage] 전후 이미지 전환 시작');
+        
+        // MSA5의 시작 이미지 URL 가져오기
+        const startImageUrl = sessionStorage.getItem('msa5_start_image_url');
+        
+        if (!startImageUrl) {
+          this.showNotification('처리 전 이미지를 찾을 수 없습니다.', 'error');
+          console.error('[toggleBeforeAfterImage] MSA5 시작 이미지 URL이 없음');
+          return;
+        }
+        
+        // 현재 표시 중인 이미지가 시작 이미지인지 확인
+        const currentImageUrl = this.isShowingInputImage ? this.internalInputImageUrl : this.outputImageUrl;
+        const isCurrentlyShowingStart = currentImageUrl === startImageUrl;
+        
+        if (isCurrentlyShowingStart) {
+          // 현재 시작 이미지를 보고 있다면 처리 후 이미지로 전환
+          this.isShowingInputImage = false;
+          this.showNotification('처리 후 이미지로 전환되었습니다.', 'info');
+          // console.log('[toggleBeforeAfterImage] 처리 후 이미지로 전환');
+        } else {
+          // 현재 처리 후 이미지를 보고 있다면 시작 이미지로 전환
+          this.isShowingInputImage = true;
+          this.internalInputImageUrl = startImageUrl;
+          this.showNotification('처리 전 이미지로 전환되었습니다. (측정 결과는 유지됩니다)', 'info');
+          // console.log('[toggleBeforeAfterImage] 처리 전 이미지로 전환');
+        }
+        
+        // 이미지 다시 로드 및 렌더링
+        this.$nextTick(() => {
+          this.render();
+        });
+        
+      } catch (error) {
+        console.error('[toggleBeforeAfterImage] 전후 이미지 전환 중 오류:', error);
+        this.showNotification('이미지 전환 중 오류가 발생했습니다.', 'error');
+      }
+    },
+
+    /**
+     * Blob URL을 Base64 데이터 URL로 변환하는 헬퍼 메서드
+     */
+    async blobToBase64(blobUrl) {
+      try {
+        // 이미 data URL이면 변환하지 않음
+        if (blobUrl.startsWith('data:')) {
+          console.log('이미 Data URL 형식입니다. 변환 불필요.');
+          return blobUrl;
+        }
+        
+        console.log('Blob URL을 Base64로 변환 시작:', blobUrl.substring(0, 50) + '...');
+        const response = await fetch(blobUrl);
+        
+        if (!response.ok) {
+          throw new Error(`Blob URL 가져오기 실패: ${response.status}`);
+        }
+        
+        const blob = await response.blob();
+        console.log('Blob 정보:', {
+          type: blob.type,
+          size: blob.size + ' bytes'
+        });
+        
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            const result = reader.result;
+            console.log('Base64 변환 완료, 길이:', result.length);
+            resolve(result);
+          };
+          reader.onerror = (e) => {
+            console.error('FileReader 오류:', e);
+            reject(new Error('이미지 읽기 오류'));
+          };
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        console.error('Base64 변환 중 오류:', error);
+        // 오류 발생 시 빈 문자열 반환
+        return '';
       }
     }
   },
@@ -4725,1089 +4510,63 @@ export default {
 </script>
 
 <style scoped>
-.image-measurement-popup {
+/* 이미지 전환 및 다운로드 버튼 스타일 */
+.image-toggle-controls {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-}
-
-.measurement-container {
-  background: #f8f9fa;
-  border-radius: 12px;
-  width: 95vw;
-  height: 95vh;
+  bottom: 30px;
+  right: 30px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
-  position: relative;
-  height: 100%;
+  gap: 10px;
+  z-index: 1000;
 }
 
-.measurement-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.75rem 1rem;
-  background: #7950f2;
-  border-bottom: 1px solid #6741d9;
-  flex-wrap: wrap;
-}
-
-.header-left {
+.toggle-image-btn,
+.download-image-btn {
   display: flex;
   align-items: center;
-}
-
-.header-title {
-  margin: 0;
-  font-size: 1.25rem;
-  color: #fff;
-  font-weight: 600;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.measurement-options {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  flex-wrap: wrap;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 0.5rem;
-  border-radius: 8px;
-}
-
-.option-group {
-  display: flex;
-  align-items: center;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  margin-right: 0.5rem;
-  margin-bottom: 0.25rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.option-group:last-child {
-  border-right: none;
-}
-
-.option-group-label {
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.8);
-  margin-right: 0.5rem;
-  white-space: nowrap;
-}
-
-.option-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  width: 2.25rem;
-  height: 2.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  margin: 0 0.125rem;
-  transition: all 0.2s;
-  color: #fff;
-}
-
-.option-btn i {
-  font-size: 0.9rem;
-}
-
-.btn-text {
-  margin-left: 0.25rem;
-}
-
-.scale-btn {
-  min-width: 4rem;
-}
-
-.reset-btn, .close-btn {
-  padding: 0.375rem 0.75rem;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.reset-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #fff;
-}
-
-.close-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  color: #fff;
-}
-
-/* option-btn 클래스 뒤에 hover와 active 상태 스타일 추가 */
-
-.option-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-.option-btn.active {
-  background: #fff;
-  color: #7950f2;
-  border-color: #fff;
-}
-
-/* reset-btn 및 close-btn hover 상태 추가 */
-.reset-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-.close-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-.measurement-content {
-  flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-.image-container {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: #000;
-}
-
-.measurement-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: crisp-edges;
-}
-
-.right-panel {
-  width: 400px;
-  background: #fff;
-  border-left: 1px solid #e9ecef;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  /* 고정 너비 설정 - 스크롤바 너비(17px) 포함 */
-  min-width: 400px;
-  max-width: 400px;
-  flex-shrink: 0; /* 사이드바 크기 고정 */
-  overflow: hidden; /* 내부 콘텐츠 오버플로우 숨김 처리 */
-}
-
-.results-panel {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden; /* 내부 컨텐츠가 넘칠 경우 숨김 처리 */
-}
-
-.results-table-container {
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
-  overflow: auto;
-  height: 600px;
-  max-height: 65vh;
-  /* 스크롤바 너비를 고려한 width 설정 */
-  width: calc(100% - 2px); /* 테두리 고려 */
-  box-sizing: border-box; /* 테두리와 패딩을 너비에 포함 */
-}
-
-.results-bottom-bar {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  width: 100%;
-  gap: 1.5rem;
-  padding: 1.25rem 1.5rem 1.5rem 1.5rem;
-  background: #fff;
-  border-top: 1px solid #e9ecef;
-  flex-shrink: 0;
-  position: static;
-  margin-top: auto;
-}
-
-.results-bottom-bar .results-summary {
-  margin: 0;
-  padding: 0;
-  background: none;
-  font-size: 1rem;
-  color: #7950f2;
-  font-weight: 600;
-}
-
-.save-measurements-btn {
-  padding: 12px 28px;
-  background-color: #7950f2;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.8);
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 1.1rem;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  box-shadow: 0 4px 16px rgba(121, 80, 242, 0.12);
-  transition: background 0.2s, box-shadow 0.2s;
-}
-
-.save-measurements-btn:hover:not(:disabled) {
-  background-color: #6741d9;
-  box-shadow: 0 6px 20px rgba(121, 80, 242, 0.18);
-}
-
-.save-measurements-btn:disabled {
-  background-color: #b197fc;
-  cursor: not-allowed;
-}
-
-.save-measurements-btn i {
-  font-size: 20px;
-}
-
-.panel-section {
-  padding: 1.5rem;
-}
-
-.id-input-panel {
-  background: #f8f0ff;
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 2px 8px rgba(121, 80, 242, 0.1);
-}
-
-.id-input-panel h5 {
-  color: #7950f2;
-  margin: 0 0 1rem 0;
-  font-size: 1rem;
-}
-
-.id-input-container {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.input-group {
-  flex: 1;
-}
-
-.input-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: #495057;
-  font-size: 0.9rem;
+  font-size: 14px;
   font-weight: 500;
-}
-
-.form-control {
-  width: 100%;
-  padding: 0.625rem;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  transition: all 0.2s;
-}
-
-.form-control:focus {
-  border-color: #7950f2;
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(121, 80, 242, 0.1);
-}
-
-.btn-apply {
-  width: 100%;
-  padding: 0.75rem;
-  background: #7950f2;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-apply:hover {
-  background: #6741d9;
-}
-
-.btn-apply:disabled {
-  background: #dee2e6;
-  cursor: not-allowed;
-}
-
-.results-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.results-table th {
-  background: #f8f0ff;
-  padding: 0.75rem 1rem;
-  text-align: left;
-  font-weight: 600;
-  color: #495057;
-  border-bottom: 2px solid #e9ecef;
-  position: sticky;
-  top: 0;
-}
-
-.results-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e9ecef;
-  color: #495057;
-}
-
-.selected-row {
-  background-color: #f3f0ff !important;
-}
-
-.results-table tr {
-  cursor: pointer;
-  user-select: none;
-}
-
-.results-table tr:hover {
-  background-color: #f8f0ff;
-}
-
-.total-measurement {
-  background-color: #e6f7ff !important;
-  font-weight: bold;
-}
-
-.total-measurement td {
-  border-bottom: 2px solid #7950f2;
-}
-
-.measurement-controls {
-  position: absolute;
-  bottom: 1.5rem;
-  left: 1.5rem;
-  background: rgba(0, 0, 0, 0.85);
-  padding: 1rem 1.5rem;
-  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  white-space: nowrap;
-  max-width: calc(100% - 3rem);
-  overflow-x: auto;
-  z-index: 1000;
-}
-
-.measurement-controls .option-btn {
-  background: #7950f2;
-  color: #fff;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
   min-width: 120px;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
   justify-content: center;
-  gap: 0.5rem;
 }
 
-.measurement-controls .option-btn i {
-  font-size: 1.2rem;
-  color: #fff;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+.toggle-image-btn:hover,
+.download-image-btn:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
-.measurement-controls .option-btn:hover {
-  background: #6741d9;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.measurement-controls .option-btn.active {
-  background: #fff;
-  color: #7950f2;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-}
-
-.measurement-controls .option-btn.active i {
-  color: #7950f2;
-  text-shadow: none;
-}
-
-.control-group {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-}
-
-.control-label {
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 500;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-  min-width: max-content;
-}
-
-.threshold-slider {
-  width: 200px;
-  height: 6px;
-  -webkit-appearance: none;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
-  outline: none;
-}
-
-.threshold-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  background: #fff;
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-}
-
-.threshold-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
+.toggle-image-btn:active,
+.download-image-btn:active {
+  transform: translateY(0);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.results-summary {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 1rem;
-  padding: 0.75rem;
-  background: #f8f0ff;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  color: #495057;
-  font-weight: 500;
+.toggle-image-btn i,
+.download-image-btn i {
+  font-size: 16px;
 }
 
-::-webkit-scrollbar {
-  width: 8px;
+/* 다운로드 버튼 특별 스타일 */
+.download-image-btn {
+  background: rgba(76, 175, 80, 0.9);
 }
 
-::-webkit-scrollbar-track {
-  background: #f8f0ff;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #7950f2;
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #6741d9;
-}
-
-.measurement-controls .control-group label {
-  color: #fff;
-  font-size: 1rem;
-  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
-}
-
-.results-table td.action-buttons .option-btn {
-  color: #7950f2;
-  background: #fff;
-  border: 1px solid #7950f2;
-  padding: 8px 12px;
-  font-size: 1.1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.results-table td.action-buttons .option-btn i {
-  color: #7950f2;
-  text-shadow: none;
-}
-
-.results-table td.action-buttons .option-btn:hover {
-  background: #7950f2;
-  color: #fff;
-  transform: scale(1.05);
-  transition: all 0.2s ease;
-}
-
-.results-table td.action-buttons .option-btn:hover i {
-  color: #fff;
-}
-
-.circle-options-panel {
-  background: #f8f0ff;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  display: flex;
-  gap: 1rem;
-}
-
-.circle-option-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  border: 1px solid #7950f2;
-  border-radius: 6px;
-  background: #fff;
-  color: #7950f2;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.circle-option-btn i {
-  font-size: 1.1rem;
-}
-
-.circle-option-btn:hover {
-  background: #f8f0ff;
-}
-
-.circle-option-btn.active {
-  background: #7950f2;
-  color: #fff;
-}
-
-.send-api-btn {
-  background: #2b8a3e;
-  color: #fff;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 140px;
-  white-space: nowrap;
-}
-
-.send-api-btn i {
-  font-size: 1.2rem;
-}
-
-.send-api-btn:hover:not(:disabled) {
-  background-color: #2f9e44;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-}
-
-.send-api-btn:disabled {
-  background: #adb5bd;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.control-input {
-  width: 60px;
-  padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  font-size: 0.9rem;
-  text-align: center;
-}
-
-.control-input:focus {
-  outline: none;
-  border-color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.header-input {
-  width: 60px;
-  padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  font-size: 0.9rem;
-  text-align: center;
-}
-
-.header-input:focus {
-  outline: none;
-  border-color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.header-input.no-spinners::-webkit-inner-spin-button,
-.header-input.no-spinners::-webkit-outer-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
-
-.header-input.no-spinners {
-  -moz-appearance: textfield;
-}
-
-.line-count-control {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.count-btn {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.count-btn i {
-  font-size: 0.8rem;
-}
-
-.count-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-.count-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.reset-btn {
-  padding: 0 15px;
-  height: 36px;
-  margin-right: 10px;
-  background: #dc3545;
-  color: #fff;
-  border: 1px solid #dc3545;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-
-.reset-btn i {
-  margin-right: 6px;
-  font-size: 1rem;
-}
-
-.reset-btn:hover {
-  background: #c82333;
-  border-color: #bd2130;
-}
-
-.color-palette-btn {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.color-palette-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-.color-picker-dropdown {
-  position: absolute;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  padding: 12px;
-  z-index: 1000;
-  margin-top: 5px;
-  border: 1px solid #e9ecef;
-}
-
-.color-options {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.color-option {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  cursor: pointer;
-  border: 1px solid #dee2e6;
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-
-/* 단축키 도움말 관련 스타일 */
-.shortcut-help-overlay {
-  position: fixed;
-  top: 0;
-    left: 0;
-  right: 0;
-    bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  z-index: 9999;
-  display: none;
-  justify-content: center;
-  align-items: center;
-}
-
-.shortcut-help-overlay.show {
-  display: flex;
-}
-
-.shortcut-help-content {
-  background-color: #fff;
-  border-radius: 12px;
-  padding: 30px;
-  max-width: 600px;
-  width: 90%;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-  transform: translateY(50px);
-    opacity: 0;
-  transition: transform 0.3s, opacity 0.3s;
-  pointer-events: none;
-  }
-
-.shortcut-help-content.show {
-  transform: translateY(0);
-    opacity: 1;
-  pointer-events: auto;
-}
-
-.shortcut-help-content h2 {
-  color: #7950f2;
-  margin-top: 0;
-  margin-bottom: 20px;
-  text-align: center;
-  font-size: 1.5rem;
-}
-
-.shortcut-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 15px;
-}
-
-.shortcut-item {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 10px;
-  border-radius: 8px;
-  background-color: #f8f0ff;
-}
-
-.shortcut-key {
-  background-color: #7950f2;
-  color: white;
-  padding: 5px 10px;
-  border-radius: 5px;
-  font-weight: bold;
-  min-width: 40px;
-  text-align: center;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-}
-
-.shortcut-desc {
-  color: #495057;
-  font-size: 0.9rem;
-}
-
-/* 알림 메시지 스타일 개선 */
-.notification {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 20px;
-  border-radius: 6px;
-  color: white;
-  font-weight: 500;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
-  z-index: 10000;
-  max-width: 90%;
-  text-align: center;
-  pointer-events: none;
-  animation: fadeInOut 3s ease-in-out;
-}
-
-.notification.info {
-  background-color: rgba(25, 118, 210, 0.9);
-}
-
-.notification.success {
-  background-color: #4caf50 !important;
-  color: white !important;
-  border-left: 5px solid #2e7d32 !important;
-}
-
-.notification.warning {
-  background-color: rgba(237, 108, 2, 0.9);
-}
-
-.notification.error {
-  background-color: rgba(211, 47, 47, 0.9);
-}
-
-@keyframes fadeInOut {
-  0%, 100% { opacity: 0; }
-  10%, 90% { opacity: 1; }
-}
-
-/* 돋보기 관련 스타일 */
-.brightness-tooltip {
-  position: absolute;
-  background-color: rgba(0, 0, 0, 0.8);
-  color: white;
-  padding: 5px 10px;
-  border-radius: 4px;
-  font-size: 12px;
-  z-index: 1000;
-  pointer-events: none;
-}
-
-.magnifier-container {
-  position: absolute;
-  z-index: 1001;
-  border: 2px solid #ff9900;
-  border-radius: 50%;
-  overflow: hidden;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
-  pointer-events: none;
-  background-color: white;
-}
-
-.magnifier-canvas {
-    width: 100%;
-  height: 100%;
-}
-
-.magnifier-crosshair {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 20px;
-  height: 20px;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-.magnifier-crosshair::before,
-.magnifier-crosshair::after {
-  content: '';
-  position: absolute;
-  background-color: rgba(255, 0, 0, 0.7);
-}
-
-.magnifier-crosshair::before {
-  top: 50%;
-  left: 0;
-    width: 100%;
-  height: 1px;
-  transform: translateY(-50%);
-}
-
-.magnifier-crosshair::after {
-  top: 0;
-  left: 50%;
-  width: 1px;
-  height: 100%;
-  transform: translateX(-50%);
-}
-
-.magnifier-brightness {
-  position: absolute;
-  bottom: 5px;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: bold;
-}
-
-.notification-container {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  min-width: 300px;
-  max-width: 80%;
-}
-
-.notification-message {
-  padding: 12px 20px;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  text-align: center;
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 10px;
-}
-
-.notification-message.success {
-  background-color: #4caf50;
-  color: white;
-  border-left: 5px solid #2e7d32;
-}
-
-.notification-message.error {
-  background-color: #f44336;
-  color: white;
-  border-left: 5px solid #c62828;
-}
-
-.notification-message.warning {
-  background-color: #ff9800;
-  color: white;
-  border-left: 5px solid #ef6c00;
-}
-
-.notification-message.info {
-  background-color: #2196f3;
-  color: white;
-  border-left: 5px solid #1565c0;
-}
-
-.notification {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 20px;
-  border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  z-index: 9999;
-  min-width: 300px;
-  max-width: 80%;
-  text-align: center;
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 10px;
-}
-
-.notification.info {
-  background-color: #2196f3;
-  color: white;
-  border-left: 5px solid #1565c0;
-}
-
-.notification.success {
-  background-color: #4caf50;
-  color: white;
-  border-left: 5px solid #2e7d32;
-}
-
-.notification.warning {
-  background-color: #ff9800;
-  color: white;
-  border-left: 5px solid #ef6c00;
-}
-
-.notification.error {
-  background-color: #f44336;
-  color: white;
-  border-left: 5px solid #c62828;
-}
-
-.notification.success {
-  background-color: #4caf50 !important;
-  color: white !important;
-  border-left: 5px solid #2e7d32 !important;
-}
-
-.notification.error {
-  background-color: #f44336 !important;
-  color: white !important;
-  border-left: 5px solid #c62828 !important;
-}
-
-/* 수정: !important 추가로 강제 적용 */
-.notification.error {
-  background-color: #f44336 !important;
-  color: white !important;
-  border-left: 5px solid #c62828 !important;
-}
-
-/* Override notification colors with highest specificity */
-div.notification.success {
-  background-color: rgb(76, 175, 80) !important;
-  color: white !important;
-  border-left: 5px solid #2e7d32 !important;
-}
-div.notification.error {
-  background-color: rgb(244, 67, 54) !important;
-  color: white !important;
-  border-left: 5px solid #c62828 !important;
+.download-image-btn:hover {
+  background: rgba(76, 175, 80, 1);
 }
 </style>
+
 

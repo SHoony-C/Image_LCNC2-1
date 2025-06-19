@@ -23,7 +23,7 @@ except ImportError:
     print("UMAP not available, using fallback dimensionality reduction method")
 
 # Import msa4_imagestorage's load_local_images function
-from msa4_imagestorage import load_local_images as msa4_load_local_images
+from msa4_LLM import load_local_images as msa4_load_local_images
 
 router = APIRouter()
 
@@ -521,12 +521,17 @@ async def load_local_images(directory_path: Optional[str] = Query(None), data: O
         if data and "includeBeforeImagesOnly" in data:
             include_before_only = data["includeBeforeImagesOnly"]
         
+        # '_whole' 접미사 필터 옵션 확인
+        include_whole_only = False
+        if data and "includeWholeImagesOnly" in data:
+            include_whole_only = data["includeWholeImagesOnly"]
+        
         # 태그 옵션 확인
         tag = "Unknown"
         if data and "tag" in data:
             tag = data["tag"]
         
-        print(f"필터링 옵션 상태: includeBeforeImagesOnly = {include_before_only}, tag = {tag}")
+        print(f"필터링 옵션 상태: includeBeforeImagesOnly = {include_before_only}, includeWholeImagesOnly = {include_whole_only}, tag = {tag}")
         
         if not path:
             raise HTTPException(status_code=400, detail="Directory path is required")
@@ -543,39 +548,47 @@ async def load_local_images(directory_path: Optional[str] = Query(None), data: O
         skipped_files = []
         for filename in os.listdir(path):
             if filename.lower().endswith(('.jpg', '.jpeg', '.png', '.gif')):
-                # 정확히 '_before'가 포함된 파일만 필터링
-                if include_before_only:
-                    if '_before' in filename:
-                        filtered_files.append(filename)
-                    else:
-                        skipped_files.append(filename)
-                        continue  # '_before'가 없는 이미지는 건너뜀
-                else:
+                # 필터링 로직
+                should_include = True
+                
+                # '_before' 필터링 체크 - true일 때 _before가 있는 파일만 포함
+                if include_before_only and data and "includeBeforeImagesOnly" in data:
+                    if '_before' not in filename:
+                        should_include = False
+                
+                # '_whole' 필터링 체크 - false일 때 _whole로 끝나지 않는 파일만 포함
+                if not include_whole_only and data and "includeWholeImagesOnly" in data:
+                    if filename.lower().endswith('_whole.png'):
+                        should_include = False
+                
+                if should_include:
                     filtered_files.append(filename)
+                else:
+                    skipped_files.append(filename)
+                    continue  # 필터링 조건에 맞지 않는 이미지는 건너뜀
                 
                 # 파일이 필터링을 통과한 경우에만 처리
-                if (not include_before_only) or (include_before_only and '_before' in filename):
-                    file_path = os.path.join(path, filename)
+                file_path = os.path.join(path, filename)
+                
+                try:
+                    # 이미지 파일을 스토리지에 복사
+                    destination_path = os.path.join(IMAGES_DIR, filename)
+                    shutil.copy2(file_path, destination_path)
                     
-                    try:
-                        # 이미지 파일을 스토리지에 복사
-                        destination_path = os.path.join(IMAGES_DIR, filename)
-                        shutil.copy2(file_path, destination_path)
-                        
-                        processed_images.append({
-                            "original_path": file_path,
-                            "stored_filename": filename,
-                            "stored_path": f"/api/imageanalysis/images/{filename}",  # API URL 경로 변경
-                            "tag": tag
-                        })
-                        
-                        print(f"Processed and saved image: {filename} with tag: {tag}")
-                    except Exception as e:
-                        errors.append({
-                            "filename": filename,
-                            "error": str(e)
-                        })
-                        print(f"Error processing image {filename}: {str(e)}")
+                    processed_images.append({
+                        "original_path": file_path,
+                        "stored_filename": filename,
+                        "stored_path": f"/api/imageanalysis/images/{filename}",  # API URL 경로 변경
+                        "tag": tag
+                    })
+                    
+                    print(f"Processed and saved image: {filename} with tag: {tag}")
+                except Exception as e:
+                    errors.append({
+                        "filename": filename,
+                        "error": str(e)
+                    })
+                    print(f"Error processing image {filename}: {str(e)}")
         
         # 처리된 결과를 로그로 요약
         print(f"필터링 결과: 선택된 파일 {len(filtered_files)}개, 제외된 파일 {len(skipped_files)}개")

@@ -812,10 +812,6 @@ export default {
         //console.log('MSAEventBus를 통해 load-workflow-to-msa5 이벤트 발생');
       }
       
-      // 루트 이벤트 버스를 통해 MSA5에 워크플로우 데이터 전송
-      this.$root.$emit('load-workflow-to-msa5', workflowData);
-      //console.log('루트 이벤트 버스를 통해 load-workflow-to-msa5 이벤트 발생');
-      
       // 직접 DOM 이벤트로도 전송 (추가 안전장치)
       const event = new CustomEvent('load-workflow-to-msa5', {
         detail: workflowData,

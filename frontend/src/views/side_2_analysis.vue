@@ -197,8 +197,11 @@
               <thead>
                 <tr>
                   <th>날짜</th>
+                  <th>테이블명</th>
+                  <th>Lot Wafer</th>
                   <th>Item ID</th>
                   <th>Sub ID</th>
+                  <th>사용자</th>
                   <th>값</th>
                   <th class="image-header">이미지</th>
                 </tr>
@@ -216,15 +219,39 @@
                       @mouseover="hoveredImage = group"
                       @mouseout="handleMouseOut">
                     <td>{{ point.date }}</td>
-                    <td>{{ point.label }}</td>
-                    <td>{{ point.subId }}</td>
-                    <td>{{ point.value.toFixed(3) }}</td>
+                    <td>{{ point.table_name || '-' }}</td>
+                    <td>{{ point.lot_wafer || '-' }}</td>
+                    <td>{{ point.item_id }}</td>
+                    <td>{{ point.subitem_id }}</td>
+                    <td>{{ point.username || '-' }}</td>
+                    <td>{{ point.value ? point.value.toFixed(3) : '-' }}</td>
                     <td v-if="index === 0" :rowspan="group.points.length" class="image-cell">
-                      <img :src="group.imageUrl" 
-                           :alt="group.item_id" 
-                           class="table-image"
-                           @error="handleImageError"
-                           @click="showImagePopup(group)" />
+                      <div class="image-container">
+                        <div class="image-item">
+                          <label>Before</label>
+                          <img v-if="getImageUrl(group.points[0].lot_wafer, selectedTable, 'before')" 
+                               :src="getImageUrl(group.points[0].lot_wafer, selectedTable, 'before')" 
+                               :alt="`${group.points[0].lot_wafer}_before`" 
+                               class="table-image"
+                               @error="handleImageError"
+                               @click="showImagePopup({...group, imageType: 'before'})" />
+                          <div v-else class="image-placeholder">
+                            Before 이미지 없음
+                          </div>
+                        </div>
+                        <div class="image-item">
+                          <label>After</label>
+                          <img v-if="getImageUrl(group.points[0].lot_wafer, selectedTable, 'after')" 
+                               :src="getImageUrl(group.points[0].lot_wafer, selectedTable, 'after')" 
+                               :alt="`${group.points[0].lot_wafer}_after`" 
+                               class="table-image"
+                               @error="handleImageError"
+                               @click="showImagePopup({...group, imageType: 'after'})" />
+                          <div v-else class="image-placeholder">
+                            After 이미지 없음
+                          </div>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 </template>
@@ -241,6 +268,8 @@
               <thead>
                 <tr>
                   <th>날짜</th>
+                  <th>세션 ID</th>
+                  <th>Lot Wafer</th>
                   <th>Item ID</th>
                   <th>Sub ID</th>
                   <th>X</th>
@@ -264,6 +293,8 @@
                       @mouseover="hoveredImage = group"
                       @mouseout="handleMouseOut">
                     <td>{{ point.date }}</td>
+                    <td>{{ point.session_id || '-' }}</td>
+                    <td>{{ point.lot_wafer || '-' }}</td>
                     <td>{{ point.item_id }}</td>
                     <td>{{ point.subitem_id }}</td>
                     <td>{{ point.x.toFixed(3) }}</td>
@@ -272,11 +303,32 @@
                     <td>{{ point.distortion.toFixed(3) }}</td>
                     <td :class="point.result === '양품' ? 'pass' : 'fail'">{{ point.result }}</td>
                     <td v-if="index === 0" :rowspan="group.points.length" class="image-cell">
-                      <img :src="group.imageUrl" 
-                           :alt="group.item_id" 
-                           class="table-image"
-                           @error="handleImageError"
-                           @click="showImagePopup(group)" />
+                      <div class="image-container">
+                        <div class="image-item">
+                          <label>Before</label>
+                          <img v-if="getImageUrl(group.points[0].lot_wafer, selectedTable, 'before')" 
+                               :src="getImageUrl(group.points[0].lot_wafer, selectedTable, 'before')" 
+                               :alt="`${group.points[0].lot_wafer}_before`" 
+                               class="table-image"
+                               @error="handleImageError"
+                               @click="showImagePopup({...group, imageType: 'before'})" />
+                          <div v-else class="image-placeholder">
+                            Before 이미지 없음
+                          </div>
+                        </div>
+                        <div class="image-item">
+                          <label>After</label>
+                          <img v-if="getImageUrl(group.points[0].lot_wafer, selectedTable, 'after')" 
+                               :src="getImageUrl(group.points[0].lot_wafer, selectedTable, 'after')" 
+                               :alt="`${group.points[0].lot_wafer}_after`" 
+                               class="table-image"
+                               @error="handleImageError"
+                               @click="showImagePopup({...group, imageType: 'after'})" />
+                          <div v-else class="image-placeholder">
+                            After 이미지 없음
+                          </div>
+                        </div>
+                      </div>
                     </td>
                   </tr>
                 </template>
@@ -286,22 +338,6 @@
         </div>
       </div>
       
-      <div class="analysis-right-panel">
-        <!-- MSA3 이미지 상세 정보 -->
-        <div class="msa3-wrapper">
-          <MSA3ImageDisplay 
-            ref="msa3Component"
-            @analyze-image="handleImageAnalysis"
-          />
-        </div>
-        
-        <!-- MSA4 이미지 분석 어시스턴트 -->
-        <div class="msa4-wrapper">
-          <MSA4LLMAnalysis 
-            ref="msa4Component"
-          />
-        </div>
-      </div>
     </div>
     
     <!-- Image Popup -->
@@ -477,17 +513,13 @@ export default {
 
     const processChartData = () => {
       if (!measurementData.value || !measurementData.value.length) {
-        console.log('No measurement data available');
         chartData.value = null;
         return;
       }
       
-      console.log('Processing chart data:', measurementData.value);
-      
       // 측정 데이터에서 x, y 값 추출
       const points = measurementData.value.map(item => {
         if (!item.measurements || typeof item.measurements.x === 'undefined' || typeof item.measurements.y === 'undefined') {
-          console.warn('Invalid measurement data:', item);
           return null;
         }
 
@@ -495,7 +527,6 @@ export default {
         const y = parseFloat(item.measurements.y);
         
         if (isNaN(x) || isNaN(y)) {
-          console.warn(`Invalid point data: x=${x}, y=${y}`, item);
           return null;
         }
         
@@ -504,15 +535,18 @@ export default {
           y,
           item_id: item.item_id,
           subitem_id: item.subitem_id,
+          table_name: item.table_name,
+          lot_wafer: item.lot_wafer,
+          username: item.username,
           date: item.date,
           result: item.result,
           color: item.result === '양품' ? '#4CAF50' : '#F44336',
-          value: Math.sqrt(x * x + y * y) // 값 계산 추가
+          value: item.value || Math.sqrt(x * x + y * y), // 실제 값 또는 계산된 값
+          imageUrl: getImageUrl(item.lot_wafer, selectedTable.value, 'before') // 선택된 테이블명 사용
         };
       }).filter(point => point !== null);
       
       if (points.length === 0) {
-        console.warn('No valid points after processing');
         chartData.value = null;
         return;
       }
@@ -527,23 +561,17 @@ export default {
         minY: Math.min(...yValues),
         maxY: Math.max(...yValues)
       };
-      
-      console.log('Final chart data:', chartData.value);
     }
 
     const processDefectData = () => {
       if (!defectData.value || !defectData.value.length) {
-        console.log('No defect data available');
         defectChartData.value = null;
         return;
       }
       
-      console.log('Processing defect data:', defectData.value);
-      
       const points = defectData.value.map(item => {
         if (typeof item.x === 'undefined' || typeof item.y === 'undefined' || 
             typeof item.striation === 'undefined' || typeof item.distortion === 'undefined') {
-          console.warn('Invalid defect data:', item);
           return null;
         }
 
@@ -553,7 +581,6 @@ export default {
         const distortion = parseFloat(item.distortion);
         
         if (isNaN(x) || isNaN(y) || isNaN(striation) || isNaN(distortion)) {
-          console.warn(`Invalid defect point data: x=${x}, y=${y}, striation=${striation}, distortion=${distortion}`, item);
           return null;
         }
         
@@ -562,16 +589,18 @@ export default {
           y,
           item_id: item.item_id,
           subitem_id: item.subitem_id,
+          session_id: item.session_id,
+          lot_wafer: item.lot_wafer,
           date: item.date,
           striation,
           distortion,
           result: item.result,
-          color: item.result === '양품' ? '#4CAF50' : '#F44336'
+          color: item.result === '양품' ? '#4CAF50' : '#F44336',
+          imageUrl: getImageUrl(item.lot_wafer, selectedTable.value, 'before') // 선택된 테이블명 사용
         };
       }).filter(point => point !== null);
       
       if (points.length === 0) {
-        console.warn('No valid defect points after processing');
         defectChartData.value = null;
         return;
       }
@@ -586,27 +615,104 @@ export default {
         minY: Math.min(...yValues),
         maxY: Math.max(...yValues)
       };
+    }
+
+    // 테이블 선택 관련 변수 추가
+    const selectedTable = ref('')
+    const authorizedTables = ref(['table1', 'table2', 'table3']) // 예시 테이블 목록
+    
+    // 기본 날짜 설정 (오늘부터 일주일 전까지)
+    const today = new Date()
+    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const dateFrom = ref(weekAgo.toISOString().split('T')[0])
+    const dateTo = ref(today.toISOString().split('T')[0])
+    const isLoading = ref(false)
+
+    // 데이터 로드 가능 여부 확인
+    const canLoadData = computed(() => {
+      return selectedTable.value && dateFrom.value && dateTo.value
+    })
+
+    // 데이터 로드 함수
+    const loadData = async () => {
+      if (!canLoadData.value) return
       
-      console.log('Final defect chart data:', defectChartData.value);
+      isLoading.value = true
+      try {
+        await fetchData()
+      } finally {
+        isLoading.value = false
+      }
+    }
+
+    // 이미지 URL 생성 함수 수정 - lot_wafer 기반
+    const getImageUrl = (lotWafer, tableName = null, imageType = 'before') => {
+      if (!lotWafer) {
+        return '';
+      }
+      
+      // 명확히 잘못된 값들만 필터링
+      if (lotWafer === 'main' || 
+          lotWafer === 'undefined' ||
+          lotWafer === 'null' ||
+          lotWafer === '' ||
+          typeof lotWafer !== 'string') {
+        return '';
+      }
+      
+      // 테이블명 결정 (파라미터로 받은 것 또는 선택된 테이블 또는 기본값)
+      const tableToUse = tableName || selectedTable.value || 'default';
+      
+      // IIS 서버를 통해 이미지 요청 - lot_wafer 기반
+      const imageName = `${lotWafer}_${imageType}.png`;
+      const finalUrl = `http://localhost:8091/results_images/${tableToUse}/${imageName}`;
+      
+      return finalUrl;
+    }
+
+    // 테이블 목록 가져오기
+    const fetchTables = async () => {
+      try {
+        const response = await axios.get('http://localhost:8000/api/msa6/table-names')
+        if (response.data.status === 'success' && response.data.data) {
+          authorizedTables.value = response.data.data.map(table => table.table_name)
+        }
+      } catch (error) {
+        console.error('테이블 목록 로드 실패:', error)
+        // 기본 테이블 목록 사용
+        authorizedTables.value = ['default', 'table1', 'table2']
+      }
     }
 
     const fetchData = async () => {
       try {
-        console.log('Fetching data...');
-        const [measurementResponse, defectResponse] = await Promise.all([
-          axios.get('http://localhost:8000/api/side2/data'),
-          axios.get('http://localhost:8000/api/side2/data_defect')
-        ]);
+        // API 파라미터 구성
+        const params = new URLSearchParams();
+        if (selectedTable.value) {
+          params.append('table_name', selectedTable.value);
+        }
+        if (dateFrom.value) {
+          params.append('date_from', dateFrom.value);
+        }
+        if (dateTo.value) {
+          params.append('date_to', dateTo.value);
+        }
         
-        console.log('Measurement API response:', measurementResponse.data);
-        console.log('Defect API response:', defectResponse.data);
+        const queryString = params.toString();
+        const measurementUrl = `http://localhost:8000/api/side2/data${queryString ? '?' + queryString : ''}`;
+        const defectUrl = `http://localhost:8000/api/side2/data_defect${queryString ? '?' + queryString : ''}`;
+        
+        const [measurementResponse, defectResponse] = await Promise.all([
+          axios.get(measurementUrl),
+          axios.get(defectUrl)
+        ]);
         
         if (measurementResponse.data.status === 'success') {
           measurementData.value = measurementResponse.data.data;
-          images.value = measurementResponse.data.images.map(img => ({
+          images.value = measurementResponse.data.images ? measurementResponse.data.images.map(img => ({
             ...img,
             path: `http://127.0.0.1:8091/images/${img.filename}`
-          }));
+          })) : [];
           
           processChartData();
         }
@@ -622,11 +728,8 @@ export default {
 
     const getVisiblePoints = computed(() => {
       if (!chartData.value || !chartData.value.points || !chartData.value.points.length) {
-        console.log('No points to display');
         return [];
       }
-      
-      console.log('Calculating visible points with data:', chartData.value);
       
       // 실제 그래프 영역 계산
       const plotWidth = width.value - margin.left - margin.right;
@@ -644,8 +747,6 @@ export default {
         const x = margin.left + (point.x - chartData.value.minX) * xScale;
         const y = height.value - margin.bottom - (point.y - chartData.value.minY) * yScale;
         
-        console.log(`Point (${point.item_id}): original(${point.x}, ${point.y}) -> scaled(${x}, ${y})`);
-        
         return {
           ...point,
           x,
@@ -661,24 +762,20 @@ export default {
     const groupDataByImage = computed(() => {
       if (!chartData.value?.points) return {};
       
-      console.log('=== 이미지 데이터 그룹화 시작 ===');
       const points = chartData.value.points;
-      console.log('모든 포인트:', points);
       
       const grouped = {};
       points.forEach(point => {
         if (!grouped[point.item_id]) {
-          console.log(`이미지 URL for ${point.item_id}:`, point.imageUrl);
           grouped[point.item_id] = {
             item_id: point.item_id,
             points: [],
-            imageUrl: point.imageUrl || `http://localhost:8091/images/그림${point.item_id.replace('item', '')}.png`
+            imageUrl: point.imageUrl || getImageUrl(point.lot_wafer, selectedTable.value, 'before')
           };
         }
         grouped[point.item_id].points.push(point);
       });
       
-      console.log('그룹화된 데이터:', grouped);
       return grouped;
     })
 
@@ -714,9 +811,45 @@ export default {
     }
 
     const handleImageError = (event) => {
-      console.error('Failed to load image:', event.target.src)
-      // 이미지 로드 실패 시 기본 이미지 표시
-      event.target.src = event.target.dataset.fallbackUrl || '' // 백엔드에서 제공하는 기본 이미지 URL 사용
+      // 이미지 오류 처리를 완전히 차단하여 무한 루프 방지
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      
+      // 이미 처리된 경우 아무것도 하지 않음
+      if (event.target.dataset.errorHandled === 'true') {
+        return false;
+      }
+      
+      // 오류 처리 완료 표시
+      event.target.dataset.errorHandled = 'true';
+      
+      // 이미지를 숨기고 텍스트로 대체
+      event.target.style.display = 'none';
+      
+      // 부모 요소에 텍스트 추가 (이미지 대신)
+      const parent = event.target.parentElement;
+      if (parent && !parent.querySelector('.image-placeholder')) {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'image-placeholder';
+        placeholder.textContent = '이미지 없음';
+        placeholder.style.cssText = `
+          width: 110px;
+          height: 110px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-color: #f5f5f5;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          color: #666;
+          font-size: 12px;
+          text-align: center;
+        `;
+        parent.appendChild(placeholder);
+      }
+      
+      return false;
     }
 
     const handleDragEnter = (group) => {
@@ -738,11 +871,8 @@ export default {
 
     const getVisibleDefectPoints = computed(() => {
       if (!defectChartData.value || !defectChartData.value.points || !defectChartData.value.points.length) {
-        console.log('No defect points to display');
         return [];
       }
-      
-      console.log('Calculating visible defect points with data:', defectChartData.value);
       
       const plotWidth = width.value - margin.left - margin.right;
       const plotHeight = height.value - margin.top - margin.bottom;
@@ -760,8 +890,6 @@ export default {
         const x = margin.left + (point.x - defectChartData.value.minX) * xScale;
         const y = height.value - margin.bottom - (point.y - defectChartData.value.minY) * yScale;
         
-        console.log(`Defect Point (${point.item_id}): original(${point.x}, ${point.y}) -> scaled(${x}, ${y})`);
-        
         return {
           ...point,
           x,
@@ -773,51 +901,50 @@ export default {
     const groupDefectDataByImage = computed(() => {
       if (!defectChartData.value?.points) return {};
       
-      console.log('=== 불량 감지 이미지 데이터 그룹화 시작 ===');
       const points = defectChartData.value.points;
-      console.log('모든 불량 감지 포인트:', points);
       
       const grouped = {};
       points.forEach(point => {
         if (!grouped[point.item_id]) {
-          console.log(`이미지 URL for ${point.item_id}:`, point.imageUrl);
           grouped[point.item_id] = {
             item_id: point.item_id,
             points: [],
-            imageUrl: point.imageUrl || `http://localhost:8091/images/그림${point.item_id.replace('item', '')}.png`
+            imageUrl: point.imageUrl || getImageUrl(point.lot_wafer, selectedTable.value, 'before')
           };
         }
         grouped[point.item_id].points.push(point);
       });
       
-      console.log('그룹화된 불량 감지 데이터:', grouped);
       return grouped;
     });
 
     // 차트 타입 변경 시 데이터 초기화 및 재처리
     watch(chartType, (newType) => {
-      console.log('차트 타입 변경:', newType);
       selectedPoint.value = null;
       
       if (newType === 'measurement') {
-        console.log('계측 데이터 처리 시작');
         processChartData();
       } else {
-        console.log('불량 감지 데이터 처리 시작');
         processDefectData();
       }
     });
 
     // 컴포넌트 마운트 시 초기 데이터 로드
     onMounted(() => {
-      console.log('컴포넌트 마운트됨');
       if (chartContainer.value) {
         const rect = chartContainer.value.getBoundingClientRect();
         width.value = rect.width;
         height.value = Math.min(400, window.innerHeight * 0.4); // 화면 높이에 맞게 차트 높이 조정
-        console.log(`차트 컨테이너 크기: ${width.value} x ${height.value}`);
       }
-      fetchData();
+      
+      // 테이블 목록을 먼저 가져온 후 데이터 로드
+      fetchTables().then(() => {
+        // 기본 테이블이 있으면 선택
+        if (authorizedTables.value.length > 0) {
+          selectedTable.value = authorizedTables.value[0];
+        }
+        fetchData();
+      });
       
       // 창 크기 변경 시 차트 크기 조정
       window.addEventListener('resize', handleResize);
@@ -836,15 +963,6 @@ export default {
         height.value = Math.min(400, window.innerHeight * 0.4);
       }
     };
-
-    // 로깅 추가
-    watch(() => chartData.value, (newVal) => {
-      console.log('chartData가 변경됨:', newVal);
-    });
-
-    watch(() => defectChartData.value, (newVal) => {
-      console.log('defectChartData가 변경됨:', newVal);
-    });
 
     return {
       chartType,
@@ -883,7 +1001,17 @@ export default {
       handleResize,
       msa3Component,
       msa4Component,
-      handleImageAnalysis
+      handleImageAnalysis,
+      getImageUrl,
+      fetchData,
+      selectedTable,
+      authorizedTables,
+      dateFrom,
+      dateTo,
+      isLoading,
+      canLoadData,
+      loadData,
+      fetchTables
     }
   }
 }
@@ -1062,14 +1190,35 @@ html, body {
 }
 
 .image-cell {
-  width: 120px;
+  width: 240px;
   vertical-align: middle;
   text-align: center;
   padding: 0.5rem;
 }
 
 .image-header {
-  width: 120px;
+  width: 240px;
+}
+
+.image-container {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.image-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.image-item label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary-600);
+  margin-bottom: 2px;
 }
 
 .table-image {
@@ -1079,6 +1228,21 @@ html, body {
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
   border: 1px solid var(--gray-200);
+}
+
+.image-placeholder {
+  width: 110px;
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  color: #666;
+  font-size: 10px;
+  text-align: center;
+  cursor: default;
 }
 
 /* 반응형 스타일 */

@@ -33,7 +33,7 @@ router = APIRouter()
 
 # 서버 시작 시 MySQL 사용자 정보 출력 
 try:
-    print("\n===== MySQL 사용자 정보 디버그 출력 =====")
+    # print("\n===== MySQL 사용자 정보 디버그 출력 =====")
     conn = mysql_engine.connect()
     
     # 사용자 정보 조회 SQL 쿼리 출력
@@ -51,7 +51,7 @@ try:
         print(row)
     
     conn.close()
-    print("\n===== MySQL 사용자 정보 출력 완료 =====\n")
+    # print("\n===== MySQL 사용자 정보 출력 완료 =====\n")
 except Exception as e:
     print(f"\n===== MySQL 사용자 정보 조회 실패 =====")
     print(f"오류: {str(e)}")
@@ -204,7 +204,7 @@ async def remove_role(user_id: str, role: str, current_user: User = Depends(get_
 @router.get("/sql-users")
 async def get_sql_users():
     """MySQL 데이터베이스에서 사용자 정보 조회"""
-    print("\n===== MySQL 사용자 정보 디버그 출력 =====")
+    # print("\n===== MySQL 사용자 정보 디버그 출력 =====")
     
     try:
         # 데이터베이스 연결
@@ -212,17 +212,17 @@ async def get_sql_users():
         
         # 사용자 정보 조회 SQL 쿼리 출력
         sql_query = "SELECT id, username, department, full_name, permission FROM users"
-        print(f"\n실행 SQL 쿼리: {sql_query}")
+        # print(f"\n실행 SQL 쿼리: {sql_query}")
         
         # 쿼리 파라미터 정보 출력 (이 경우 없음)
-        print("바인딩 파라미터: 없음")
+        # print("바인딩 파라미터: 없음")
         
         # 쿼리 실행
         query = text(sql_query)
         result = conn.execute(query)
         
         # 결과 출력 - 로우 데이터 형태로 출력
-        print("\n[SQL 쿼리 결과 로우 데이터]")
+        # print("\n[SQL 쿼리 결과 로우 데이터]")
         users = []
         for row in result:
             row_dict = dict(row._mapping)
@@ -230,8 +230,8 @@ async def get_sql_users():
             users.append(row_dict)
         
         conn.close()
-        print(f"\n총 {len(users)}명의 사용자 정보 조회 완료")
-        print("\n===== MySQL 사용자 정보 출력 완료 =====\n")
+        # print(f"\n총 {len(users)}명의 사용자 정보 조회 완료")
+        # print("\n===== MySQL 사용자 정보 출력 완료 =====\n")
         
         return {"status": "success", "users": users}
         

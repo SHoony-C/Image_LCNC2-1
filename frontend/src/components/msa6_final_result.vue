@@ -98,7 +98,7 @@ export default {
     checkMSA5StatusAndUpdateImage() {
       // 페이지 새로고침 시에는 MSA5 end 노드에 이미지가 없기 때문에 MSA6도 초기화해야 함
       const hasMSA5EndImage = sessionStorage.getItem('msa5_end_image')
-      console.log('MSA6: MSA5 이미지 상태 확인 - 종료 이미지 있음:', hasMSA5EndImage)
+      // console.log('MSA6: MSA5 이미지 상태 확인 - 종료 이미지 있음:', hasMSA5EndImage)
       
       if (hasMSA5EndImage === 'true') {
         // MSA5에 종료 이미지가 있으면 MSA6도 이미지 표시
@@ -108,13 +108,13 @@ export default {
         if (localStorage.getItem('msa6_final_image')) {
           this.finalImage = localStorage.getItem('msa6_final_image')
           this.showResult = true
-          console.log('MSA6: 로컬 스토리지에서 최종 이미지 로드됨')
+          // console.log('MSA6: 로컬 스토리지에서 최종 이미지 로드됨')
           
           // MSA5 입력 이미지 URL 저장 (세션 스토리지에서 가져오기)
           this.inputImage = sessionStorage.getItem('msa5_start_image_url')
-          console.log('MSA6: MSA5 입력 이미지 URL 로드됨:', this.inputImage ? '있음' : '없음')
+          // console.log('MSA6: MSA5 입력 이미지 URL 로드됨:', this.inputImage ? '있음' : '없음')
         } else {
-          console.log('MSA6: 로컬 스토리지에 저장된 이미지 없음')
+          // console.log('MSA6: 로컬 스토리지에 저장된 이미지 없음')
           this.showResult = false
         }
       } else {
@@ -123,12 +123,12 @@ export default {
         this.finalImage = ''
         this.inputImage = null
         this.showResult = false
-        console.log('MSA6: MSA5 이미지 없음, 결과 표시 안함')
+        // console.log('MSA6: MSA5 이미지 없음, 결과 표시 안함')
       }
     },
     // 페이지 새로고침 시 이미지 초기화 메소드 추가
     clearImageOnReload() {
-      console.log('MSA6: 페이지 새로고침 감지, 이미지 초기화 시작')
+      // console.log('MSA6: 페이지 새로고침 감지, 이미지 초기화 시작')
       
       // 세션 스토리지에 초기화 플래그 설정 (1초 후 자동 삭제)
       sessionStorage.setItem('image_cleared', 'true')
@@ -142,11 +142,11 @@ export default {
       // 측정 팝업 초기화
       if (this.$refs.measurementPopup && typeof this.$refs.measurementPopup.clearImage === 'function') {
         this.$refs.measurementPopup.clearImage()
-        console.log('MSA6: 측정 팝업 이미지 초기화 완료')
+        // console.log('MSA6: 측정 팝업 이미지 초기화 완료')
       }
     },
     handleMSA5ImageProcessed(event) {
-      console.log('MSA5 이미지 처리 이벤트 수신')
+      // console.log('MSA5 이미지 처리 이벤트 수신')
       const { imageUrl, timestamp, noPopup } = event.detail
       
       // 최종 이미지 설정
@@ -158,16 +158,16 @@ export default {
       
       // MSA5 입력 이미지 URL 저장 (세션 스토리지에서 가져오기)
       this.inputImage = sessionStorage.getItem('msa5_start_image_url')
-      console.log('MSA6: MSA5 입력 이미지 URL 업데이트됨:', this.inputImage ? '있음' : '없음')
+      // console.log('MSA6: MSA5 입력 이미지 URL 업데이트됨:', this.inputImage ? '있음' : '없음')
       
       // MSA5 이미지 사용 가능 플래그 설정
       this.msa5ImageAvailable = true
       
-      console.log('MSA6 최종 결과 이미지 업데이트 완료')
+      // console.log('MSA6 최종 결과 이미지 업데이트 완료')
       
       // 자동 팝업 열림 방지 플래그 확인 및 설정
       if (noPopup === true) {
-        console.log('MSA6: MSA5에서 noPopup 플래그가 전달됨. 팝업을 열지 않습니다.');
+        // console.log('MSA6: MSA5에서 noPopup 플래그가 전달됨. 팝업을 열지 않습니다.');
         // 세션 스토리지에도 플래그 설정 (다른 컴포넌트에서 참조할 수 있도록)
         sessionStorage.setItem('msa6_no_auto_popup', 'true');
       } else {
@@ -175,38 +175,38 @@ export default {
         const noAutoPopupFromStorage = sessionStorage.getItem('msa6_no_auto_popup') === 'true';
         
         if (noAutoPopupFromStorage) {
-          console.log('MSA6: 세션 스토리지에 자동 팝업 방지 플래그가 설정되어 있습니다.');
+          // console.log('MSA6: 세션 스토리지에 자동 팝업 방지 플래그가 설정되어 있습니다.');
           // 플래그는 유지 (필요한 경우 다른 컴포넌트에서 초기화)
         } else {
-          console.log('MSA6: 자동 팝업 방지 플래그가 없습니다. 사용자가 이미지를 클릭하면 팝업이 열립니다.');
+          // console.log('MSA6: 자동 팝업 방지 플래그가 없습니다. 사용자가 이미지를 클릭하면 팝업이 열립니다.');
           // 플래그가 없는 경우에는 아무 작업도 하지 않음 (기본적으로 팝업을 열지 않음)
         }
       }
     },
     handleMSA5ProcessStart(event) {
-      console.log('MSA6: MSA5 프로세스 시작 이벤트 수신')
+      // console.log('MSA6: MSA5 프로세스 시작 이벤트 수신')
       
       try {
         // 이벤트 데이터 확인
         const data = event.detail;
         
         if (data && data.action === 'clear_measurements') {
-          console.log('MSA6: 측정 결과 초기화 요청 수신');
+          // console.log('MSA6: 측정 결과 초기화 요청 수신');
           
           // measurements 배열 직접 초기화
           this.measurements = [];
-          console.log('MSA6: measurements 배열 초기화 완료');
+          // console.log('MSA6: measurements 배열 초기화 완료');
           
           // 측정 팝업 컴포넌트에도 초기화 요청 (내부 데이터 초기화용)
           if (this.$refs.measurementPopup && typeof this.$refs.measurementPopup.clearMeasurements === 'function') {
             this.$refs.measurementPopup.clearMeasurements();
-            console.log('MSA6: 측정 팝업에 초기화 요청 전송 완료');
+            // console.log('MSA6: 측정 팝업에 초기화 요청 전송 완료');
           } else {
-            console.warn('MSA6: 측정 팝업 컴포넌트를 찾을 수 없거나 clearMeasurements 메서드가 없습니다');
+            // console.warn('MSA6: 측정 팝업 컴포넌트를 찾을 수 없거나 clearMeasurements 메서드가 없습니다');
           }
         }
       } catch (error) {
-        console.error('MSA6: MSA5 프로세스 시작 이벤트 처리 중 오류:', error);
+        // console.error('MSA6: MSA5 프로세스 시작 이벤트 처리 중 오류:', error);
       }
     },
     toggleMaximize() {
@@ -214,12 +214,12 @@ export default {
     },
     openMeasurementPopup() {
       if (this.finalImage) {
-        console.log('Opening measurement popup with image:', this.finalImage)
+        // console.log('Opening measurement popup with image:', this.finalImage)
         this.showMeasurementPopup = true
         
         // 세션 스토리지 플래그 초기화 (팝업을 명시적으로 열었으므로 플래그 초기화)
         sessionStorage.removeItem('msa6_no_auto_popup');
-        console.log('MSA6: 사용자가 수동으로 팝업을 열었습니다. 자동 팝업 방지 플래그를 초기화합니다.');
+        // console.log('MSA6: 사용자가 수동으로 팝업을 열었습니다. 자동 팝업 방지 플래그를 초기화합니다.');
         
         // First make sure the container elements are visible
         this.$nextTick(() => {
@@ -236,15 +236,15 @@ export default {
             popupContainer.style.removeProperty('visibility');
           }
           
-          console.log('MSA6: 팝업 컨테이너 표시 설정 완료');
+          // console.log('MSA6: 팝업 컨테이너 표시 설정 완료');
           
           // 이제 팝업 컴포넌트의 openPopup 메서드 호출
           if (this.$refs.measurementPopup && typeof this.$refs.measurementPopup.openPopup === 'function') {
             try {
               this.$refs.measurementPopup.openPopup(this.finalImage);
-              console.log('MSA6: 측정 팝업 openPopup 메서드 호출 완료');
+              // console.log('MSA6: 측정 팝업 openPopup 메서드 호출 완료');
             } catch (error) {
-              console.error('MSA6: openPopup 메서드 호출 중 오류 발생:', error);
+              // console.error('MSA6: openPopup 메서드 호출 중 오류 발생:', error);
             }
           } else {
             console.error('MSA6: 측정 팝업 컴포넌트 참조 또는 openPopup 메서드를 찾을 수 없습니다.', {
@@ -255,11 +255,11 @@ export default {
           }
         });
       } else {
-        console.warn('MSA6: 표시할 이미지가 없어 측정 팝업을 열 수 없습니다.');
+        // console.warn('MSA6: 표시할 이미지가 없어 측정 팝업을 열 수 없습니다.');
       }
     },
     closeMeasurementPopup() {
-      console.log('Closing measurement popup, data will be preserved')
+      // console.log('Closing measurement popup, data will be preserved')
       this.showMeasurementPopup = false
       
       // Force refresh the component state
@@ -277,15 +277,17 @@ export default {
           element.style.visibility = 'hidden';
         });
         
-        console.log('MSA6: 측정 팝업 DOM 요소 강제 숨김 처리 완료');
+        // console.log('MSA6: 측정 팝업 DOM 요소 강제 숨김 처리 완료');
       });
     },
     handleMeasurementAdded(measurement) {
-      console.log('MSA6: 측정 결과 추가됨', measurement);
+      // console.log('MSA6: 측정 결과 추가됨', measurement);
       this.measurements.push(measurement);
+      
+      // 히스토리 저장은 측정 컴포넌트 내부에서 처리하므로 여기서는 제거
     },
     handleMeasurementRemoved(measurement) {
-      console.log('MSA6: 측정 결과 제거됨', measurement);
+      // console.log('MSA6: 측정 결과 제거됨', measurement);
       if (measurement.itemId) {
         // itemId로 삭제하는 경우
         this.measurements = this.measurements.filter(m => m.itemId !== measurement.itemId);
@@ -301,7 +303,7 @@ export default {
       }
     },
     handleMeasurementsCleared() {
-      console.log('MSA6: 모든 측정 결과 제거됨');
+      // console.log('MSA6: 모든 측정 결과 제거됨');
       this.measurements = [];
     }
   }
