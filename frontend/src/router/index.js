@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import MainView from '@/views/side_1_main.vue'
 import AnalysisView from '@/views/side_2_analysis.vue'
-import AddonView from '@/views/side_3_addon.vue'
+import TableManagementView from '@/views/side_3_Table Management.vue'
 import AdminDashboard from '@/views/side_admin1_dashboard.vue'
 import UserManagement from '@/views/side_admin2_users.vue'
 import SettingsView from '@/views/side_admin3_settings.vue'
@@ -26,15 +26,9 @@ const routes = [
     component: AnalysisView
   },
   {
-    path: '/addon',
-    name: 'Addon',
-    component: AddonView
-  },
-  {
-    path: '/admin/dashboard',
-    name: 'AdminDashboard',
-    component: AdminDashboard,
-    meta: { requiresAuth: true, requiresAdmin: true }
+    path: '/table-management',
+    name: 'TableManagementView',
+    component: TableManagementView
   },
   {
     path: '/admin/users',
@@ -70,7 +64,7 @@ const router = createRouter({
 // Navigation guard for authentication
 router.beforeEach(async (to, from, next) => {
   // 페이지 타이틀 설정
-  document.title = to.meta.title || 'LCNC MSA Application'
+  document.title = to.meta.title || 'Image - Total AI Platform'
   
   // 페이지 접근 로깅 (비동기 실행, 페이지 로딩 속도에 영향 없도록)
   setTimeout(() => {

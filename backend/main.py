@@ -17,7 +17,7 @@ from msa5_workLCNC import router as msa5_work_router
 
 # 사이드 모듈 라우터 임포트
 from side_2_analysis import router as side_2_router
-from side_3_workflow import router as workflow_router
+from side_3_tablemanage import router as side_3_tablemanage
 from side_4_management import router as management_router
 from side_5_settings import router as settings_router
 from side_6_help import router as help_router
@@ -144,11 +144,13 @@ app.include_router(msa3_router, prefix="/api", tags=["msa3"])
 app.include_router(msa4_router, prefix="/api/imagestorage", tags=["msa4"])
 app.include_router(msa5_router, prefix="/api/msa5", tags=["msa5"])
 app.include_router(msa5_work_router, prefix="/api/msa5/work", tags=["msa5_work"])
+# lcnc 경로로도 msa5_router 등록 (워크플로우 해시 조회용)
+app.include_router(msa5_router, prefix="/api/lcnc", tags=["lcnc"])
 app.include_router(msa6_router, prefix="/api/msa6", tags=["msa6"])
 
 # 사이드 모듈 라우터 등록
 app.include_router(side_2_router, prefix="/api/side2", tags=["side2"])
-app.include_router(workflow_router, prefix="/api/workflow", tags=["workflow"])
+app.include_router(side_3_tablemanage, prefix="/api/side3", tags=["side3"])
 app.include_router(management_router, prefix="/api/management", tags=["management"])
 app.include_router(settings_router, prefix="/api/settings", tags=["settings"])
 app.include_router(help_router, prefix="/api/help", tags=["help"])

@@ -123,15 +123,6 @@ async def get_nodes():
             "type": "image",
             "category": "noise"
         },
-        
-        # 스케일 조정 및 정규화
-        {
-            "id": "resize",
-            "label": "크기 조정",
-            "icon": "fas fa-expand",
-            "type": "image",
-            "category": "scale"
-        },
         {
             "id": "normalize",
             "label": "정규화",
@@ -164,7 +155,10 @@ async def get_nodes():
         
         # 히스토그램 기반 처리
         "histogram_equalization": {
-            "enabled": True
+            "enabled": True,
+            "options": {
+                "enabled": [True, False]
+            }
         },
         "clahe": {
             "clip_limit": 2.0,
@@ -174,23 +168,25 @@ async def get_nodes():
         # 노이즈 제거
         "gaussian_blur": {
             "kernel_size": 5,  # 반드시 홀수여야 함 (3, 5, 7, ...)
-            "sigma": 0  # 0은 자동 계산
+            "sigma": 0,  # 0은 자동 계산
+            "options": {
+                "kernel_size": [3, 5, 7, 9, 11, 13, 15]
+            }
         },
         "median_filter": {
-            "kernel_size": 5  # 반드시 홀수여야 함
+            "kernel_size": 5,  # 반드시 홀수여야 함
+            "options": {
+                "kernel_size": [3, 5, 7, 9, 11, 13, 15]
+            }
         },
         "anisotropic_diffusion": {
             "num_iter": 5,
             "kappa": 50,
             "gamma": 0.1,
-            "option": 1  # 1 또는 2
-        },
-        
-        # 스케일 조정 및 정규화
-        "resize": {
-            "width": 500,
-            "height": 500,
-            "preserve_aspect_ratio": True
+            "option": 1,  # 1 또는 2
+            "options": {
+                "option": [1, 2]
+            }
         },
         "normalize": {
             "min_value": 0,
@@ -199,8 +195,10 @@ async def get_nodes():
         
         # 병합 노드
         "merge": {
-            "merge_type": "horizontal",
-            "spacing": 0
+            "operation": "average",
+            "options": {
+                "operation": ["average", "max", "min"]
+            }
         }
     }
     
@@ -360,8 +358,6 @@ async def get_workflow_by_hash(image_hash: str):
             }
         )
 
-@router.get("/available-nodes")
-async def get_available_nodes():
     """
     처리 가능한 노드 목록을 반환합니다.
     프론트엔드 LCNC 컴포넌트에서 사용됩니다.
@@ -423,14 +419,7 @@ async def get_available_nodes():
                 "icon": "fas fa-wave-square",
                 "category": "noise"
             },
-            
-            # 스케일 조정 및 정규화
-            {
-                "id": "resize",
-                "label": "크기 조정",
-                "icon": "fas fa-expand",
-                "category": "scale"
-            },
+
             {
                 "id": "normalize",
                 "label": "정규화",

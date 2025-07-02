@@ -119,14 +119,14 @@ async def save_measurement_to_lcnc(measurement_data: Dict[str, Any] = Body(...))
                     # SQL 삽입 쿼리 생성
                     query = text("""
                     INSERT INTO """ + target_table + """ (
-                        session_id, item_id, sub_item_id, 
-                        x_pos, y_pos, value, 
-                        is_bright, is_striated, is_distorted,
+                        session_id, item_id, subitem_id, 
+                        major_axis, minor_axis, area, 
+                        striated_ratio, distorted_ratio,
                         created_at
                     ) VALUES (
                         :session_id, :itemId, :subItemId,
-                        :xPos, :yPos, :value,
-                        :isBright, :isStriated, :isDistorted,
+                        :majorAxis, :minorAxis, :area,
+                        :striated_ratio, :distorted_ratio,
                         :createdAt
                     )
                     """)
@@ -136,12 +136,11 @@ async def save_measurement_to_lcnc(measurement_data: Dict[str, Any] = Body(...))
                         "session_id": session_id,
                         "itemId": defect.get('itemId', ''),
                         "subItemId": defect.get('subItemId', ''),
-                        "xPos": defect.get('x', 0),
-                        "yPos": defect.get('y', 0),
-                        "value": defect.get('value', 0),
-                        "isBright": 1 if defect.get('isBright', False) else 0,
-                        "isStriated": 1 if defect.get('isStriated', False) else 0,
-                        "isDistorted": 1 if defect.get('isDistorted', False) else 0,
+                        "majorAxis": float(defect.get('majorAxis', 0)),
+                        "minorAxis": float(defect.get('minorAxis', 0)),
+                        "area": float(defect.get('area', 0)),
+                        "striated_ratio": float(defect.get('striation', 0)) / 100.0,
+                        "distorted_ratio": float(defect.get('distortion', 0)) / 100.0,
                         "createdAt": now
                     })
             
@@ -490,7 +489,8 @@ async def options_check_table_permission():
 @router.post("/save-with-table-name")
 async def save_with_table_name(data: Dict[str, Any] = Body(...)):
     """
-    측정 데이터를 선택한 테이블 이름과 함께 msa6_result_cd 테이블에 저장합니다.
+    측정 데이터를 선택한 테이블 이름과 함께 저장합니다.
+    일반 측정은 msa6_result_cd 테이블에, 불량 감지는 msa6_result_defect 테이블에 저장됩니다.
     단일 측정값 또는 측정값 배열을 받을 수 있습니다.
     측정 결과가 표시된 before/after 이미지도 함께 저장합니다.
     """
@@ -524,6 +524,7 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
         username = data.get("username") or data.get("user_name", "")
         lot_wafer = data.get("lot_wafer", "")
         measurements = data.get("measurements", [])
+        measurement_type = data.get("measurement_type", "measurement")  # 'measurement' 또는 'defect'
         before_image_data = data.get("before_image_data")
         after_image_data = data.get("after_image_data")
         
@@ -543,7 +544,9 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
             print("[save_with_table_name] 오류: 측정 데이터가 없음")
             raise HTTPException(status_code=400, detail="측정 데이터가 필요합니다")
         
-        print(f"[save_with_table_name] 저장할 데이터: 테이블={table_name}, 사용자={username}, 측정값 수={len(measurements)}")
+        # 측정 타입에 따른 테이블 결정
+        target_table = "msa6_result_defect" if measurement_type == "defect" else "msa6_result_cd"
+        print(f"[save_with_table_name] 저장할 데이터: 테이블={table_name}, 대상DB테이블={target_table}, 사용자={username}, 측정값 수={len(measurements)}, 타입={measurement_type}")
         
         # 이미지 저장 처리
         saved_images = {}
@@ -694,16 +697,29 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
             trans = conn.begin()
             print("[save_with_table_name] 트랜잭션 시작됨")
             
-            # 측정 데이터 삽입 쿼리 미리 정의
-            query_str = """
-            INSERT INTO msa6_result_cd (
-                table_name, username, lot_wafer, 
-                item_id, subitem_id, value, create_time
-            ) VALUES (
-                :table_name, :username, :lot_wafer,
-                :item_id, :subitem_id, :value, :create_time
-            )
-            """
+            # 측정 타입에 따른 쿼리 준비
+            if measurement_type == "defect":
+                # 불량감지 결과 저장 쿼리 - session_id 제거하고 기본 필드들 추가
+                query_str = """
+                INSERT INTO msa6_result_defect (
+                    table_name, username, lot_wafer, item_id, subitem_id, 
+                    major_axis, minor_axis, area, striated_ratio, distorted_ratio, created_at
+                ) VALUES (
+                    :table_name, :username, :lot_wafer, :item_id, :subitem_id,
+                    :major_axis, :minor_axis, :area, :striated_ratio, :distorted_ratio, :created_at
+                )
+                """
+            else:
+                # 일반 측정 결과 저장 쿼리
+                query_str = """
+                INSERT INTO msa6_result_cd (
+                    table_name, username, lot_wafer, 
+                    item_id, subitem_id, value, create_time
+                ) VALUES (
+                    :table_name, :username, :lot_wafer,
+                    :item_id, :subitem_id, :value, :create_time
+                )
+                """
             
             # 쿼리 준비
             query = text(query_str)
@@ -719,72 +735,87 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                         print(f"[save_with_table_name] 측정값 #{idx+1}: dict 타입이 아님, 건너뜀 (타입: {type(measurement)})")
                         continue
                     
-                    # 필수 필드 확인
-                    item_id = measurement.get("itemId", "")
-                    subitem_id = measurement.get("subItemId", "")
-                    raw_value = measurement.get("value", 0)
+                    if measurement_type == "defect":
+                        # 불량감지 결과 데이터 처리
+                        item_id = measurement.get("itemId", "")
+                        subitem_id = measurement.get("subItemId", "")
+                        raw_value = measurement.get("value", 0)
+                        major_axis = measurement.get("majorAxis", 0)
+                        minor_axis = measurement.get("minorAxis", 0)
+                        area = measurement.get("area", 0)
+                        
+                        # 비율 데이터 추출 (프론트엔드에서 보내는 실제 비율값)
+                        striation_ratio = float(measurement.get("striation", 0)) / 100.0  # 줄무늬 비율 (0~1)
+                        distortion_ratio = float(measurement.get("distortion", 0)) / 100.0  # 왜곡 비율 (0~1)
+                        
+                        # 원본 데이터 출력
+                        print(f"[save_with_table_name] 불량감지 #{idx+1} 원본: itemId={item_id}, subItemId={subitem_id}, major_axis={major_axis}, minor_axis={minor_axis}, area={area}, striation={striation_ratio:.3f}, distortion={distortion_ratio:.3f}")
+                        
+                        # 파라미터 준비
+                        params = {
+                            "table_name": str(table_name)[:45],
+                            "username": str(username)[:45],
+                            "lot_wafer": str(lot_wafer)[:45],
+                            "item_id": str(item_id)[:45],
+                            "subitem_id": str(subitem_id)[:45],
+                            "major_axis": major_axis,
+                            "minor_axis": minor_axis,
+                            "area": area,
+                            "striated_ratio": striation_ratio,
+                            "distorted_ratio": distortion_ratio,
+                            "created_at": now
+                        }
+                    else:
+                        # 일반 측정 결과 데이터 처리
+                        item_id = measurement.get("itemId", "")
+                        subitem_id = measurement.get("subItemId", "")
+                        raw_value = measurement.get("value", 0)
+                        
+                        # 원본 데이터 출력
+                        print(f"[save_with_table_name] 측정값 #{idx+1} 원본: itemId={item_id}, subItemId={subitem_id}, value={raw_value}")
+                        
+                        # 값 변환
+                        try:
+                            float_value = float(raw_value) if raw_value is not None else 0.0
+                        except (ValueError, TypeError):
+                            float_value = 0.0
+                        
+                        # 파라미터 준비
+                        params = {
+                            "table_name": str(table_name)[:45],
+                            "username": str(username)[:45],
+                            "lot_wafer": str(lot_wafer)[:45],
+                            "item_id": str(item_id)[:45],
+                            "subitem_id": str(subitem_id)[:45],
+                            "value": float_value,
+                            "create_time": now
+                        }
                     
-                    # 원본 데이터 출력
-                    print(f"[save_with_table_name] 측정값 #{idx+1} 원본: itemId={item_id}, subItemId={subitem_id}, value={raw_value}")
-                    print(f"[save_with_table_name] 측정값 #{idx+1} 전체 객체: {measurement}")
-                    
-                    # 값이 없거나 0인 측정값도 저장하도록 변경 (실제 측정값이 0일 수 있음)
-                    if raw_value is None:
-                        print(f"[save_with_table_name] 측정값 #{idx+1}: 값이 None임, 0으로 설정")
-                        raw_value = 0
-                    
-                    # float 변환 확인
-                    try:
-                        float_value = float(raw_value)
-                        print(f"[save_with_table_name] 측정값 #{idx+1}: float 변환 성공: {float_value}")
-                    except (ValueError, TypeError) as e:
-                        print(f"[save_with_table_name] 측정값 #{idx+1}: 값({raw_value})을 float로 변환할 수 없음, 0으로 설정: {str(e)}")
-                        float_value = 0.0
-                    
-                    # item_id, subitem_id는 원본 값 그대로 사용 (빈 값이어도 그대로 저장)
-                    print(f"[save_with_table_name] 측정값 #{idx+1}: 원본 값 사용 - item_id='{item_id}', subitem_id='{subitem_id}'")
-                    
-                    # 파라미터 준비
-                    params = {
-                        "table_name": str(table_name)[:45] if table_name else "",  # varchar(45) 제한
-                        "username": str(username)[:45] if username else "",  # varchar(45) 제한
-                        "lot_wafer": str(lot_wafer)[:45] if lot_wafer else "",              # varchar(45) 제한
-                        "item_id": str(item_id)[:45],           # varchar(45) 제한 - 원본 값 그대로 사용
-                        "subitem_id": str(subitem_id)[:45],  # varchar(45) 제한 - 원본 값 그대로 사용
-                        "value": float_value,                                      # double 타입
-                        "create_time": now                                         # datetime 타입
-                    }
-                    
-                    # 상세 로깅 추가 - 모든 값 정확히 확인
-                    print(f"[save_with_table_name] 측정값 #{idx+1} 저장 파라미터:")
+                    # 상세 로깅
+                    print(f"[save_with_table_name] {measurement_type} #{idx+1} 저장 파라미터:")
                     for key, value in params.items():
-                        print(f"  - {key}: '{value}' (타입: {type(value).__name__}, 길이: {len(str(value)) if isinstance(value, str) else 'N/A'})")
+                        print(f"  - {key}: '{value}' (타입: {type(value).__name__})")
                     
-                    # 측정 데이터 삽입
-                    print(f"[save_with_table_name] SQL 쿼리 실행: {query_str}")
+                    # 데이터 삽입
                     try:
                         insert_result = conn.execute(query, params)
                         print(f"[save_with_table_name] SQL 실행 결과: {insert_result.rowcount} 행 영향 받음")
                         
-                        # 실제로 데이터가 삽입되었는지 확인
                         if insert_result.rowcount > 0:
                             saved_count += 1
-                            print(f"[save_with_table_name] 측정값 #{idx+1} 저장 성공 (총 {saved_count}개 저장됨)")
+                            print(f"[save_with_table_name] {measurement_type} #{idx+1} 저장 성공 (총 {saved_count}개 저장됨)")
                         else:
-                            print(f"[save_with_table_name] 측정값 #{idx+1} 저장 실패: 영향받은 행이 0개")
-                            errors.append(f"측정값 #{idx+1}: 데이터베이스에 저장되지 않음")
+                            print(f"[save_with_table_name] {measurement_type} #{idx+1} 저장 실패: 영향받은 행이 0개")
+                            errors.append(f"{measurement_type} #{idx+1}: 데이터베이스에 저장되지 않음")
                             
                     except Exception as exec_error:
                         print(f"[save_with_table_name] SQL 실행 오류: {str(exec_error)}")
-                        print(f"[save_with_table_name] SQL 오류 상세:", traceback.format_exc())
-                        errors.append(f"측정값 #{idx+1} SQL 오류: {str(exec_error)}")
-                        # 단일 항목 오류는 무시하고 계속 진행
+                        errors.append(f"{measurement_type} #{idx+1} SQL 오류: {str(exec_error)}")
                         continue
                 
                 except Exception as item_error:
-                    error_msg = f"측정값 #{idx+1} 저장 중 오류: {str(item_error)}"
+                    error_msg = f"{measurement_type} #{idx+1} 저장 중 오류: {str(item_error)}"
                     print(f"[save_with_table_name] {error_msg}")
-                    print(f"[save_with_table_name] 오류 상세 정보:", traceback.format_exc())
                     errors.append(error_msg)
             
             # 저장 결과 확인
@@ -815,17 +846,30 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                     # 커밋 후 실제 저장된 데이터 확인
                     verify_conn = lcnc_sql["engine"].connect()
                     try:
-                        verify_query = text("""
-                        SELECT COUNT(*) as count FROM msa6_result_cd 
-                        WHERE table_name = :table_name AND username = :username AND lot_wafer = :lot_wafer
-                        ORDER BY create_time DESC
-                        """)
-                        verify_result = verify_conn.execute(verify_query, {
-                            "table_name": table_name,
-                            "username": username,
-                            "lot_wafer": lot_wafer
-                        }).fetchone()
+                        if measurement_type == "defect":
+                            verify_query = text("""
+                            SELECT COUNT(*) as count FROM msa6_result_defect 
+                            WHERE table_name = :table_name AND username = :username AND lot_wafer = :lot_wafer
+                            ORDER BY created_at DESC
+                            """)
+                            verify_params = {
+                                "table_name": table_name,
+                                "username": username,
+                                "lot_wafer": lot_wafer
+                            }
+                        else:
+                            verify_query = text("""
+                            SELECT COUNT(*) as count FROM msa6_result_cd 
+                            WHERE table_name = :table_name AND username = :username AND lot_wafer = :lot_wafer
+                            ORDER BY create_time DESC
+                            """)
+                            verify_params = {
+                                "table_name": table_name,
+                                "username": username,
+                                "lot_wafer": lot_wafer
+                            }
                         
+                        verify_result = verify_conn.execute(verify_query, verify_params).fetchone()
                         actual_count = verify_result[0] if verify_result else 0
                         print(f"[save_with_table_name] 데이터베이스 확인: 실제 저장된 레코드 수 = {actual_count}")
                         
@@ -841,11 +885,13 @@ async def save_with_table_name(data: Dict[str, Any] = Body(...)):
                     raise commit_error
             
             # 응답 반환
+            data_type_korean = "불량감지" if measurement_type == "defect" else "측정"
             response = {
                 "status": "success",
-                "message": f"{saved_count}개의 측정 데이터가 성공적으로 '{table_name}' 테이블 이름으로 저장되었습니다",
+                "message": f"{saved_count}개의 {data_type_korean} 데이터가 성공적으로 '{table_name}' 테이블 이름으로 저장되었습니다",
                 "saved_count": saved_count,
-                "total_sent": len(measurements)
+                "total_sent": len(measurements),
+                "target_table": target_table
             }
             
             # 이미지 저장 정보 추가
@@ -948,12 +994,16 @@ async def test_connection():
 async def check_lot_wafer_duplicate(data: Dict[str, Any] = Body(...)):
     """
     지정된 테이블에서 lot_wafer 값이 이미 존재하는지 확인합니다.
+    measurement_type에 따라 적절한 테이블에서 확인합니다.
+    - defect: msa6_result_defect 테이블에서 session_id 확인
+    - measurement: msa6_result_cd 테이블에서 lot_wafer 확인
     존재하는 경우 'duplicate'를 반환하고, 그렇지 않은 경우 'available'을 반환합니다.
     """
     try:
         # 필수 파라미터 확인
         table_name = data.get("table_name")
         lot_wafer = data.get("lot_wafer")
+        measurement_type = data.get("measurement_type", "measurement")  # 기본값은 measurement
         
         if not table_name or not lot_wafer:
             return JSONResponse(
@@ -961,28 +1011,41 @@ async def check_lot_wafer_duplicate(data: Dict[str, Any] = Body(...)):
                 content={"status": "error", "message": "table_name과 lot_wafer 파라미터가 필요합니다."}
             )
         
-        print(f"[check_lot_wafer_duplicate] 중복 확인: 테이블={table_name}, lot_wafer={lot_wafer}")
+        print(f"[check_lot_wafer_duplicate] 중복 확인: 테이블={table_name}, lot_wafer={lot_wafer}, 타입={measurement_type}")
         
         # SQL 커넥션 가져오기
         conn = lcnc_sql["engine"].connect()
         
         try:
-            # 안전한 쿼리 실행을 위해 text() 사용
-            query = text("""
-            SELECT COUNT(*) as count FROM msa6_result_cd
-            WHERE table_name = :table_name AND lot_wafer = :lot_wafer
-            """)
+            # 측정 타입에 따른 쿼리 선택
+            if measurement_type == "defect":
+                # 불량감지 모드: msa6_result_defect 테이블에서 table_name과 lot_wafer로 확인
+                query = text("""
+                SELECT COUNT(*) as count FROM msa6_result_defect
+                WHERE table_name = :table_name AND lot_wafer = :lot_wafer
+                """)
+                query_params = {"table_name": table_name, "lot_wafer": lot_wafer}
+                target_table = "msa6_result_defect"
+            else:
+                # 일반 측정 모드: msa6_result_cd 테이블에서 확인
+                query = text("""
+                SELECT COUNT(*) as count FROM msa6_result_cd
+                WHERE table_name = :table_name AND lot_wafer = :lot_wafer
+                """)
+                query_params = {"table_name": table_name, "lot_wafer": lot_wafer}
+                target_table = "msa6_result_cd"
             
-            result = conn.execute(query, {"table_name": table_name, "lot_wafer": lot_wafer}).fetchone()
+            result = conn.execute(query, query_params).fetchone()
             
             if result and result[0] > 0:
-                print(f"[check_lot_wafer_duplicate] 중복 발견: {result[0]}개의 레코드가 있습니다.")
+                data_type = "불량감지" if measurement_type == "defect" else "측정"
+                print(f"[check_lot_wafer_duplicate] 중복 발견: {target_table} 테이블에 {result[0]}개의 레코드가 있습니다.")
                 return {
                     "status": "duplicate",
-                    "message": f"이미 '{table_name}' 테이블에 '{lot_wafer}' Lot Wafer가 존재합니다."
+                    "message": f"이미 '{table_name}' 테이블에 '{lot_wafer}' Lot Wafer의 {data_type} 데이터가 존재합니다."
                 }
             else:
-                print(f"[check_lot_wafer_duplicate] 중복 없음: 사용 가능")
+                print(f"[check_lot_wafer_duplicate] 중복 없음: {target_table} 테이블에서 사용 가능")
                 return {
                     "status": "available",
                     "message": "사용 가능한 Lot Wafer입니다."
@@ -1006,7 +1069,7 @@ async def check_lot_wafer_duplicate(data: Dict[str, Any] = Body(...)):
         return JSONResponse(
             status_code=500,
             content={"status": "error", "message": f"중복 확인 중 오류가 발생했습니다: {str(e)}"}
-        ) 
+        )
 
 @router.options("/check-lot-wafer")
 async def options_check_lot_wafer():

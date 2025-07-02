@@ -521,23 +521,64 @@ export default {
       }
     },
     loadWorkflowToMSA5() {
-      //console.log('원본 워크플로우 데이터:', this.image.workflow);
+      console.log('=== MSA3 → MSA5 워크플로우 로드 시작 ===');
+      console.log('원본 이미지 객체:', this.image);
+      console.log('원본 워크플로우 데이터:', this.image ? this.image.workflow : 'null');
       
-      // 워크플로우 디버깅 정보 출력
-      this.debugWorkflow(this.image.workflow);
-      
-      // 워크플로우 구조 분석
-      this.inspectWorkflowStructure(this.image.workflow);
-      
-      // 워크플로우 데이터 검증 및 구조화
+      // 워크플로우 데이터 검증
       if (!this.image || !this.image.workflow) {
         console.error('워크플로우 데이터가 없습니다.');
+        console.error('image 존재 여부:', !!this.image);
+        console.error('workflow 존재 여부:', !!(this.image && this.image.workflow));
         alert('워크플로우 데이터가 없습니다.');
         return;
       }
       
-      // MongoDB 워크플로우 데이터 구조 분석
+      // 워크플로우 구조 분석
       const rawWorkflow = this.image.workflow;
+      console.log('워크플로우 원본 데이터 타입:', typeof rawWorkflow);
+      console.log('워크플로우 원본 데이터 키:', Object.keys(rawWorkflow));
+      console.log('워크플로우 전체 내용:', rawWorkflow);
+      
+      // elements 배열이 있는지 확인
+      if (rawWorkflow.elements && Array.isArray(rawWorkflow.elements)) {
+        console.log('elements 배열 발견, 길이:', rawWorkflow.elements.length);
+        console.log('elements 내용:', rawWorkflow.elements);
+        
+        // MSA5에 직접 전송할 데이터 준비
+        const workflowData = {
+          workflow_name: rawWorkflow.workflow_name || 'Loaded Workflow',
+          elements: rawWorkflow.elements,
+          input_image_url: rawWorkflow.input_image_url || null,
+          originalWorkflow: rawWorkflow
+        };
+        
+        console.log('MSA5로 전송할 최종 데이터:', workflowData);
+        
+        // 이벤트 버스를 통해 MSA5에 워크플로우 데이터 전송
+        if (window.MSAEventBus) {
+          window.MSAEventBus.emit('load-workflow-to-msa5', workflowData);
+          console.log('MSAEventBus를 통해 load-workflow-to-msa5 이벤트 발생');
+        }
+        
+        // 직접 DOM 이벤트로도 전송 (추가 안전장치)
+        const event = new CustomEvent('load-workflow-to-msa5', {
+          detail: workflowData,
+          bubbles: true
+        });
+        document.dispatchEvent(event);
+        console.log('DOM 이벤트를 통해 load-workflow-to-msa5 이벤트 발생');
+        
+        // 팝업 닫기
+        this.close();
+        
+        // 성공 메시지 표시
+        alert('워크플로우가 MSA5로 로드되었습니다.');
+        return;
+      }
+      
+      // elements가 없는 경우 기존 로직 사용
+      console.log('elements 배열이 없음, 기존 노드 추출 로직 사용');
       
       // 가능한 노드 키 목록
       const possibleNodeKeys = ['nodes', 'node', 'elements', 'steps', 'operations'];
@@ -550,7 +591,7 @@ export default {
       for (const key of possibleNodeKeys) {
         if (rawWorkflow[key] && Array.isArray(rawWorkflow[key])) {
           nodes = rawWorkflow[key];
-          //console.log(`직접적인 노드 배열 발견: "${key}", 길이:`, nodes.length);
+          console.log(`직접적인 노드 배열 발견: "${key}", 길이:`, nodes.length);
           foundNodesDirectly = true;
           break;
         }
@@ -563,7 +604,7 @@ export default {
             for (const innerKey of possibleNodeKeys) {
               if (rawWorkflow[key][innerKey] && Array.isArray(rawWorkflow[key][innerKey])) {
                 nodes = rawWorkflow[key][innerKey];
-                //console.log(`중첩된 노드 배열 발견: "${key}.${innerKey}", 길이:`, nodes.length);
+                console.log(`중첩된 노드 배열 발견: "${key}.${innerKey}", 길이:`, nodes.length);
                 foundNodesDirectly = true;
                 break;
               }
@@ -573,78 +614,10 @@ export default {
         }
       }
       
-      // 3. 노드 맵 구조 추출 (객체 내 여러 노드 객체가 있는 경우)
-      if (!foundNodesDirectly && typeof rawWorkflow === 'object') {
-        // 가능한 노드 객체들 수집
-        const candidateNodes = [];
-        
-        // 최상위 속성 탐색
-        for (const key of Object.keys(rawWorkflow)) {
-          const value = rawWorkflow[key];
-          
-          // 노드로 보이는 객체 식별
-          if (typeof value === 'object' && value !== null) {
-            // 노드 여부 판별 조건
-            const hasNodeType = value.type || (value.data && value.data.type);
-            const hasNodeId = value.id || (value.data && value.data.id);
-            const isValidNode = hasNodeType || hasNodeId;
-            
-            if (isValidNode) {
-              candidateNodes.push(value);
-            }
-            
-            // 중첩 객체 내 노드 탐색
-            if (typeof value === 'object' && !Array.isArray(value)) {
-              for (const innerKey of Object.keys(value)) {
-                const innerValue = value[innerKey];
-                
-                if (typeof innerValue === 'object' && innerValue !== null) {
-                  const hasInnerNodeType = innerValue.type || (innerValue.data && innerValue.data.type);
-                  const hasInnerNodeId = innerValue.id || (innerValue.data && innerValue.data.id);
-                  const isInnerValidNode = hasInnerNodeType || hasInnerNodeId;
-                  
-                  if (isInnerValidNode && !Array.isArray(innerValue)) {
-                    candidateNodes.push(innerValue);
-                  }
-                }
-              }
-            }
-          }
-        }
-        
-        if (candidateNodes.length > 0) {
-          nodes = candidateNodes;
-          //console.log(`노드 맵 구조에서 ${nodes.length}개의 노드를 추출했습니다.`);
-        }
-      }
-      
-      // 4. 워크플로우가 단일 노드인 경우
-      if (nodes.length === 0 && rawWorkflow.type) {
-        nodes = [rawWorkflow];
-        //console.log('워크플로우 자체가 단일 노드입니다.');
-      }
-      
-      // 5. 대체 구조 - 워크플로우 내 특정 필드를 직접 추출
-      if (nodes.length === 0 && rawWorkflow.workflow) {
-        // workflow 필드가 있는 경우
-        this.inspectWorkflowStructure(rawWorkflow.workflow, '중첩된 workflow 필드: ');
-        
-        // 재귀적으로 내부 워크플로우에서 노드 추출 시도
-        if (typeof rawWorkflow.workflow === 'object') {
-          for (const key of possibleNodeKeys) {
-            if (rawWorkflow.workflow[key] && Array.isArray(rawWorkflow.workflow[key])) {
-              nodes = rawWorkflow.workflow[key];
-              //console.log(`중첩된 workflow에서 노드 배열 발견: "workflow.${key}", 길이:`, nodes.length);
-              break;
-            }
-          }
-        }
-      }
-      
       // 최종 노드 필터링 - 유효한 객체만 유지
       nodes = nodes.filter(node => node && typeof node === 'object');
       
-      //console.log('추출된 노드 목록:', nodes);
+      console.log('추출된 노드 목록:', nodes);
       
       if (nodes.length === 0) {
         console.error('워크플로우에 유효한 노드가 없습니다.');
@@ -656,160 +629,20 @@ export default {
       const workflowName = rawWorkflow.name || rawWorkflow.title || 
                             (this.image.title ? `${this.image.title}_workflow` : null);
       
-      // 전달할 데이터 준비
+      // 전달할 데이터 준비 (기존 로직)
       const workflowData = {
         name: workflowName,
-        nodes: nodes.map(node => {
-          // 노드 타입 처리 (여러 구조 지원)
-          let nodeType = '';
-          let nodeData = {};
-          
-          if (node.type) {
-            nodeType = node.type;
-          } else if (node.data && node.data.type) {
-            nodeType = node.data.type;
-          } else if (node.nodeName) {
-            nodeType = node.nodeName;
-          } else if (node.name) {
-            nodeType = node.name;
-          } else {
-            // 타입이 없으면 ID에서 추출 시도
-            if (node.id && typeof node.id === 'string') {
-              const idParts = node.id.split('_');
-              if (idParts.length > 0) {
-                nodeType = idParts[0]; // ID의 첫 부분을 타입으로 사용
-              }
-            }
-            
-            // 여전히 타입이 없으면 기본값 사용
-            if (!nodeType) {
-              nodeType = 'custom';
-             }
-          }
-          
-          // 노드 데이터 처리
-          if (node.data) {
-            nodeData = { ...node.data };
-          } else if (node.parameters || node.params || node.options) {
-            // 파라미터/옵션이 별도 필드에 있는 경우
-            nodeData = { 
-              ...(node.parameters || {}),
-              ...(node.params || {}),
-              ...(node.options || {})
-            };
-          } else {
-            // 데이터 필드가 없으면 type과 id를 제외한 모든 속성을 데이터로 간주
-            nodeData = { ...node };
-            delete nodeData.type;
-            delete nodeData.id;
-            
-            // 일반적인 메타데이터 필드 제외
-            delete nodeData.position;
-            delete nodeData.positionAbsolute;
-            delete nodeData.selected;
-            delete nodeData.dragging;
-          }
-          
-          // 노드 타입을 완전한 API 엔드포인트 형식으로 변환
-          // API 엔드포인트와 호환되는 정확한 타입명 사용
-          const apiCompatibilityMap = {
-            'median': 'median_filter',
-            'blur': 'gaussian_blur', 
-            'gamma': 'gamma',
-            'gamma_correction': 'gamma',
-            'anisotropic': 'anisotropic_diffusion',
-            'anisotropic_diffusion_filter': 'anisotropic_diffusion',
-            'anisotropic_filter': 'anisotropic_diffusion',
-            '비등방성 확산': 'anisotropic_diffusion',
-            '비등방성': 'anisotropic_diffusion',
-            '확산 필터': 'anisotropic_diffusion',
-            '비등방성 확산 필터': 'anisotropic_diffusion',
-            'clahe': 'clahe',
-            'threshold': 'threshold',
-            'edge': 'edge',
-            'edge_detection': 'edge',
-            'brightness': 'brightness',
-            'contrast': 'contrast',
-            'histogram_eq': 'histogram_equalization',
-            'hist_eq': 'histogram_equalization',
-            'histogram': 'histogram_equalization',
-            'histogram_equalization': 'histogram_equalization',
-            'object_detection': 'object_detection',
-            'object-detection': 'object_detection',
-            'object': 'object_detection'
-          };
-          
-          // 노드 타입 매핑 적용 (API 호환성)
-          if (apiCompatibilityMap[nodeType]) {
-            //console.log(`노드 타입 매핑 적용: ${nodeType} -> ${apiCompatibilityMap[nodeType]}`);
-            nodeType = apiCompatibilityMap[nodeType];
-          }
-          
-          // 한글 노드 라벨 매핑
-          const koreanToApiTypeMap = {
-            '미디언 필터': 'median_filter',
-            '미디안 필터': 'median_filter',
-            '감마 보정': 'gamma',
-            '히스토그램 평활화': 'histogram_equalization',
-            '히스토그램': 'histogram_equalization',
-            '가우시안 블러': 'gaussian_blur',
-            '블러': 'gaussian_blur',
-            '비등방성 확산': 'anisotropic_diffusion',
-            '비등방성 필터': 'anisotropic_diffusion',
-            '비등방성 확산 필터': 'anisotropic_diffusion',
-            '비등방성': 'anisotropic_diffusion',
-            '엣지 검출': 'edge',
-            '엣지': 'edge',
-            '이진화': 'threshold',
-            '밝기 조정': 'brightness',
-            '밝기': 'brightness',
-            '대비 조정': 'contrast',
-            '대비': 'contrast',
-            '객체 검출': 'object_detection',
-            '객체 감지': 'object_detection'
-          };
-          
-          // 라벨이 한글인 경우 API 타입으로 변환
-          if (node.label && koreanToApiTypeMap[node.label]) {
-            //console.log(`한글 라벨 매핑 적용: ${node.label} -> ${koreanToApiTypeMap[node.label]}`);
-            nodeType = koreanToApiTypeMap[node.label];
-          } else if (nodeData.label && koreanToApiTypeMap[nodeData.label]) {
-            //console.log(`데이터 한글 라벨 매핑 적용: ${nodeData.label} -> ${koreanToApiTypeMap[nodeData.label]}`);
-            nodeType = koreanToApiTypeMap[nodeData.label];
-          }
-          
-          //console.log(`최종 변환된 노드 타입:`, nodeType);
-          
-          // 라벨 처리
-          let label = '';
-          if (nodeData.label) {
-            label = nodeData.label;
-          } else if (node.label) {
-            label = node.label;
-          } else if (node.name) {
-            label = node.name;
-          } else {
-            // 라벨이 없으면 타입에서 생성
-            label = nodeType.charAt(0).toUpperCase() + nodeType.slice(1).replace(/_/g, ' ');
-          }
-          
-          return {
-            id: node.id || `node_${Math.random().toString(36).substring(2, 9)}`,
-            type: nodeType,
-            label: label,
-            data: nodeData
-          };
-        }),
+        nodes: nodes,
         edges: rawWorkflow.edges || [],
         originalWorkflow: rawWorkflow
       };
       
-      //console.log('MSA5로 전송할 워크플로우 데이터:', workflowData);
+      console.log('MSA5로 전송할 워크플로우 데이터 (기존 로직):', workflowData);
       
       // 이벤트 버스를 통해 MSA5에 워크플로우 데이터 전송
       if (window.MSAEventBus) {
         window.MSAEventBus.emit('load-workflow-to-msa5', workflowData);
-        //console.log('MSAEventBus를 통해 load-workflow-to-msa5 이벤트 발생');
+        console.log('MSAEventBus를 통해 load-workflow-to-msa5 이벤트 발생');
       }
       
       // 직접 DOM 이벤트로도 전송 (추가 안전장치)
@@ -818,7 +651,7 @@ export default {
         bubbles: true
       });
       document.dispatchEvent(event);
-      //console.log('DOM 이벤트를 통해 load-workflow-to-msa5 이벤트 발생');
+      console.log('DOM 이벤트를 통해 load-workflow-to-msa5 이벤트 발생');
       
       // 팝업 닫기
       this.close();

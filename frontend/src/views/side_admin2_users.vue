@@ -378,7 +378,7 @@ export default {
   },
   created() {
     // 기본 로그만 남기기
-    console.log("UserManagement component created - SQL debugging enabled");
+    // console.log("UserManagement component created - SQL debugging enabled");
     // 초기 API 호출 제거 (접속 시 자동 호출하지 않음)
     // this.fetchUsers();
   },
@@ -388,7 +388,7 @@ export default {
       this.error = false;
       
       try {
-        console.log("SQL DEBUG: Fetching users from /api/users/users-noauth (인증 없는 엔드포인트)");
+        // console.log("SQL DEBUG: Fetching users from /api/users/users-noauth (인증 없는 엔드포인트)");
         
         // 인증이 필요 없는 엔드포인트 사용
         const response = await axios.get('http://localhost:8000/api/users/users-noauth', {
@@ -398,7 +398,7 @@ export default {
           }
         });
         
-        console.log("SQL DEBUG: Response received, status:", response.status);
+        // console.log("SQL DEBUG: Response received, status:", response.status);
         
         if (response.data.status === 'success') {
           this.users = response.data.users.map(user => {
@@ -408,21 +408,21 @@ export default {
             };
           });
           this.filterUsers();
-          console.log(`SQL DEBUG: Loaded ${this.users.length} users`);
+          // console.log(`SQL DEBUG: Loaded ${this.users.length} users`);
         } else {
           this.error = true;
           this.errorMessage = '사용자 목록을 불러오는데 실패했습니다.';
-          console.error("API error: Response not successful");
+          // console.error("API error: Response not successful");
         }
       } catch (error) {
-        console.error('SQL DEBUG ERROR:', error.message);
+        // console.error('SQL DEBUG ERROR:', error.message);
         if (error.response) {
-          console.error('Error status:', error.response.status);
-          console.error('Error details:', error.response.data);
+          // console.error('Error status:', error.response.status);
+          // console.error('Error details:', error.response.data);
         } else if (error.request) {
-          console.error('No response received:', error.request);
+          // console.error('No response received:', error.request);
         } else {
-          console.error('Error in request setup:', error);
+          // console.error('Error in request setup:', error);
         }
         
         this.error = true;
@@ -490,7 +490,7 @@ export default {
       this.loading = true;
       
       try {
-        console.log("함수 호출: updateUser() - 인증 없는 엔드포인트 사용");
+        // console.log("함수 호출: updateUser() - 인증 없는 엔드포인트 사용");
         
         // 사용자 정보 업데이트
         const userData = {
@@ -504,11 +504,11 @@ export default {
           userData.password = this.editingUser.password;
         }
         
-        console.log("API Request - Update User:", {
-          url: `http://localhost:8000/api/users/user-noauth/${this.editingUser.id}`,
-          method: 'put',
-          userId: this.editingUser.id
-        });
+        // console.log("API Request - Update User:", {
+        //   url: `http://localhost:8000/api/users/user-noauth/${this.editingUser.id}`,
+        //   method: 'put',
+        //   userId: this.editingUser.id
+        // });
         
         // 인증 없는 엔드포인트 사용
         const response = await axios.put(`http://localhost:8000/api/users/user-noauth/${this.editingUser.id}`, userData, {
@@ -526,7 +526,7 @@ export default {
           throw new Error('업데이트 실패: 서버 응답이 올바르지 않습니다.');
         }
       } catch (error) {
-        console.error('Failed to update user:', error);
+        // console.error('Failed to update user:', error);
         
         // 오류 메시지 정리
         let errorMsg = '사용자 정보 업데이트에 실패했습니다.';
@@ -543,8 +543,8 @@ export default {
       this.loading = true;
       
       try {
-        console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
-        console.log("함수 호출: addUser() - 인증 없는 엔드포인트 사용");
+        // console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
+        // console.log("함수 호출: addUser() - 인증 없는 엔드포인트 사용");
         
         // JSON 형식으로 데이터 준비
         const userData = {
@@ -557,18 +557,18 @@ export default {
         };
         
         // 사용자 추가 정보 로깅
-        console.log("API 요청 정보:");
-        console.log("- 엔드포인트: /api/users/user-noauth (인증 없음)");
-        console.log("- 메서드: POST");
-        console.log("- 요청 데이터:");
-        console.log("  username:", this.newUser.username);
-        console.log("  email:", this.newUser.email);
-        console.log("  full_name:", this.newUser.fullName);
-        console.log("  department:", this.newUser.department);
-        console.log("  permission:", this.newUser.permission);
-        console.log("  password: [보안 정보 - 표시하지 않음]");
-        console.log("- 예상 SQL 쿼리: INSERT INTO users (username, email, full_name, department, permission, hashed_password) VALUES (?, ?, ?, ?, ?, ?)");
-        console.log("요청 시작 시간:", new Date().toISOString());
+        // console.log("API 요청 정보:");
+        // console.log("- 엔드포인트: /api/users/user-noauth (인증 없음)");
+        // console.log("- 메서드: POST");
+        // console.log("- 요청 데이터:");
+        // console.log("  username:", this.newUser.username);
+        // console.log("  email:", this.newUser.email);
+        // console.log("  full_name:", this.newUser.fullName);
+        // console.log("  department:", this.newUser.department);
+        // console.log("  permission:", this.newUser.permission);
+        // console.log("  password: [보안 정보 - 표시하지 않음]");
+        // console.log("- 예상 SQL 쿼리: INSERT INTO users (username, email, full_name, department, permission, hashed_password) VALUES (?, ?, ?, ?, ?, ?)");
+        // console.log("요청 시작 시간:", new Date().toISOString());
         
         // API 호출 - 인증 필요 없는 엔드포인트 사용
         const response = await axios.post('http://localhost:8000/api/users/user-noauth', userData, {
@@ -578,20 +578,20 @@ export default {
           }
         });
         
-        console.log("요청 완료 시간:", new Date().toISOString());
-        console.log("응답 상태 코드:", response.status);
-        console.log("응답 데이터:", JSON.stringify(response.data, null, 2));
-        console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
+        // console.log("요청 완료 시간:", new Date().toISOString());
+        // console.log("응답 상태 코드:", response.status);
+        // console.log("응답 데이터:", JSON.stringify(response.data, null, 2));
+        // console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
         
         alert('사용자가 성공적으로 추가되었습니다.');
         this.showAddUserModal = false;
         this.resetNewUserForm();
         this.fetchUsers();
       } catch (error) {
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
-        console.error('Failed to add user:', error);
-        console.error('Error details:', error.response?.data || error.message);
-        console.error('Error status:', error.response?.status);
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
+        // console.error('Failed to add user:', error);
+        // console.error('Error details:', error.response?.data || error.message);
+        // console.error('Error status:', error.response?.status);
         
         let errorMsg = '사용자 추가에 실패했습니다.';
         if (error.response && error.response.data && error.response.data.detail) {
@@ -609,12 +609,12 @@ export default {
         const token = localStorage.getItem('token');
         const newStatus = !user.is_active;
         
-        console.log("API Request - Toggle Status:", {
-          url: `http://localhost:8000/api/users/user/${user.id}`,
-          method: 'put',
-          userId: user.id,
-          newStatus: newStatus
-        });
+        // console.log("API Request - Toggle Status:", {
+        //   url: `http://localhost:8000/api/users/user/${user.id}`,
+        //   method: 'put',
+        //   userId: user.id,
+        //   newStatus: newStatus
+        // });
         
         const response = await axios({
           method: 'put',
@@ -633,7 +633,7 @@ export default {
           throw new Error('상태 변경 실패: 서버 응답이 올바르지 않습니다.');
         }
       } catch (error) {
-        console.error('Failed to toggle user status:', error);
+        // console.error('Failed to toggle user status:', error);
         
         // 오류 메시지 정리
         let errorMsg = '사용자 상태 변경에 실패했습니다.';
@@ -656,13 +656,13 @@ export default {
       this.loading = true;
       
       try {
-        console.log("함수 호출: deleteUser() - 인증 없는 엔드포인트 사용");
+        // console.log("함수 호출: deleteUser() - 인증 없는 엔드포인트 사용");
         
-        console.log("API Request - Delete User:", {
-          url: `http://localhost:8000/api/users/user-noauth/${this.userToDelete.id}`,
-          method: 'delete',
-          userId: this.userToDelete.id
-        });
+        // console.log("API Request - Delete User:", {
+        //   url: `http://localhost:8000/api/users/user-noauth/${this.userToDelete.id}`,
+        //   method: 'delete',
+        //   userId: this.userToDelete.id
+        // });
         
         // 인증 없는 엔드포인트 사용
         const response = await axios.delete(`http://localhost:8000/api/users/user-noauth/${this.userToDelete.id}`, {
@@ -681,7 +681,7 @@ export default {
           throw new Error('삭제 실패: 서버 응답이 올바르지 않습니다.');
         }
       } catch (error) {
-        console.error('Failed to delete user:', error);
+        // console.error('Failed to delete user:', error);
         
         // 오류 메시지 정리
         let errorMsg = '사용자 삭제에 실패했습니다.';

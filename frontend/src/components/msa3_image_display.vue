@@ -2,8 +2,8 @@
   <div class="msa3-container">
     <div class="card-header">
       <div class="header-left">
-        <i class="fas fa-image"></i>
-        <span>이미지 상세 정보</span>
+        <i class="fas fa-images"></i>
+        <span>Image Display Assistant</span>
       </div>
     </div>
     
@@ -25,7 +25,7 @@
           <h4>선택된 이미지: {{ getCleanFilename(mainImage.filename) }}</h4>
           <div class="image-tag" :class="{ 'tag-iapp': isIAppTag(mainImage.filename), 'tag-analysis': !isIAppTag(mainImage.filename) }">
             <i :class="isIAppTag(mainImage.filename) ? 'fas fa-cogs' : 'fas fa-chart-bar'"></i>
-            <span>{{ isIAppTag(mainImage.filename) ? 'I-app' : 'Analysis' }}</span>
+            <span>{{ isIAppTag(mainImage.filename) ? 'I-TAP' : 'Analysis' }}</span>
           </div>
           <div class="image-wrapper" @click="showImageDetailsPopup(mainImage.filename)">
             <img v-if="mainImage" :src="mainImage.url" :alt="mainImage.filename" @error="handleImageError" />
@@ -34,7 +34,7 @@
         
         <div class="similar-images">
           <div class="similar-section-headers">
-            <h4 class="similar-section-title iapp-title">I-app 유사 이미지</h4>
+            <h4 class="similar-section-title iapp-title">I-TAP 유사 이미지</h4>
             <h4 class="similar-section-title analysis-title">Analysis 유사 이미지</h4>
           </div>
           
@@ -285,35 +285,6 @@ export default {
       return filename.includes('_before');
     },
     
-    // 전역 공유 데이터 확인
-    checkGlobalSharedData() {
-      try {
-        if (typeof window !== 'undefined' && window.MSASharedData) {
-          // 현재 이미지 데이터 확인
-          if (window.MSASharedData.currentImage && 
-              (!this.mainImage || 
-               this.mainImage.filename !== window.MSASharedData.currentImage.filename)) {
-            this.handleImageSelected(window.MSASharedData.currentImage);
-          }
-          
-          // 유사 이미지 데이터 확인
-          if (window.MSASharedData.similarImages && 
-              window.MSASharedData.similarImages.length > 0) {
-            this.handleSimilarImagesFound(window.MSASharedData.similarImages);
-          }
-        } else {
-          // 전역 객체가 없으면 생성
-          if (typeof window !== 'undefined' && !window.MSASharedData) {
-            window.MSASharedData = {
-              currentImage: null,
-              similarImages: []
-            };
-          }
-        }
-      } catch (error) {
-        console.error('MSA3: 전역 데이터 확인 중 오류:', error);
-      }
-    },
     
     // MSA2에서 보내는 커스텀 이벤트 핸들러
     handleMSA2Event(event) {
@@ -337,9 +308,10 @@ export default {
         if (event.detail) {
           const { mainImage, similarImages } = event.detail;
           
-          // 메인 이미지 설정
+          // 메인 이미지 설정 - MSA1에서 온 이미지는 새로운 이미지이므로 특별 처리
           if (mainImage) {
-            this.handleImageSelected(mainImage);
+            // MSA1에서 온 메인 이미지는 fromMSA1 플래그를 true로 설정하여 처리
+            this.handleImageSelected({ ...mainImage, fromMSA1: true });
           }
           
           // 유사 이미지 설정
@@ -347,7 +319,7 @@ export default {
             this.handleSimilarImagesFound(similarImages);
           }
           
-          console.log('[MSA3] MSA1 유사 이미지 데이터 처리 완료');
+          // console.log('[MSA3] MSA1 유사 이미지 데이터 처리 완료');
         }
       } catch (error) {
         console.error('[MSA3] MSA1 유사 이미지 데이터 처리 오류:', error);
@@ -360,8 +332,9 @@ export default {
         return;
       }
       
-      // 유효하지 않은 이미지 필터링
+      // 유효하지 않은 이미지 필터링 - 'image' 추가
       if (image.filename === 'main' || 
+          image.filename === 'image' ||
           (image.filename && (image.filename.includes('localhost') || 
                            image.filename.includes('undefined') || 
                            image.filename.includes('null')))) {
@@ -388,6 +361,7 @@ export default {
       if (image && image.filename && 
           !image.filename.includes('localhost') && 
           image.filename !== 'main' && 
+          image.filename !== 'image' &&
           !image.filename.includes('undefined') && 
           !image.filename.includes('null')) {
         this.fetchWorkflowInfo(image.filename);
@@ -420,7 +394,7 @@ export default {
         // 태그 타입 확인 (파일명으로 추론, 백엔드 태그 값 우선)
         let tagType = img.tag_type;
         if (!tagType) {
-          tagType = this.isIAppTag(img.filename) ? 'I-app' : 'Analysis';
+          tagType = this.isIAppTag(img.filename) ? 'I-TAP' : 'Analysis';
         }
         
         return {
@@ -433,13 +407,13 @@ export default {
       
       // 태그별로 이미지 분류 (명시적으로 태그 타입으로 필터링)
       const iappImages = processedImages.filter(img => 
-        img.tag_type === 'I-app' || this.isIAppTag(img.filename)
+        img.tag_type === 'I-TAP' || this.isIAppTag(img.filename)
       );
       const analysisImages = processedImages.filter(img => 
-        img.tag_type === 'Analysis' || (!this.isIAppTag(img.filename) && img.tag_type !== 'I-app')
+        img.tag_type === 'Analysis' || (!this.isIAppTag(img.filename) && img.tag_type !== 'I-TAP')
       );
       
-      //console.log(`MSA3: 태그별 분류 - I-app: ${iappImages.length}개, Analysis: ${analysisImages.length}개`);
+      //console.log(`MSA3: 태그별 분류 - I-TAP: ${iappImages.length}개, Analysis: ${analysisImages.length}개`);
       
       // 유사도 순으로 정렬
       iappImages.sort((a, b) => b.similarity - a.similarity);
@@ -470,6 +444,12 @@ export default {
         // 각 Analysis 이미지의 txt 파일 내용을 가져옴 (백엔드 프록시를 통해 IIS 서버 8091 포트)
         for (const image of analysisImages) {
           try {
+            // MSA1에서 온 이미지는 새로운 이미지이므로 txt 파일이 존재하지 않음 - 스킵
+            if (image.fromMSA1) {
+              console.log(`MSA3: MSA1에서 온 새로운 이미지이므로 txt 파일 요청을 건너뜁니다: ${image.filename}`);
+              continue;
+            }
+            
             // 유효하지 않은 파일명 필터링
             if (!image.filename || 
                 image.filename === 'image' || 
@@ -483,11 +463,11 @@ export default {
 
             const imageName = image.filename.split('.')[0];
             
-            // 이미지명이 너무 짧거나 의미없는 경우도 스킵
-            if (!imageName || imageName.length < 2) {
-              console.warn(`MSA3: Skipping too short image name: ${imageName}`);
-              continue;
-            }
+            // // 이미지명이 너무 짧거나 의미없는 경우도 스킵
+            // if (!imageName || imageName.length < 2) {
+            //   console.warn(`MSA3: Skipping too short image name: ${imageName}`);
+            //   continue;
+            // }
 
             // 백엔드 프록시를 통해 IIS 서버의 txt 파일 가져오기
             const proxyUrl = `http://localhost:8000/api/imagestorage/fetch-txt/${imageName}`;
@@ -513,10 +493,10 @@ export default {
                 // console.log(`MSA3: Successfully fetched txt for ${image.filename} via backend proxy`);
               }
             } else {
-              console.warn(`MSA3: Backend proxy returned ${response.status} for ${imageName}.txt`);
+              // console.warn(`MSA3: Backend proxy returned ${response.status} for ${imageName}.txt`);
             }
           } catch (error) {
-            console.warn(`MSA3: Failed to fetch txt via backend proxy for ${image.filename}:`, error);
+            // console.warn(`MSA3: Failed to fetch txt via backend proxy for ${image.filename}:`, error);
           }
         }
 
@@ -546,13 +526,21 @@ export default {
       if (image && image.filename && 
           !image.filename.includes('localhost') && 
           image.filename !== 'main' && 
+          image.filename !== 'image' &&
           !image.filename.includes('undefined') && 
           !image.filename.includes('null')) {
         this.fetchWorkflowInfo(image.filename);
       }
 
-      // Analysis 태그 이미지라면 MSA4로 전송
-      if (!this.isIAppTag(image.filename)) {
+      // MSA1에서 온 이미지가 아닌 경우에만 Analysis 태그 이미지를 MSA4로 전송
+      if (!image.fromMSA1 && 
+          !this.isIAppTag(image.filename) && 
+          image.filename && 
+          image.filename !== 'image' && 
+          image.filename !== 'main' &&
+          !image.filename.includes('localhost') && 
+          !image.filename.includes('undefined') && 
+          !image.filename.includes('null')) {
         this.sendSingleAnalysisImageToMSA4(image);
       }
     },
@@ -560,6 +548,12 @@ export default {
     // 단일 Analysis 이미지의 txt 파일 내용을 MSA4로 전송
     async sendSingleAnalysisImageToMSA4(image) {
       try {
+        // MSA1에서 온 이미지는 새로운 이미지이므로 txt 파일이 존재하지 않음 - 스킵
+        if (image.fromMSA1) {
+          console.log(`MSA3: MSA1에서 온 새로운 이미지이므로 txt 파일 요청을 건너뜁니다: ${image.filename}`);
+          return;
+        }
+        
         // 유효하지 않은 파일명 필터링
         if (!image.filename || 
             image.filename === 'image' || 
@@ -575,7 +569,7 @@ export default {
         
         // 이미지명이 너무 짧거나 의미없는 경우도 스킵
         if (!imageName || imageName.length < 2) {
-          console.warn(`MSA3: Skipping too short single image name: ${imageName}`);
+          // console.warn(`MSA3: Skipping too short single image name: ${imageName}`);
           return;
         }
 
@@ -606,10 +600,10 @@ export default {
             // console.log(`MSA3: Sent single analysis text content to MSA4 for ${image.filename} via backend proxy`);
           }
         } else {
-          console.warn(`MSA3: Backend proxy returned ${response.status} for single txt fetch: ${imageName}.txt`);
+          // console.warn(`MSA3: Backend proxy returned ${response.status} for single txt fetch: ${imageName}.txt`);
         }
       } catch (error) {
-        console.warn(`MSA3: Failed to fetch single txt via backend proxy for ${image.filename}:`, error);
+        // console.warn(`MSA3: Failed to fetch single txt via backend proxy for ${image.filename}:`, error);
       }
     },
     
@@ -645,6 +639,7 @@ export default {
       if (this.isIAppTag(image.filename) && image.filename && 
           !image.filename.includes('localhost') && 
           image.filename !== 'main' && 
+          image.filename !== 'image' &&
           !image.filename.includes('undefined') && 
           !image.filename.includes('null')) {
         this.fetchWorkflowInfo(image.filename);
@@ -668,8 +663,11 @@ export default {
       if (!filename) return '';
       
       // 유효하지 않은 이미지 파일명 필터링
-      if (filename === 'main' || filename.includes('localhost') || 
-          filename.includes('undefined') || filename.includes('null')) {
+      if (filename === 'main' || 
+          filename === 'image' ||
+          filename.includes('localhost') || 
+          filename.includes('undefined') || 
+          filename.includes('null')) {
         console.warn(`MSA3: 유효하지 않은 이미지 파일명: ${filename}, 기본 이미지 URL 반환`);
         return 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgd2lkdGg9IjEwMCIgaGVpZ2h0PSIxMDAiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2NjY2NjYyIgc3Ryb2tlLXdpZHRoPSIyIj48cGF0aCBkPSJNMTAgMTQgMTIgMTEuNSAxNCAxNCIvPjxwYXRoIGQ9Ik0yMCAxM3YtNGExIDEgMCAwIDAtMS0xSDVhMSAxIDAgMCAwLTEgMXY0Ii8+PHBhdGggZD0iTTEgMTd2NGExIDEgMCAwIDAgMSAxaDIwYTEgMSAwIDAgMCAxLTF2LTRhMSAxIDAgMCAwLTEtMUgyYTEgMSAwIDAgMC0xIDF6Ii8+PC9zdmc+';
       }
@@ -689,15 +687,6 @@ export default {
       // API 서버를 통해 이미지 요청 (MSA2와 동일한 경로 사용)
       return `http://localhost:8000/api/imageanalysis/images/${imageFilename}`;
     },
-    
-    // 후처리 이미지 이름 생성
-    getAfterImageName(filename) {
-      if (!filename) return '';
-      const ext = filename.split('.').pop();
-      const baseName = filename.substring(0, filename.lastIndexOf('.'));
-      return `${baseName}_after.${ext}`;
-    },
-    
     // 파일명 정리
     getCleanFilename(filename) {
       if (!filename) return '';
@@ -714,42 +703,6 @@ export default {
         return Math.round(value);
       }
       return 0;
-    },
-    
-    // 날짜 포맷팅
-    formatDate(dateString) {
-      if (!dateString) return '';
-      try {
-        const date = new Date(dateString);
-        return date.toLocaleString('ko-KR', {
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit'
-        });
-      } catch (e) {
-        console.error('Date formatting error:', e);
-        return dateString;
-      }
-    },
-    
-    // 노드 타입에 따른 아이콘 클래스
-    getNodeIcon(type) {
-      const iconMap = {
-        'resize': 'fas fa-expand',
-        'crop': 'fas fa-crop',
-        'rotate': 'fas fa-sync',
-        'filter': 'fas fa-filter',
-        'blur': 'fas fa-eye-slash',
-        'sharpen': 'fas fa-sliders-h',
-        'contrast': 'fas fa-adjust',
-        'brightness': 'fas fa-sun',
-        'color': 'fas fa-palette',
-        'custom': 'fas fa-cogs'
-      };
-      
-      return iconMap[type.toLowerCase()] || 'fas fa-cogs';
     },
     
     // 팝업 닫기
@@ -776,7 +729,7 @@ export default {
           workflowStatus: 'loading'
         };
       } else {
-        console.warn('MSA3: selectedImage is null when fetching workflow');
+        // console.warn('MSA3: selectedImage is null when fetching workflow');
       }
       
       // I-app 태그 이미지인지 확인
@@ -808,11 +761,6 @@ export default {
       
       // 직접 워크플로우 이름만 사용하는 방식으로 변경 (MongoDB workflow_name 필드와 일치)
       const apiUrl = `http://localhost:8000/api/workflow/by-image/${encodedSearchFilename}`;
-      
-      //console.log(`MSA3: Workflow API URL: ${apiUrl}`);
-      //console.log(`MSA3: Workflow search filename (cleaned): ${searchFilename}`);
-      //console.log(`MSA3: Encoded search filename: ${encodedSearchFilename}`);
-      //console.log(`MSA3: Filename bytes: ${this.getStringBytes(searchFilename)}`);
       
       // API 요청 - I-app 이미지 워크플로우 정보
       //console.log('MSA3: Sending fetch request to API');
@@ -856,70 +804,86 @@ export default {
           //console.log('MSA3: Response OK, parsing JSON');
           return response.json()
             .then(data => {
-              //console.log('MSA3: JSON parse successful', data);
-              return data;
+              console.log('MSA3: 실제 워크플로우 데이터 수신:', data);
+              console.log('MSA3: 데이터 타입:', typeof data);
+              console.log('MSA3: 데이터 구조 키:', data ? Object.keys(data) : 'null');
+              
+              if (data && typeof data === 'object') {
+                console.log('MSA3: 상세 데이터 구조:');
+                Object.keys(data).forEach(key => {
+                  const value = data[key];
+                  console.log(`  - ${key}: ${typeof value}`, Array.isArray(value) ? `(배열, 길이: ${value.length})` : '');
+                  if (key === 'workflow' && value) {
+                    console.log('    workflow 내부 구조:', Object.keys(value));
+                  }
+                  if (key === 'elements' && Array.isArray(value)) {
+                    console.log('    elements 배열 내용:', value);
+                  }
+                });
+              }
+              
+              // 응답이 HTTP 오류 객체인 경우
+              if (data && data.status && data.status >= 400) {
+                console.error(`MSA3: API returned error response: ${data.status}`);
+                if (this.selectedImage) {
+                  this.selectedImage = {
+                    ...this.selectedImage,
+                    isLoading: false,
+                    workflowStatus: 'error',
+                    workflow: null
+                  };
+                }
+                return;
+              }
+              
+              // 워크플로우 정보 업데이트
+              if (this.selectedImage && data && (data.workflow || data)) {
+                console.log('MSA3: selectedImage 업데이트 시작');
+                const workflowData = data.workflow || data;
+                console.log('MSA3: 사용할 워크플로우 데이터:', workflowData);
+                console.log('MSA3: 워크플로우 데이터 구조:', Object.keys(workflowData));
+                
+                this.selectedImage = {
+                  ...this.selectedImage,
+                  workflow: workflowData,
+                  isLoading: false,
+                  workflowStatus: 'found'
+                };
+                console.log('MSA3: selectedImage 업데이트 완료:', this.selectedImage.workflow);
+              } else {
+                console.error('MSA3: Invalid workflow data received or selectedImage is null');
+                console.error('MSA3: selectedImage 상태:', this.selectedImage ? '존재함' : 'null');
+                if (data) {
+                  console.error('MSA3: 받은 데이터 구조:', Object.keys(data));
+                  console.error('MSA3: 전체 데이터:', data);
+                }
+                if (this.selectedImage) {
+                  this.selectedImage = {
+                    ...this.selectedImage,
+                    isLoading: false,
+                    workflowStatus: 'error'
+                  };
+                }
+              }
             })
-            .catch(parseError => {
-              console.error('MSA3: JSON parse error', parseError);
-              throw new Error(`JSON 파싱 오류: ${parseError.message}`);
+            .catch(error => {
+              // 두 번째 시도까지 실패한 경우
+              console.error('MSA3: Error fetching workflow info:', error);
+              
+              // 이미 404 처리가 되지 않은 경우만 상태 업데이트
+              if (this.selectedImage && this.selectedImage.workflowStatus !== 'not_found') {
+                console.error('MSA3: Setting error state for workflow fetch');
+                this.selectedImage = {
+                  ...this.selectedImage,
+                  isLoading: false,
+                  workflowStatus: 'error',
+                  workflow: null  // 명시적으로 null 설정
+                };
+              }
+            })
+            .finally(() => {
+              //console.log('MSA3: ========== WORKFLOW INFO FETCH END ==========');
             });
-        })
-        .then(data => {
-          //console.log('MSA3: Workflow data received:', data);
-          
-          // API에서 명시적으로 is_demo_data 필드가 있는지 확인
-          const isDemoData = data && data.is_demo_data === true;
-          
-          if (isDemoData) {
-            console.warn('MSA3: Server returned demo data, not using it');
-            if (this.selectedImage) {
-              this.selectedImage = {
-                ...this.selectedImage,
-                workflowStatus: 'not_found',
-                workflow: null
-              };
-            }
-            return;
-          }
-          
-          // 응답이 HTTP 오류 객체인 경우
-          if (data && data.status && data.status >= 400) {
-            console.error(`MSA3: API returned error response: ${data.status}`);
-            if (this.selectedImage) {
-              this.selectedImage = {
-                ...this.selectedImage,
-                isLoading: false,
-                workflowStatus: 'error',
-                workflow: null
-              };
-            }
-            return;
-          }
-          
-          // 워크플로우 정보 업데이트
-          if (this.selectedImage && data && (data.workflow || data)) {
-            //console.log('MSA3: Updating selectedImage with workflow data');
-            const workflowData = data.workflow || data;
-            //console.log('MSA3: Workflow data structure:', Object.keys(workflowData));
-            
-            this.selectedImage = {
-              ...this.selectedImage,
-              workflow: workflowData,
-              isLoading: false,
-              workflowStatus: 'found'
-            };
-            //console.log('MSA3: Workflow data updated in selectedImage', this.selectedImage.workflow);
-          } else {
-            console.error('MSA3: Invalid workflow data received or selectedImage is null');
-            if (data) console.error('MSA3: Data structure:', Object.keys(data));
-            if (this.selectedImage) {
-              this.selectedImage = {
-                ...this.selectedImage,
-                isLoading: false,
-                workflowStatus: 'error'
-              };
-            }
-          }
         })
         .catch(error => {
           // 두 번째 시도까지 실패한 경우
@@ -939,31 +903,6 @@ export default {
         .finally(() => {
           //console.log('MSA3: ========== WORKFLOW INFO FETCH END ==========');
         });
-    },
-    
-    // 바이트 배열을 문자열로 변환
-    getStringBytes(str) {
-      try {
-        // 문자열을 UTF-8 인코딩된 바이트 배열로 변환
-        const encoder = new TextEncoder();
-        const bytes = encoder.encode(str);
-        
-        // 바이트 배열을 16진수로 표시
-        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' ');
-      } catch (e) {
-        return `인코딩 오류: ${e.message}`;
-      }
-    },
-    
-    // MSA5에 워크플로우 로드
-    loadWorkflowToMSA5(workflow) {
-      if (!workflow) return;
-      
-      //console.log('MSA3: Loading workflow to MSA5:', workflow);
-      if (this.$eventBus) {
-        this.$eventBus.emit('load-workflow-to-msa5', workflow);
-      }
-      this.closeImagePopup();
     },
     
     // 레이아웃 초기화 함수
@@ -1020,12 +959,25 @@ export default {
       }
     },
     handleAnalyzeRequest(data) {
-      // Emit event to parent to forward data to MSA4
-      this.$emit('analyze-image', {
-        imageName: data.imageName,
-        textUrl: data.textUrl,
-        imageUrl: this.getImageUrl(data.imageName)
-      });
+      // MSA4로 단일 이미지 분석 데이터 직접 전송
+      try {
+        if (data.textContent && data.imageName) {
+          // 부모 컴포넌트로 이벤트 발생하여 MSA4로 전송
+          this.$emit('send-analysis-data', {
+            type: 'single',
+            data: [{
+              imageName: data.imageName,
+              textContent: data.textContent,
+              similarity: 100 // 직접 선택한 이미지이므로 100%
+            }]
+          });
+          console.log(`MSA3: Analysis popup에서 단일 이미지 분석 데이터를 MSA4로 전송: ${data.imageName}`);
+        } else {
+          console.warn('MSA3: Analysis popup에서 받은 데이터가 불완전합니다:', data);
+        }
+      } catch (error) {
+        console.error('MSA3: Analysis popup 데이터 처리 중 오류:', error);
+      }
     }
   }
 }
@@ -1053,7 +1005,7 @@ export default {
 }
 
 .card-header {
-  background-color: #4a76fd;
+  background-color: #6c5ce7;
   color: white;
   padding: 8px 12px;
   font-weight: bold;

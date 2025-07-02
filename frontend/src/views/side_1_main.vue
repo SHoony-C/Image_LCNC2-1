@@ -1,12 +1,12 @@
 <template>
   <div class="main-view">
+    <!-- AppHeader를 최상단으로 이동하여 다른 페이지들과 통일화 -->
+    <AppHeader pageTitle="I-Tap Main" />
+    
     <!-- Server connection error component -->
     <ServerConnectionError v-if="serverError" />
     
     <div v-else class="main-container">
-      <!-- 기존 사용자 아이콘 섹션 제거하고 AppHeader 추가 -->
-      <AppHeader pageTitle="I-App Main" />
-      
       <div class="mobile-header">
         <button class="hamburger-btn" @click="toggleSidebar">
           <i class="fas fa-bars"></i>

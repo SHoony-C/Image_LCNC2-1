@@ -1,7 +1,12 @@
 <template>
   <div class="msa-component" :class="{ active: isActive }" @paste="handlePaste">
-    <div class="component-header">
-      <h3>MSA1</h3>
+    <div class="card-header">
+      <div class="header-left">
+        <i class="fas fa-cloud-upload-alt"></i>
+        <span>Image Import Panel
+
+</span>
+      </div>
       <div class="status-badge" :class="status">
         {{ statusText }}
       </div>
@@ -117,12 +122,12 @@ export default {
             }
           })
           document.dispatchEvent(msa4Event)
-          console.log('[MSA1] 이미지가 MSA4로 전송됨:', file.name)
+          // console.log('[MSA1] 이미지가 MSA4로 전송됨:', file.name)
           
           // 로그 저장 - MSA4 전송
-          LogService.logAction('send_to_msa4', {
-            filename: file.name
-          })
+          // LogService.logAction('send_to_msa4', {
+          //   filename: file.name
+          // })
           
           // MSA5로 이미지 전송
           const msa5Event = new CustomEvent('msa1-to-msa5-image', { 
@@ -132,19 +137,19 @@ export default {
             }
           })
           document.dispatchEvent(msa5Event)
-          console.log('[MSA1] 이미지가 MSA5로 전송됨:', file.name)
+          // console.log('[MSA1] 이미지가 MSA5로 전송됨:', file.name)
           
           // 로그 저장 - MSA5 전송
-          LogService.logAction('send_to_msa5', {
-            filename: file.name
-          })
+          // LogService.logAction('send_to_msa5', {
+          //   filename: file.name
+          // })
         }
         reader.readAsDataURL(file)
       }
     },
     async searchSimilarImages(filename, imageUrl) {
       try {
-        console.log('[MSA1] 유사 이미지 검색 시작:', filename)
+        // console.log('[MSA1] 유사 이미지 검색 시작:', filename)
         
         // Base64 데이터 추출 (data:image/...;base64, 부분 제거)
         const base64Data = imageUrl.split(',')[1]
@@ -166,7 +171,7 @@ export default {
         }
         
         const data = await response.json()
-        console.log('[MSA1] Base64 유사 이미지 검색 결과:', data)
+        // console.log('[MSA1] Base64 유사 이미지 검색 결과:', data)
         
         if (data.status === 'success' && data.similar_images) {
           // 최유사 이미지를 msa2로 전송 (새로 추가)
@@ -185,7 +190,7 @@ export default {
               }
             });
             document.dispatchEvent(msa2SimilarEvent);
-            console.log('[MSA1] 최유사 이미지가 MSA2로 전송됨:', mostSimilar.filename);
+            // console.log('[MSA1] 최유사 이미지가 MSA2로 전송됨:', mostSimilar.filename);
           }
           
           // MSA2에 유사 이미지 데이터 전송 (벡터 플롯용)
@@ -201,7 +206,7 @@ export default {
             }
           })
           document.dispatchEvent(msa2Event)
-          console.log('[MSA1] 유사 이미지 데이터가 MSA2로 전송됨')
+          // console.log('[MSA1] 유사 이미지 데이터가 MSA2로 전송됨')
           
           // MSA3에 유사 이미지 데이터 전송 (이미지 디스플레이용)
           const msa3Event = new CustomEvent('msa1-to-msa3-similar-images', {
@@ -214,7 +219,7 @@ export default {
             }
           })
           document.dispatchEvent(msa3Event)
-          console.log('[MSA1] 유사 이미지 데이터가 MSA3로 전송됨')
+          // console.log('[MSA1] 유사 이미지 데이터가 MSA3로 전송됨')
           
           // 로그 저장 - 유사 이미지 검색 성공
           LogService.logAction('similar_images_found', {
@@ -252,13 +257,15 @@ export default {
 .msa-component {
   background: rgba(255, 255, 255, 0.9);
   border-radius: 16px;
-  padding: 1.5rem;
   height: 100%;
   transition: all 0.3s ease;
   border: 1px solid rgba(124, 58, 237, 0.1);
   box-shadow: 
     0 4px 6px -1px rgba(0, 0, 0, 0.05),
     0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .msa-component:hover {
@@ -277,18 +284,39 @@ export default {
     0 4px 6px -2px rgba(124, 58, 237, 0.05);
 }
 
-.component-header {
+.card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  background: #6c5ce7;
+  color: white;
+  padding: 12px 16px;
+  height: 40px !important;
+  min-height: 40px;
+  max-height: 40px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px 8px 0 0;
+  flex: 0 0 48px;
+  flex-shrink: 0;
+  flex-grow: 0;
 }
 
-h3 {
-  font-size: 1.25rem;
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
-  color: #4c1d95;
-  margin: 0;
+}
+
+.header-left i {
+  font-size: 1.2rem;
+  color: white;
+}
+
+.header-left span {
+  font-size: 1rem;
+  font-weight: 600;
+  color: white;
 }
 
 .status-badge {
@@ -296,30 +324,39 @@ h3 {
   border-radius: 9999px;
   font-size: 0.875rem;
   font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .status-badge.pending {
-  background-color: rgba(124, 58, 237, 0.1);
-  color: #6d28d9;
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .status-badge.processing {
-  background-color: rgba(59, 130, 246, 0.1);
-  color: #2563eb;
+  background-color: rgba(59, 130, 246, 0.8);
+  color: white;
+  border-color: rgba(59, 130, 246, 1);
 }
 
 .status-badge.success {
-  background-color: rgba(16, 185, 129, 0.1);
-  color: #059669;
+  background-color: rgba(16, 185, 129, 0.8);
+  color: white;
+  border-color: rgba(16, 185, 129, 1);
 }
 
 .status-badge.warning {
-  background-color: rgba(245, 158, 11, 0.1);
-  color: #d97706;
+  background-color: rgba(245, 158, 11, 0.8);
+  color: white;
+  border-color: rgba(245, 158, 11, 1);
 }
 
 .content {
   text-align: left;
+  padding: 1.5rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .title {

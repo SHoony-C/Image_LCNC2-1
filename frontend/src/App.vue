@@ -6,8 +6,8 @@
           <img src="@/assets/logo.png" alt="Logo" />
         </div>
         <div class="loading-text">
-          <h2>I-App</h2>
-          <p>Initializing AI Dashboard...</p>
+          <h2>I-TAP</h2>
+          <p>Visualizing AI Imagination...</p>
         </div>
         <div class="loading-animation">
           <div class="loading-ring"></div>
@@ -276,6 +276,7 @@ html {
   height: 120px;
   position: relative;
   animation: float 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  margin-top: -1rem;
 }
 
 .loading-logo::before {
@@ -316,9 +317,11 @@ html {
 }
 
 .loading-text p {
-  color: var(--gray-300);
+  color: #a97ccf;
   font-size: 1.1rem;
   position: relative;
+  font-weight: 500;
+  text-shadow: 0 2px 8px rgba(162, 143, 143, 0.3);
 }
 
 .loading-text p::after {

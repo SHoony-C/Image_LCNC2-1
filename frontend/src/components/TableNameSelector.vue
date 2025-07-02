@@ -53,8 +53,9 @@
             @blur="checkLotWaferDuplicate"
             @input="resetLotWaferError"
           />
-          <div v-if="lotWaferMessage" class="lot-id-message" :class="{'error': lotWaferError}">
-            {{ lotWaferMessage }}
+          <div v-if="lotWaferMessage || isCheckingDuplicate" class="lot-id-message" :class="{'error': lotWaferError, 'checking': isCheckingDuplicate}">
+            <span v-if="isCheckingDuplicate">중복 확인 중...</span>
+            <span v-else>{{ lotWaferMessage }}</span>
           </div>
         </div>
       </div>
@@ -68,10 +69,11 @@
         </button>
         <button 
           class="select-btn" 
-          :disabled="!selectedTable || !lot_wafer || lotWaferError"
+          :disabled="!selectedTable || !lot_wafer || lotWaferError || isCheckingDuplicate"
           @click="confirmSelection"
         >
-          선택 완료
+          <span v-if="isCheckingDuplicate">확인 중...</span>
+          <span v-else>선택 완료</span>
         </button>
       </div>
     </div>
@@ -85,6 +87,10 @@ export default {
     show: {
       type: Boolean,
       default: false
+    },
+    measurementMode: {
+      type: String,
+      default: 'line'
     }
   },
   data() {
@@ -96,7 +102,8 @@ export default {
       isLoading: false,
       lot_wafer: '',
       lotWaferError: false,
-      lotWaferMessage: ''
+      lotWaferMessage: '',
+      isCheckingDuplicate: false
     }
   },
   watch: {
@@ -161,6 +168,9 @@ export default {
         return;
       }
       
+      // 중복 확인 중 상태 설정
+      this.isCheckingDuplicate = true;
+      
       // 사용자 경험을 해치지 않도록 404 오류 발생 시 체크를 건너뛰는 방식으로 변경
       try {
         // 중복 체크 API 호출 (이 API가 없어도 정상 동작하도록 수정)
@@ -171,7 +181,8 @@ export default {
           },
           body: JSON.stringify({
             lot_wafer: this.lot_wafer,
-            table_name: this.selectedTable.table_name
+            table_name: this.selectedTable.table_name,
+            measurement_type: this.measurementMode === 'defect' ? 'defect' : 'measurement'
           })
         });
         
@@ -186,7 +197,7 @@ export default {
           } else if (result.status === 'available') {
             // 사용 가능한 lot_wafer
             this.lotWaferError = false;
-            this.lotWaferMessage = '';
+            this.lotWaferMessage = '사용 가능한 Lot Wafer입니다.';
           } else {
             // 오류 발생
             this.lotWaferError = false;
@@ -204,6 +215,9 @@ export default {
         console.warn('Lot Wafer 중복 체크 오류 발생. 체크 없이 진행합니다:', error);
         this.lotWaferError = false;
         this.lotWaferMessage = '';
+      } finally {
+        // 중복 확인 완료 상태 설정
+        this.isCheckingDuplicate = false;
       }
     },
     
@@ -215,7 +229,7 @@ export default {
       }
     },
     
-    confirmSelection() {
+    async confirmSelection() {
       if (!this.selectedTable) {
         alert('테이블을 선택해주세요.');
         return;
@@ -229,6 +243,56 @@ export default {
       if (this.lotWaferError) {
         alert('이미 존재하는 Lot Wafer입니다. 다른 ID를 입력해주세요.');
         return;
+      }
+      
+      // 중복 확인이 진행 중인 경우 대기
+      if (this.isCheckingDuplicate) {
+        alert('중복 확인이 진행 중입니다. 잠시 기다려주세요.');
+        return;
+      }
+      
+      // 최종 중복 확인을 한 번 더 수행
+      this.isCheckingDuplicate = true;
+      try {
+        console.log('[TableNameSelector] 최종 중복 확인 시작');
+        
+        const response = await fetch('http://localhost:8000/api/msa6/check-lot-wafer', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            lot_wafer: this.lot_wafer,
+            table_name: this.selectedTable.table_name,
+            measurement_type: this.measurementMode === 'defect' ? 'defect' : 'measurement'
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          
+          if (result.status === 'duplicate') {
+            // 중복된 경우 저장 차단
+            alert(result.message || '이미 존재하는 Lot Wafer입니다. 다른 ID를 입력해주세요.');
+            this.lotWaferError = true;
+            this.lotWaferMessage = result.message || '이미 존재하는 Lot Wafer입니다.';
+            return;
+          } else if (result.status === 'available') {
+            // 사용 가능한 경우에만 진행
+            console.log('[TableNameSelector] 최종 중복 확인 완료: 사용 가능');
+          } else {
+            // 기타 오류
+            console.warn('[TableNameSelector] 중복 확인 결과가 예상과 다름:', result);
+          }
+        } else {
+          // API 응답이 실패한 경우 경고 후 진행 (기존 동작 유지)
+          console.warn('[TableNameSelector] 중복 확인 API 응답 실패, 진행합니다.');
+        }
+      } catch (error) {
+        // 네트워크 오류 등의 경우 경고 후 진행 (기존 동작 유지)
+        console.warn('[TableNameSelector] 중복 확인 중 오류 발생, 진행합니다:', error);
+      } finally {
+        this.isCheckingDuplicate = false;
       }
       
       const selectedData = {
@@ -445,6 +509,14 @@ export default {
 
 .lot-id-message.error {
   color: #e03131;
+}
+
+.lot-id-message.checking {
+  color: #868e96;
+}
+
+.lot-id-message:not(.error):not(.checking) {
+  color: #2b8a3e;
 }
 
 .selector-footer {

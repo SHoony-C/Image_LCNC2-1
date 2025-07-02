@@ -14,14 +14,14 @@
   .measurement-container {
     background: #f8f9fa;
     border-radius: 12px;
-    width: 95vw;
-    height: 95vh;
+    width: 98vw;
+    height: 98vh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
     position: relative;
-    height: 100%;
+    margin: 2vh 2vw;
   }
   
   .measurement-header {
@@ -229,8 +229,10 @@
     background: #fff;
     border-top: 1px solid #e9ecef;
     flex-shrink: 0;
-    position: static;
     margin-top: auto;
+    /* 불량감지 로딩 오버레이보다 높은 z-index 설정 */
+    position: relative;
+    z-index: 10000;
   }
   
   .results-bottom-bar .results-summary {
@@ -1083,3 +1085,614 @@
     border-left: 5px solid #c62828 !important;
   }
   
+  /* Start 버튼 스타일 추가 */
+  .start-btn {
+    background: rgba(76, 175, 80, 0.8);
+    border: 1px solid rgba(76, 175, 80, 0.9);
+    border-radius: 4px;
+    padding: 0.375rem 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #fff;
+    font-weight: 500;
+    margin-left: 0.25rem;
+    min-width: 4rem;
+  }
+  
+  .start-btn:hover:not(:disabled) {
+    background: rgba(76, 175, 80, 1);
+    border-color: rgba(76, 175, 80, 1);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  
+  .start-btn:disabled {
+    background: rgba(108, 117, 125, 0.6);
+    border-color: rgba(108, 117, 125, 0.6);
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  
+  .start-btn.active {
+    background: rgba(255, 193, 7, 0.9);
+    border-color: rgba(255, 193, 7, 1);
+    color: #212529;
+  }
+  
+  .start-btn i {
+    font-size: 0.9rem;
+    margin-right: 0.25rem;
+  }
+  
+  /* 스케일바 선택 팝업 스타일 - 이미지와 동일한 디자인으로 수정 */
+  .scale-choice-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999999;
+  }
+  
+  .scale-choice-popup.super-overlay {
+    z-index: 999999 !important;
+  }
+  
+  .scale-choice-content {
+    background: #fff;
+    border-radius: 8px;
+    padding: 2rem;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+    text-align: center;
+  }
+  
+  .scale-choice-content h3 {
+    color: #333;
+    margin-bottom: 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+  
+  .scale-choice-content p {
+    color: #666;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+  
+  .scale-choice-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+  }
+  
+  .choice-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1rem;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    background: #f8f9fa;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 120px;
+    text-decoration: none;
+    color: #495057;
+  }
+  
+  .choice-btn:hover {
+    border-color: #6f42c1;
+    background: #f8f6ff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(111, 66, 193, 0.1);
+  }
+  
+  .choice-btn i {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+    color: #6f42c1;
+  }
+  
+  .choice-btn span {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #333;
+  }
+  
+  .choice-btn small {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+    display: none; /* 이미지에는 설명 텍스트가 없으므로 숨김 */
+  }
+  
+  .magnification-btn:hover {
+    border-color: #17a2b8;
+  }
+  
+  .magnification-btn:hover i {
+    color: #17a2b8;
+  }
+  
+  .scalebar-btn:hover {
+    border-color: #6f42c1;
+  }
+  
+  .scalebar-btn:hover i {
+    color: #6f42c1;
+  }
+  
+  @media (max-width: 600px) {
+    .scale-choice-buttons {
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    
+    .choice-btn {
+      min-width: auto;
+    }
+    
+    .scale-choice-content {
+      padding: 1.5rem;
+    }
+  }
+  
+  .unit-selector {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    color: #fff;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    margin-left: 0.25rem;
+    min-width: 3rem;
+  }
+  
+  .unit-selector:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.15);
+  }
+  
+  .unit-selector option {
+    background: #7950f2;
+    color: #fff;
+  }
+  /* 이미지 전환 및 다운로드 버튼 스타일 */
+.image-toggle-controls {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 1000;
+}
+
+.toggle-image-btn,
+.download-image-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  min-width: 120px;
+  justify-content: center;
+}
+
+.toggle-image-btn:hover,
+.download-image-btn:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.toggle-image-btn:active,
+.download-image-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.toggle-image-btn i,
+.download-image-btn i {
+  font-size: 16px;
+}
+
+/* 다운로드 버튼 특별 스타일 */
+.download-image-btn {
+  background: rgba(76, 175, 80, 0.9);
+}
+
+.download-image-btn:hover {
+  background: rgba(76, 175, 80, 1);
+}
+
+/* 불량 감지 로딩 오버레이 스타일 */
+.defect-detection-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.1); /* 매우 투명하게 */
+  display: flex;
+  justify-content: center; /* 가운데 정렬 */
+  align-items: center;
+  z-index: 9999;
+  pointer-events: none; /* 클릭 이벤트 통과 */
+}
+
+.loading-content {
+  background: rgba(255, 255, 255, 0.9);
+  padding: 15px 20px; /* 작은 크기 */
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  max-width: 250px; /* 버튼을 위해 너비 증가 */
+  width: auto;
+  backdrop-filter: blur(10px);
+  pointer-events: auto; /* 버튼 클릭을 위해 이벤트 허용 */
+}
+
+.loading-spinner {
+  position: relative;
+  width: 40px; /* 작은 스피너 */
+  height: 40px;
+  margin: 0 auto 10px;
+}
+
+.spinner-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: 3px solid transparent;
+  border-top: 3px solid #007bff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-title {
+  color: #333;
+  font-size: 16px; /* 작은 폰트 */
+  font-weight: 600;
+  margin: 0 0 5px 0;
+}
+
+.loading-message {
+  color: #666;
+  font-size: 12px; /* 작은 폰트 */
+  margin: 0;
+  line-height: 1.3;
+}
+
+.loading-warning {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(255, 193, 7, 0.1);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  border-radius: 8px;
+  color: #856404;
+  font-size: 14px;
+}
+
+.loading-warning i {
+  color: #ffc107;
+  font-size: 16px;
+}
+
+/* 즉시 중단 버튼 스타일 */
+.emergency-stop-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin-top: 15px;
+  background: linear-gradient(135deg, #dc3545, #c82333);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+  min-width: 120px;
+}
+
+.emergency-stop-btn:hover {
+  background: linear-gradient(135deg, #c82333, #a71e2a);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+}
+
+.emergency-stop-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(220, 53, 69, 0.3);
+}
+
+.emergency-stop-btn i {
+  font-size: 16px;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+/* 감지 중 캔버스 비활성화 스타일 */
+.measurement-canvas.detecting-disabled {
+  pointer-events: none;
+  opacity: 0.7;
+  cursor: not-allowed !important;
+}
+
+/* 감지 중 버튼 비활성화 스타일 */
+.option-btn:disabled,
+.start-btn:disabled,
+.reset-btn:disabled,
+.close-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed !important;
+  pointer-events: none;
+}
+
+.option-btn:disabled:hover,
+.start-btn:disabled:hover,
+.reset-btn:disabled:hover,
+.close-btn:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* 선택 영역 불량 감지 버튼 깜빡이는 효과 */
+.blinking-button {
+  animation: blink 1.5s ease-in-out infinite;
+  box-shadow: 0 0 15px rgba(255, 193, 7, 0.6) !important;
+}
+
+.blinking-button:not(:disabled) {
+  background: linear-gradient(135deg, #ffc107, #ff9800) !important;
+  color: #333 !important;
+  font-weight: 600 !important;
+  border: 2px solid #ffc107 !important;
+}
+
+.blinking-button:not(:disabled):hover {
+  background: linear-gradient(135deg, #ff9800, #f57c00) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 0 20px rgba(255, 193, 7, 0.8) !important;
+}
+
+@keyframes blink {
+  0%, 100% { 
+    opacity: 1; 
+    box-shadow: 0 0 15px rgba(255, 193, 7, 0.6);
+  }
+  50% { 
+    opacity: 0.7; 
+    box-shadow: 0 0 25px rgba(255, 193, 7, 0.9);
+  }
+}
+
+/* 감지 중일 때는 깜빡임 효과 제거 */
+.blinking-button:disabled {
+  animation: none !important;
+  box-shadow: none !important;
+}
+
+/* 사용법 안내 스타일 */
+.usage-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  background: rgba(33, 150, 243, 0.1);
+  border: 1px solid rgba(33, 150, 243, 0.2);
+  border-radius: 6px;
+  color: #1565c0;
+  font-size: 12px;
+}
+
+.usage-hint i {
+  color: #2196f3;
+  font-size: 14px;
+}
+
+/* 초기화 확인 팝업 스타일 */
+.reset-confirmation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  backdrop-filter: blur(5px);
+}
+
+.reset-confirmation-popup {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  max-width: 450px;
+  width: 90%;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: popupSlideIn 0.3s ease-out;
+}
+
+@keyframes popupSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #f8f9fa;
+}
+
+.popup-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.popup-close-btn {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.popup-close-btn:hover {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.popup-content {
+  padding: 24px;
+  text-align: center;
+}
+
+.warning-icon {
+  margin-bottom: 16px;
+}
+
+.warning-icon i {
+  font-size: 48px;
+  color: #ff9800;
+  animation: pulse 2s infinite;
+}
+
+.warning-message {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px 0;
+}
+
+.warning-detail {
+  font-size: 14px;
+  color: #666;
+  margin: 0 0 20px 0;
+}
+
+.reset-items {
+  text-align: left;
+  margin: 20px 0;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #ff9800;
+}
+
+.reset-items li {
+  color: #555;
+  font-size: 14px;
+  margin-bottom: 8px;
+  list-style: none;
+}
+
+.reset-items li:last-child {
+  margin-bottom: 0;
+}
+
+.popup-actions {
+  display: flex;
+  gap: 12px;
+  padding: 0 24px 24px;
+  justify-content: flex-end;
+}
+
+.cancel-btn, .confirm-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 100px;
+  justify-content: center;
+}
+
+.cancel-btn {
+  background: #f5f5f5;
+  color: #666;
+  border: 1px solid #ddd;
+}
+
+.cancel-btn:hover {
+  background: #e0e0e0;
+  color: #333;
+  transform: translateY(-1px);
+}
+
+.confirm-btn {
+  background: linear-gradient(135deg, #dc3545, #c82333);
+  color: white;
+  box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+}
+
+.confirm-btn:hover {
+  background: linear-gradient(135deg, #c82333, #a71e2a);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+}
+
+.confirm-btn:active, .cancel-btn:active {
+  transform: translateY(0);
+}

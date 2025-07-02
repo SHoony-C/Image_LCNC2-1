@@ -424,6 +424,14 @@ async def fetch_txt_from_iis(image_name: str):
     CORS 문제를 해결하기 위한 백엔드 프록시 엔드포인트입니다.
     """
     try:
+        # 유효하지 않은 이미지명 필터링
+        if not image_name or image_name == 'image':
+            print(f"MSA4 Backend: Invalid image name: {image_name}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Invalid image name: {image_name}"
+            )
+        
         # IIS 서버의 txt 파일 URL
         txt_url = f"http://localhost:8091/additional_images/{image_name}.txt"
         
@@ -453,6 +461,9 @@ async def fetch_txt_from_iis(image_name: str):
             status_code=503, 
             detail=f"Failed to connect to IIS server: {str(e)}"
         )
+    except HTTPException:
+        # HTTPException은 그대로 다시 발생시킴
+        raise
     except Exception as e:
         print(f"MSA4 Backend: Unexpected error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e)) 

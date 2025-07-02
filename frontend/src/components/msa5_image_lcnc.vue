@@ -3,7 +3,7 @@
     <div class="component-header">
       <div class="header-left">
         <i class="fas fa-image"></i>
-        <span>이미지 전처리 LCNC</span>
+        <span>Smart Image Preprocessor</span>
       </div>
       <div class="header-right">
         <button @click="() => { console.log('저장 버튼 클릭됨'); openWorkflowSaveDialog(); }" class="save-btn" :disabled="processingStatus !== 'completed'" title="현재 워크플로우 저장">
@@ -78,7 +78,7 @@
 
         <VueFlow v-model="elements" 
           :default-viewport="{ x: 0, y: 0, zoom: 0.7 }"
-          :style="{ width: '100%', height: '100%' }"
+          :style="{ width: '100%', height: 'calc(100% - 40px)' }"
           @connect="onConnect" @node-drag-stop="onNodeDragStop" @node-click="onNodeClick" @edge-click="onEdgeClick"
           :min-zoom="0.2" :max-zoom="2" :snap-to-grid="true" :snap-grid="[15, 15]"
           :fit-view-on-init="true"
@@ -138,12 +138,9 @@
           <template #node-merge="nodeProps">
             <div class="merge-node">
               <!-- 여러 입력을 받을 수 있도록 핸들 위치 조정 -->
-              <Handle type="target" position="left" id="input-1" :style="{ left: '-5px', top: '30%', transform: 'none' }" />
-              <Handle type="target" position="left" id="input-2" :style="{ left: '-5px', top: '50%', transform: 'none' }" />
-              <Handle type="target" position="left" id="input-3" :style="{ left: '-5px', top: '70%', transform: 'none' }" />
-              <Handle type="target" position="top" id="input-4" :style="{ top: '-5px', left: '30%', transform: 'none' }" />
-              <Handle type="target" position="top" id="input-5" :style="{ top: '-5px', left: '70%', transform: 'none' }" />
-              <Handle type="source" position="right" id="output" :style="{ right: '-5px', top: '50%', transform: 'none' }" />
+              
+              <Handle type="target" position="left" />
+              <Handle type="source" position="right" />
               
               <div class="node-header">
                 <i :class="nodeProps.data.icon"></i>
@@ -430,6 +427,7 @@ import { VueFlow, Handle } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
+import '@/assets/css/msa5_image_lcnc.css'
 import '@vue-flow/core/dist/style.css'
 import LogService from '../utils/logService'
 import { mapValues } from 'lodash'
@@ -622,17 +620,17 @@ export default {
 
     // 키보드 이벤트 핸들러
     const handleKeyDown = (event) => {
-        console.log('키보드 이벤트 감지:', event.key, event.ctrlKey);
-        console.log('키보드 이벤트 상세정보:', {
-        key: event.key,
-        code: event.code,
-        ctrlKey: event.ctrlKey,
-        metaKey: event.metaKey,
-        altKey: event.altKey,
-        shiftKey: event.shiftKey,
-        target: event.target.tagName,
-        activeElement: document.activeElement?.tagName
-      });
+      //   console.log('키보드 이벤트 감지:', event.key, event.ctrlKey);
+      //   console.log('키보드 이벤트 상세정보:', {
+      //   key: event.key,
+      //   code: event.code,
+      //   ctrlKey: event.ctrlKey,
+      //   metaKey: event.metaKey,
+      //   altKey: event.altKey,
+      //   shiftKey: event.shiftKey,
+      //   target: event.target.tagName,
+      //   activeElement: document.activeElement?.tagName
+      // });
       
       // Escape 키는 이미지 프리뷰 닫기
       if (event.key === 'Escape' && previewImageUrl.value) {
@@ -779,8 +777,16 @@ export default {
       // 파라미터 타입별로 UI 구성을 위한 메타데이터 추가
       const result = {}
       
+      // 백엔드에서 제공하는 options 정보 추출
+      const backendOptions = params.options || {}
+      
       // 파라미터 형식 변환 및 메타데이터 추가
       Object.entries(params).forEach(([key, value]) => {
+        // options 필드는 메타데이터이므로 파라미터로 처리하지 않음
+        if (key === 'options') {
+          return
+        }
+        
         let paramConfig = {
           value: value,
           label: key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' '),
@@ -789,30 +795,35 @@ export default {
           step: 1
         }
         
-        // 파라미터 타입에 따른 특수 설정
-        if (key.includes('factor')) {
-          paramConfig.min = 0
-          paramConfig.max = 2
-          paramConfig.step = 0.1
-        } else if (key.includes('angle')) {
-          paramConfig.min = -360
-          paramConfig.max = 360
-          paramConfig.step = 1
-        } else if (key.includes('threshold')) {
-          paramConfig.min = 0
-          paramConfig.max = 255
-          paramConfig.step = 1
-        } else if (key.includes('radius')) {
-          paramConfig.min = 0
-          paramConfig.max = 50
-          paramConfig.step = 1
-        } else if (key.includes('direction') || key.includes('method') || key.includes('model')) {
-          // 옵션형 파라미터는 select 요소로 표시
-          paramConfig.options = Array.isArray(value) ? value : 
-            key === 'direction' ? ['horizontal', 'vertical'] :
-            key === 'method' ? ['canny', 'sobel', 'laplacian'] :
-            key === 'model' ? ['yolov5', 'yolov8', 'faster_rcnn'] : 
-            [value]
+        // 백엔드에서 제공하는 옵션이 있는지 확인
+        if (backendOptions[key] && Array.isArray(backendOptions[key])) {
+          paramConfig.options = backendOptions[key]
+        } else {
+          // 파라미터 타입에 따른 특수 설정 (기존 로직 유지)
+          if (key.includes('factor')) {
+            paramConfig.min = 0
+            paramConfig.max = 2
+            paramConfig.step = 0.1
+          } else if (key.includes('angle')) {
+            paramConfig.min = -360
+            paramConfig.max = 360
+            paramConfig.step = 1
+          } else if (key.includes('threshold')) {
+            paramConfig.min = 0
+            paramConfig.max = 255
+            paramConfig.step = 1
+          } else if (key.includes('radius')) {
+            paramConfig.min = 0
+            paramConfig.max = 50
+            paramConfig.step = 1
+          } else if (key.includes('direction') || key.includes('method') || key.includes('model')) {
+            // 옵션형 파라미터는 select 요소로 표시
+            paramConfig.options = Array.isArray(value) ? value : 
+              key === 'direction' ? ['horizontal', 'vertical'] :
+              key === 'method' ? ['canny', 'sobel', 'laplacian'] :
+              key === 'model' ? ['yolov5', 'yolov8', 'faster_rcnn'] : 
+              [value]
+          }
         }
         
         result[key] = paramConfig
@@ -848,12 +859,12 @@ export default {
     // 노드 클릭 이벤트 핸들러
     const onNodeClick = (event) => {
       const { node } = event
-      console.log('노드 클릭:', node.id, '마우스 위치:', { 
-        clientX: event.event?.clientX, 
-        clientY: event.event?.clientY,
-        screenX: event.event?.screenX, 
-        screenY: event.event?.screenY 
-      });
+      // console.log('노드 클릭:', node.id, '마우스 위치:', { 
+      //   clientX: event.event?.clientX, 
+      //   clientY: event.event?.clientY,
+      //   screenX: event.event?.screenX, 
+      //   screenY: event.event?.screenY 
+      // });
       
       // 엣지 선택 해제
       selectedEdge.value = null;
@@ -873,23 +884,23 @@ export default {
           const componentEl = document.querySelector('.msa-component');
           
           if (panelEl && componentEl) {
-            console.log('옵션 패널 위치 정보:', {
-              panel: {
-                offsetTop: panelEl.offsetTop,
-                offsetLeft: panelEl.offsetLeft,
-                offsetWidth: panelEl.offsetWidth,
-                offsetHeight: panelEl.offsetHeight,
-                clientRect: panelEl.getBoundingClientRect()
-              },
-              component: {
-                isMaximized: isMaximized.value,
-                clientRect: componentEl.getBoundingClientRect()
-              },
-              windowSize: {
-                innerWidth: window.innerWidth,
-                innerHeight: window.innerHeight
-              }
-            });
+            // console.log('옵션 패널 위치 정보:', {
+            //   panel: {
+            //     offsetTop: panelEl.offsetTop,
+            //     offsetLeft: panelEl.offsetLeft,
+            //     offsetWidth: panelEl.offsetWidth,
+            //     offsetHeight: panelEl.offsetHeight,
+            //     clientRect: panelEl.getBoundingClientRect()
+            //   },
+            //   component: {
+            //     isMaximized: isMaximized.value,
+            //     clientRect: componentEl.getBoundingClientRect()
+            //   },
+            //   windowSize: {
+            //     innerWidth: window.innerWidth,
+            //     innerHeight: window.innerHeight
+            //   }
+            // });
           }
         }, 10);
       } else {
@@ -928,7 +939,7 @@ export default {
       
       // MSA6 측정 결과 초기화 이벤트 발생 (프로세스 시작 시 즉시)
       try {
-        console.log('[processStart] MSA6 측정 결과 초기화 이벤트 발생');
+        // console.log('[processStart] MSA6 측정 결과 초기화 이벤트 발생');
         const clearEvent = new CustomEvent('msa5-process-start', {
           detail: {
             timestamp: Date.now(),
@@ -944,7 +955,7 @@ export default {
         // 세션 스토리지에도 플래그 설정
         sessionStorage.setItem('msa5_process_started', 'true');
         
-        console.log('[processStart] MSA6 측정 결과 초기화 이벤트 발생 완료');
+        // console.log('[processStart] MSA6 측정 결과 초기화 이벤트 발생 완료');
       } catch (error) {
         console.error('[processStart] MSA6 초기화 이벤트 발생 실패:', error);
       }
@@ -1031,6 +1042,8 @@ export default {
       
       // 2. 노드와 엣지 확인
       const connections = elements.value.filter(el => el.type === 'smoothstep')
+      const nodes = elements.value.filter(el => el.type !== 'smoothstep')
+      
       if (connections.length === 0) {
         return {
           valid: false,
@@ -1059,7 +1072,73 @@ export default {
         }
       }
       
-      // 5. 연결 경로 확인 (시작 -> 종료)
+      // 5. 노드별 입력/출력 제약사항 검증
+      for (const node of nodes) {
+        const nodeId = node.id
+        
+        // 노드로 들어오는 연결 개수 확인
+        const incomingConnections = connections.filter(conn => conn.target === nodeId)
+        
+        // 이미지 병합 노드 확인 (여러 조건으로 검증)
+        const isMergeNode = node.type === 'merge' || 
+                           (node.data && node.data.id === 'merge') ||
+                           (node.data && node.data.label && node.data.label.includes('병합')) ||
+                           (node.data && node.data.label && node.data.label.includes('merge')) ||
+                           (node.id && node.id.includes('merge')) ||
+                           (node.name && node.name.includes('merge'))
+        
+        if (isMergeNode) {
+          // 병합 노드는 하나의 핸들에 여러 입력 허용, 하지만 최소 2개 이상 필요
+          if (incomingConnections.length < 2) {
+            return {
+              valid: false,
+              message: `이미지 병합 노드에 입력이 부족합니다.`,
+              details: `병합 노드 '${node.data?.label || nodeId}'는 최소 2개 이상의 입력이 필요합니다. 현재 ${incomingConnections.length}개 입력만 연결되어 있습니다. 하나의 입력 핸들에 여러 연결선을 연결할 수 있습니다.`
+            }
+          }
+          
+          // 병합 노드의 최대 입력 개수 확인 (5개로 제한)
+          if (incomingConnections.length > 5) {
+            return {
+              valid: false,
+              message: `이미지 병합 노드의 입력이 너무 많습니다.`,
+              details: `병합 노드 '${node.data?.label || nodeId}'는 최대 5개까지의 입력만 허용됩니다. 현재 ${incomingConnections.length}개 입력이 연결되어 있습니다. 일부 연결을 제거해주세요.`
+            }
+          }
+        } else {
+          // 일반 노드는 하나의 입력만 허용 (시작/종료 노드 제외)
+          if (nodeId !== 'start' && nodeId !== 'end' && incomingConnections.length > 1) {
+            return {
+              valid: false,
+              message: `노드에 여러 입력이 연결되어 있습니다.`,
+              details: `노드 '${node.data?.label || nodeId}'는 하나의 입력만 허용됩니다. 현재 ${incomingConnections.length}개 입력이 연결되어 있습니다. 여러 이미지를 병합하려면 이미지 병합 노드를 사용하세요.`
+            }
+          }
+          
+          // 일반 노드는 최소 하나의 입력 필요 (시작 노드 제외)
+          if (nodeId !== 'start' && incomingConnections.length === 0) {
+            return {
+              valid: false,
+              message: `노드에 입력이 연결되어 있지 않습니다.`,
+              details: `노드 '${node.data?.label || nodeId}'에 입력을 연결해주세요.`
+            }
+          }
+        }
+        
+        // 노드에서 나가는 연결 개수 확인 (모든 노드는 여러 출력 분기 허용)
+        const outgoingConnections = connections.filter(conn => conn.source === nodeId)
+        
+        // 종료 노드를 제외한 모든 노드는 최소 하나의 출력 필요
+        if (nodeId !== 'end' && outgoingConnections.length === 0) {
+          return {
+            valid: false,
+            message: `노드에서 나가는 연결이 없습니다.`,
+            details: `노드 '${node.data?.label || nodeId}'에서 다른 노드로의 연결을 추가해주세요.`
+          }
+        }
+      }
+      
+      // 6. 연결 경로 확인 (시작 -> 종료)
       const graph = {}
       elements.value.filter(el => el.type !== 'smoothstep').forEach(node => {
         graph[node.id] = []
@@ -1223,38 +1302,86 @@ export default {
           node.data.params = getDefaultParams(node.data?.nodeId || node.data?.id || node.type, defaultOptions.value);
         }
         
-        // 노드 타입 및 파라미터 추출 - 여러 가능한 필드 검사
+        // 노드 타입 및 파라미터 추출 - 여러 가능한 필드 검사 (강화된 버전)
         let originalNodeType = node.data?.nodeId || node.data?.id || node.type || 'custom';
         let nodeType = originalNodeType;
         
-        //console.log(`[processNode] 원본 노드 타입: ${originalNodeType}`);
+        console.log(`[processNode] 노드 타입 추출 시도 - nodeId: ${node.data?.nodeId}, id: ${node.data?.id}, type: ${node.type}, 노드ID: ${node.id}`);
         
-        // 노드 데이터 전체 디버깅
-        console.log(`[processNode] 노드 상세 정보:`, {
-          id: node.id,
-          type: node.type,
-          data: {
-            nodeId: node.data?.nodeId,
-            id: node.data?.id,
-            label: node.data?.label,
-            params: node.data?.params ? Object.keys(node.data.params) : 'none'
-          }
-        });
+        // // 노드 데이터 전체 디버깅
+        // console.log(`[processNode] 노드 상세 정보:`, {
+        //   id: node.id,
+        //   type: node.type,
+        //   data: {
+        //     nodeId: node.data?.nodeId,
+        //     id: node.data?.id,
+        //     label: node.data?.label,
+        //     params: node.data?.params ? Object.keys(node.data.params) : 'none'
+        //   }
+        // });
         
-        // 노드 ID에서 타입 추출 시도 (예: median_filter_1234567 -> median_filter)
+        // 1. 항상 노드 ID에서 타입 추출 시도 (불러온 워크플로우에서 가장 확실한 방법)
         if (typeof node.id === 'string' && node.id.includes('_')) {
+          const idParts = node.id.split('_');
+          console.log(`[processNode] 노드 ID 분석: ${node.id} -> parts:`, idParts);
+          
+          // 마지막 두 부분이 숫자인지 확인 (타임스탬프와 랜덤 숫자로 추정)
+          const lastPart = idParts[idParts.length - 1];
+          const secondLastPart = idParts[idParts.length - 2];
+          
+          if (/^\d+$/.test(lastPart) && /^\d+$/.test(secondLastPart)) {
+            // 마지막 두 부분(타임스탬프와 랜덤)을 제외한 ID 부분을 타입으로 사용
+            const typeFromId = idParts.slice(0, -2).join('_');
+            if (typeFromId) {
+              nodeType = typeFromId;
+              console.log(`[processNode] 노드 ID에서 타입 추출 (두 숫자): ${typeFromId}`);
+            }
+          } else if (/^\d+$/.test(lastPart)) {
+            // 마지막 부분만 숫자인 경우
+            const typeFromId = idParts.slice(0, -1).join('_');
+            if (typeFromId) {
+              nodeType = typeFromId;
+              console.log(`[processNode] 노드 ID에서 타입 추출 (한 숫자): ${typeFromId}`);
+            }
+          } else {
+            // 숫자가 없는 경우 전체를 타입으로 사용
+            nodeType = node.id;
+            console.log(`[processNode] 노드 ID 전체를 타입으로 사용: ${nodeType}`);
+          }
+        }
+        
+        // 2. 불러온 워크플로우에서 노드 타입이 손실된 경우에만 추가 복구 시도
+        if (nodeType === 'custom' || !nodeType || nodeType === 'undefined') {
+          // 노드 이름(name) 속성에서 타입 추출 시도
+          if (node.name && typeof node.name === 'string') {
+            if (node.name.includes('_')) {
+              const nameParts = node.name.split('_');
+              const lastPart = nameParts[nameParts.length - 1];
+              if (/^\d+$/.test(lastPart)) {
+                const typeFromName = nameParts.slice(0, -1).join('_');
+                if (typeFromName) {
+                  nodeType = typeFromName;
+                  console.log(`[processNode] 노드 이름에서 타입 복구: ${typeFromName}`);
+                }
+              }
+            } else {
+              nodeType = node.name;
+              console.log(`[processNode] 노드 이름을 타입으로 사용: ${nodeType}`);
+            }
+          }
+        }
+        
+        // 3. 노드 ID에서 타입 추출 시도 (기존 로직 강화)
+        if ((nodeType === 'custom' || !nodeType) && typeof node.id === 'string' && node.id.includes('_')) {
           const idParts = node.id.split('_');
           // ID의 마지막 부분이 숫자인지 확인 (타임스탬프로 추정)
           const lastPart = idParts[idParts.length - 1];
           if (/^\d+$/.test(lastPart)) {
             // 마지막 부분(타임스탬프)을 제외한 ID 부분을 타입으로 사용
             const typeFromId = idParts.slice(0, -1).join('_');
-            //console.log(`[processNode] 노드 ID에서 추출한 타입: ${typeFromId}`);
-            
-            // 기존 타입이 custom이거나 없는 경우 ID에서 추출한 타입 사용
-            if (nodeType === 'custom' || !nodeType) {
+            if (typeFromId) {
               nodeType = typeFromId;
-              //console.log(`[processNode] ID에서 추출한 타입으로 대체: ${nodeType}`);
+              console.log(`[processNode] ID에서 추출한 타입으로 대체: ${nodeType}`);
             }
           }
         }
@@ -1273,8 +1400,6 @@ export default {
             '비등방성 확산 필터': 'anisotropic_diffusion',
             '비등방성 필터': 'anisotropic_diffusion',
             '비등방성': 'anisotropic_diffusion',
-            '엣지 검출': 'edge',
-            '엣지': 'edge',
             '이진화': 'threshold',
             '밝기 조정': 'brightness',
             '밝기': 'brightness',
@@ -1283,7 +1408,14 @@ export default {
             '객체 검출': 'object_detection',
             '객체 감지': 'object_detection',
             '적응형 히스토그램 평활화': 'clahe',
-            'CLAHE': 'clahe'
+            'CLAHE': 'clahe',
+            '샤프닝': 'sharpen',
+            '샤프': 'sharpen',
+            '그레이스케일': 'grayscale',
+            '회색조': 'grayscale',
+            '정규화': 'normalize',
+            '이미지 병합': 'merge',
+            '병합': 'merge'
           };
           
           if (koreanLabelMap[node.data.label]) {
@@ -1296,6 +1428,7 @@ export default {
         const basicTypeMap = {
           'median': 'median_filter',
           'blur': 'gaussian_blur',
+          'gaussian': 'gaussian_blur',
           'gamma_correction': 'gamma',
           'gamma': 'gamma',
           'anisotropic': 'anisotropic_diffusion',
@@ -1305,8 +1438,6 @@ export default {
           'hist_eq': 'histogram_equalization',
           'histogram': 'histogram_equalization',
           'histogram_equalization': 'histogram_equalization',
-          'edge': 'edge',
-          'edge_detection': 'edge',
           'threshold': 'threshold',
           'brightness': 'brightness',
           'contrast': 'contrast',
@@ -1314,7 +1445,10 @@ export default {
           'object_detection': 'object_detection',
           'object-detection': 'object_detection',
           'object': 'object_detection',
-          'custom': 'custom'
+          'sharpen': 'sharpen',
+          'grayscale': 'grayscale',
+          'normalize': 'normalize',
+          'merge': 'merge'
         };
         
         // 필요한 경우에만 타입 변환 (호환성 이슈가 있는 타입만)
@@ -1323,18 +1457,27 @@ export default {
           nodeType = basicTypeMap[nodeType];
         }
         
-        //console.log(`[processNode] 최종 API 요청 타입: ${nodeType} (원본: ${originalNodeType})`);
+        console.log(`[processNode] 최종 API 요청 타입: ${nodeType} (원본: ${originalNodeType})`);
         
-        // 지원되는 노드 타입인지 확인
+        // 지원되는 노드 타입인지 확인 및 404 오류 방지를 위한 강화된 검증
         const supportedNodeTypes = [
           'median_filter', 'gaussian_blur', 'gamma', 'anisotropic_diffusion',
-          'histogram_equalization', 'edge', 'threshold', 'brightness', 'contrast',
-          'clahe', 'object_detection', 'custom'
+          'histogram_equalization', 'threshold', 'brightness', 'contrast',
+          'clahe', 'object_detection', 'blur', 'sharpen', 'grayscale', 'normalize', 'merge'
         ];
         
         if (!supportedNodeTypes.includes(nodeType)) {
-          console.warn(`[processNode] 지원되지 않는 노드 타입: ${nodeType}, 기본 'custom' 타입으로 대체`);
-          nodeType = 'custom';
+          console.warn(`[processNode] 지원되지 않는 노드 타입: ${nodeType}, 지원되는 타입 목록:`, supportedNodeTypes);
+          console.warn(`[processNode] 노드 정보 - ID: ${node.id}, 라벨: ${node.data?.label}, 원본 타입: ${originalNodeType}`);
+          
+          // custom 대신 오류를 발생시켜 더 명확한 디버깅 가능
+          throw new Error(`지원되지 않는 노드 타입: ${nodeType}. 지원되는 타입: ${supportedNodeTypes.join(', ')}`);
+        }
+        
+        // 404 오류 방지를 위한 추가 검증
+        if (!nodeType || nodeType === 'undefined' || nodeType === 'null') {
+          console.error(`[processNode] 유효하지 않은 노드 타입이 감지됨: '${nodeType}'`);
+          throw new Error(`유효하지 않은 노드 타입: ${nodeType}`);
         }
         
         const params = {};
@@ -1672,10 +1815,6 @@ export default {
     // 워크플로우 실제 처리 함수
     const processWorkflow = async () => {
       try {
-        console.log('[processWorkflow] 워크플로우 처리 시작 ====================================');
-        //console.log('[processWorkflow] 네트워크 상태 확인:', navigator.onLine ? '온라인' : '오프라인');
-        //console.log('[processWorkflow] 백엔드 API 기본 URL: http://localhost:8000/api/msa5/work');
-        
         // 처리 큐 초기화
         const queue = []
         const visited = new Set(['start']) // 시작 노드 방문 표시
@@ -1936,13 +2075,13 @@ export default {
     }
 
     // 이미지 설정 함수 (MSA4에서 이미지를 받아올 때 호출)
-    const setImage = async (imageUrl, imageTitle) => {
+    const setImage = async (imageUrl, imageTitle, fromMSA1 = false) => {
       inputImage.value = imageUrl
       // 이미지 제목이 없으면 기본값 사용, 있으면 공백을 언더스코어로 변환
       currentImageTitle.value = imageTitle ? imageTitle.replace(/ /g, '_') : ''
       
-      // 이미지 해시 계산하여 저장된 워크플로우 확인
-      if (imageUrl) {
+      // 이미지 해시 계산하여 저장된 워크플로우 확인 - MSA1에서 온 이미지가 아닌 경우에만
+      if (imageUrl && !fromMSA1) {
         try {
           const imageHash = await calculateImageHash(imageUrl)
           canSaveWorkflow.value = true
@@ -1952,6 +2091,10 @@ export default {
         } catch (error) {
           console.error('이미지 해시 계산 중 오류:', error)
         }
+      } else if (fromMSA1) {
+        // MSA1에서 온 이미지는 항상 새로운 이미지이므로 저장 가능하게 설정하고 API 호출 생략
+        canSaveWorkflow.value = true
+        // 기존에 저장된 워크플로우 체크를 하지 않아서 API 에러가 발생하지 않습니다.
       }
     }
     
@@ -1988,34 +2131,6 @@ export default {
       } catch (error) {
         console.error('워크플로우 조회 중 오류:', error);
       }
-    }
-    
-    // 기본 노드 설정 함수
-    const useDefaultNodes = () => {
-      // 가상의 노드 목록 설정 (백엔드 API 오류 시 대체)
-      availableNodes.value = [
-        { id: 'resize', label: '크기 조정', icon: 'fas fa-expand' },
-        { id: 'crop', label: '이미지 자르기', icon: 'fas fa-crop' },
-        { id: 'rotate', label: '회전', icon: 'fas fa-sync' },
-        { id: 'brightness', label: '밝기 조정', icon: 'fas fa-sun' },
-        { id: 'blur', label: '블러 효과', icon: 'fas fa-blur' },
-        { id: 'merge', label: '이미지 병합', icon: 'fas fa-object-group' },
-        { id: 'object_detection', label: '객체 감지', icon: 'fas fa-search' },
-        { id: 'style_transfer', label: '스타일 변환', icon: 'fas fa-paint-brush' }
-      ]
-      
-      defaultOptions.value = {
-        resize: { width: 800, height: 600 },
-        crop: { x: 0, y: 0, width: 200, height: 200 },
-        rotate: { angle: 90 },
-        brightness: { factor: 1.2 },
-        blur: { radius: 5 },
-        merge: { merge_type: 'horizontal', spacing: 10 },
-        object_detection: { confidence: 0.5 },
-        style_transfer: { style_strength: 0.8 }
-      }
-      
-      //console.log('기본 노드 목록 설정 완료:', availableNodes.value);
     }
     
     // 초기 엘리먼트 설정
@@ -2291,12 +2406,15 @@ export default {
         if (!imageUrl) {
           console.warn('MSA5: 이벤트에 이미지 URL이 없습니다');
             return;
-          }
+        }
           
         //console.log(`MSA5: 이미지 수신 - URL: ${imageUrl.substring(0, 30)}..., 제목: ${imageTitle}`);
         
+        // MSA1에서 온 이미지인지 확인
+        const fromMSA1 = event.type === 'msa1-to-msa5-image';
+        
         // 이미지 설정
-        setImage(imageUrl, imageTitle);
+        setImage(imageUrl, imageTitle, fromMSA1);
         
         // processedImages에 시작 이미지로 설정
         processedImages['start'] = imageUrl;
@@ -2364,19 +2482,16 @@ export default {
               } else {
                 console.warn('❌ 백엔드 응답에 options 배열이 없거나 형식이 맞지 않습니다:', data);
                 console.warn('기본 노드 목록을 사용합니다.');
-                useDefaultNodes();
               }
             } catch (parseError) {
               console.error('❌ JSON 파싱 오류:', parseError);
               console.warn('JSON 파싱에 실패했습니다. 기본 노드 목록을 사용합니다.');
-              useDefaultNodes();
             }
           } else {
             console.error(`❌ API 요청 실패: ${response.status} ${response.statusText}`);
             const errorText = await response.text();
             console.error('오류 응답 내용:', errorText);
             console.warn('API 요청이 실패했습니다. 기본 노드 목록을 사용합니다.');
-            useDefaultNodes();
           }
         } catch (fetchError) {
           console.timeEnd('API 호출 시간');
@@ -2387,7 +2502,6 @@ export default {
             stack: fetchError.stack
           });
           console.warn('백엔드 연결에 실패했습니다. 기본 노드 목록을 사용합니다.');
-          useDefaultNodes();
         }
       } finally {
         // 노드 로드 후 초기 요소 설정
@@ -3162,7 +3276,7 @@ export default {
         // 사용자에게 알림
             showStatusMessage.value = true;
         statusMessage.value = 'MSA6로 이미지 전송 완료';
-            setTimeout(() => { showStatusMessage.value = false }, 3000);
+        setTimeout(() => { showStatusMessage.value = false }, 3000);
         
         return true;
       } catch (error) {
@@ -3393,88 +3507,191 @@ export default {
       return cleanedElements;
     }
 
-    // 로드된 워크플로우 요소 재정렬 함수
-    const prepareElementsForLoad = (elements) => {
-      if (!elements || !Array.isArray(elements)) {
+    // 요소 로드 전 처리 함수 - 정렬 및 ID 재구성
+    const prepareElementsForLoad = (inputElements) => {
+      console.log('=== prepareElementsForLoad 함수 호출됨 ===');
+      console.log('입력 요소들:', inputElements);
+      console.log('입력 요소 개수:', inputElements ? inputElements.length : 'null');
+      
+      if (!inputElements || !Array.isArray(inputElements)) {
+        console.warn('prepareElementsForLoad: 유효하지 않은 입력 요소');
         return [];
       }
       
-      //console.log('로드할 원본 데이터:', elements);
-      
-      // 타임스탬프 생성 (고유 ID 생성용)
-      const timestamp = Date.now();
-      
-      // 요소 분류
-      const startNode = elements.find(el => el.id === 'start');
-      const endNode = elements.find(el => el.id === 'end');
-      const customNodes = elements.filter(el => el.id !== 'start' && el.id !== 'end' && el.type === 'custom');
-      
-      // 재구성된 요소 배열
       const reorganizedElements = [];
+      const idMapping = {}; // 저장된 ID → 새로운 고유 ID
+      const nameToIdMapping = {}; // 기본 이름 → 새로운 고유 ID
       
-      // ID 매핑을 위한 객체 (기존 ID -> 고유 ID)
-      const idMapping = {};
+      // 시작 노드와 종료 노드 분리
+      const startNode = inputElements.find(el => el.type === 'start');
+      const endNode = inputElements.find(el => el.type === 'end');
+      const customNodes = inputElements.filter(el => el.type !== 'start' && el.type !== 'end' && el.type !== 'edge');
       
-      // 시작 노드 먼저 추가
+      // 시작 노드를 먼저 추가
       if (startNode) {
-        reorganizedElements.push({
-          ...startNode,
-          data: {
-            ...startNode.data,
-            // connections 속성 제거 (별도로 처리)
-            connections: undefined
-          }
-        });
+        reorganizedElements.push({ ...startNode });
       }
       
-      // 커스텀 노드 추가 (고유 ID 생성)
+      // 타임스탬프 생성 (모든 노드에 동일한 타임스탬프 사용)
+      const timestamp = Date.now();
+      
+      // 1단계: 모든 저장된 노드 ID들을 새로운 고유 ID로 매핑
+      console.log('=== 1단계: ID 매핑 생성 ===');
       customNodes.forEach(node => {
-        // 저장된 노드 ID
         const originalId = node.id;
-        // 기본 노드 이름 (저장된 name 필드 사용)
         const nodeName = node.name || originalId;
-        // 고유 ID 생성
         const uniqueId = `${nodeName}_${timestamp}_${Math.floor(Math.random() * 10000)}`;
         
-        //console.log('노드 로드 처리:', {
-        //   originalId,
-        //   nodeName,
-        //   uniqueId
-        // });
-        
-        // ID 매핑 저장
+        // 기본 매핑
         idMapping[originalId] = uniqueId;
+        nameToIdMapping[nodeName] = uniqueId;
         
-        // 노드 복사 및 ID 업데이트
+        console.log(`매핑 생성: ${originalId} → ${uniqueId} (이름: ${nodeName})`);
+        
+        // 저장된 고유 ID에서 기본 이름 추출하여 추가 매핑
+        if (originalId.includes('_')) {
+          const baseName = originalId.split('_')[0];
+          if (!nameToIdMapping[baseName]) {
+            nameToIdMapping[baseName] = uniqueId;
+            console.log(`기본 이름 매핑 추가: ${baseName} → ${uniqueId}`);
+          }
+        }
+      });
+      
+      // 2단계: connections 배열 분석하여 추가 매핑 생성
+      console.log('=== 2단계: connections 기반 추가 매핑 ===');
+      inputElements.forEach(el => {
+        if (el.data && el.data.connections && Array.isArray(el.data.connections)) {
+          console.log(`${el.id}의 connections:`, el.data.connections);
+          
+          el.data.connections.forEach(targetId => {
+            // 이미 매핑된 경우 건너뛰기
+            if (idMapping[targetId] || targetId === 'start' || targetId === 'end') {
+              return;
+            }
+            
+            // 기본 이름 추출 시도
+            let baseName = targetId;
+            if (targetId.includes('_')) {
+              baseName = targetId.split('_')[0];
+            }
+            
+            // 해당 기본 이름을 가진 노드 찾기
+            const matchingNode = customNodes.find(node => {
+              const nodeId = node.id;
+              const nodeName = node.name || nodeId;
+              const nodeBaseName = nodeName.split('_')[0];
+              
+              // 1. 정확한 ID 매칭 시도
+              if (nodeId === targetId) return true;
+              
+              // 2. 기본 이름 매칭 시도  
+              if (nodeBaseName === baseName) return true;
+              
+              // 3. 이름 직접 매칭 시도 (대소문자 무시)
+              if (nodeName.toLowerCase() === targetId.toLowerCase()) return true;
+              
+              // 4. 타겟 ID가 노드 이름에 포함되는지 확인
+              if (nodeName.toLowerCase().includes(targetId.toLowerCase())) return true;
+              
+              return false;
+            });
+            
+            if (matchingNode) {
+              const mappedId = idMapping[matchingNode.id];
+              if (mappedId) {
+                idMapping[targetId] = mappedId;
+                console.log(`connections 기반 매핑: ${targetId} → ${mappedId}`);
+              }
+            } else {
+              console.warn(`connections에서 타겟 노드를 찾을 수 없음: ${targetId}`);
+              
+              // 매칭되는 노드가 없는 경우, 이름 매핑 테이블에서 시도
+              if (nameToIdMapping[baseName]) {
+                idMapping[targetId] = nameToIdMapping[baseName];
+                console.log(`기본 이름으로 매핑: ${targetId} → ${nameToIdMapping[baseName]}`);
+              } else if (nameToIdMapping[targetId]) {
+                idMapping[targetId] = nameToIdMapping[targetId];
+                console.log(`직접 이름으로 매핑: ${targetId} → ${nameToIdMapping[targetId]}`);
+              }
+            }
+          });
+        }
+      });
+      
+      // 3단계: 커스텀 노드 추가
+      console.log('=== 3단계: 노드 생성 ===');
+      customNodes.forEach(node => {
+        const originalId = node.id;
+        const uniqueId = idMapping[originalId];
+        const nodeName = node.name || originalId;
+        
+        console.log(`노드 생성: ${originalId} → ${uniqueId}`);
+        
+        // 병합 노드인지 확인하여 타입 정보 보존
+        const isMergeNode = node.type === 'merge' || 
+                           (node.data && node.data.id === 'merge') ||
+                           (node.data && node.data.label && node.data.label.includes('병합')) ||
+                           (node.data && node.data.label && node.data.label.includes('merge')) ||
+                           (node.id && node.id.includes('merge')) ||
+                           (node.name && node.name.includes('merge'));
+        
         const updatedNode = {
           ...node,
           id: uniqueId,
-          name: nodeName, // 원본 이름 유지
+          name: nodeName,
+          type: isMergeNode ? 'merge' : node.type, // 병합 노드 타입 확실히 보존
           data: {
             ...node.data,
-            // connections 속성 제거 (별도로 처리)
-            connections: undefined
+            id: isMergeNode ? 'merge' : node.data?.id, // 병합 노드 데이터 ID도 보존
+            nodeId: node.data?.nodeId || node.data?.id, // 원본 nodeId 보존 (404 오류 방지)
+            label: node.data?.label, // 라벨 보존
+            icon: node.data?.icon, // 아이콘 보존
+            params: node.data?.params ? { ...node.data.params } : undefined, // 파라미터 완전 복사
+            connections: undefined // connections는 엣지로 별도 처리
           }
         };
         
         reorganizedElements.push(updatedNode);
       });
       
-      // 종료 노드를 추가
+      // 종료 노드 추가
       if (endNode) {
-        reorganizedElements.push(endNode);
+        reorganizedElements.push({ ...endNode });
       }
       
-      // 연결 정보를 엣지로 변환
-      elements.forEach(el => {
+      // 4단계: connections 기반 엣지 생성
+      console.log('=== 4단계: 엣지 생성 ===');
+      inputElements.forEach(el => {
         if (el.data && el.data.connections && Array.isArray(el.data.connections)) {
-          const sourceId = el.id === 'start' ? 'start' : idMapping[el.id] || el.id;
+          // 소스 노드 ID 결정
+          let sourceId;
+          if (el.id === 'start') {
+            sourceId = 'start';
+          } else if (el.id === 'end') {
+            sourceId = 'end';
+          } else {
+            sourceId = idMapping[el.id] || el.id;
+          }
           
-          el.data.connections.forEach(targetId => {
-            const mappedTargetId = targetId === 'end' ? 'end' : idMapping[targetId] || targetId;
+          console.log(`${el.id}에서 ${el.data.connections.length}개 분기 생성:`);
+          
+          // 각 연결 대상에 대해 엣지 생성
+          el.data.connections.forEach((targetId, index) => {
+            // 타겟 노드 ID 결정
+            let mappedTargetId;
+            if (targetId === 'start') {
+              mappedTargetId = 'start';
+            } else if (targetId === 'end') {
+              mappedTargetId = 'end';
+            } else {
+              mappedTargetId = idMapping[targetId] || targetId;
+            }
             
             // 엣지 ID 생성
-            const edgeId = `e_${sourceId}_${mappedTargetId}`;
+            const edgeId = `e_${sourceId}_${mappedTargetId}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            
+            console.log(`  분기 ${index + 1}: ${sourceId} → ${mappedTargetId} (${targetId})`);
             
             // 엣지 추가
             reorganizedElements.push({
@@ -3483,13 +3700,21 @@ export default {
               source: sourceId,
               target: mappedTargetId,
               sourceHandle: null,
-              targetHandle: null
+              targetHandle: null,
+              style: {
+                stroke: '#666',
+                strokeWidth: 2
+              },
+              animated: false
             });
           });
         }
       });
       
-      //console.log('변환된 로드 데이터:', reorganizedElements);
+      console.log('=== 최종 결과 ===');
+      console.log('생성된 elements:', reorganizedElements);
+      console.log('ID 매핑 테이블:', idMapping);
+      console.log('이름 매핑 테이블:', nameToIdMapping);
       
       return reorganizedElements;
     }
@@ -3660,7 +3885,7 @@ export default {
                     //console.log('저장된 Before 이미지 URL:', imageResult.image_data.before_url);
                     //console.log('저장된 After 이미지 URL:', imageResult.image_data.after_url);
                   }
-                } else {
+        } else {
                   console.error('이미지 저장 실패:', await imageResponse.text());
                 }
               }
@@ -3690,670 +3915,77 @@ export default {
 
     // MSA3에서 워크플로우 데이터 받기 - 이벤트 핸들러
     const handleWorkflowFromMSA3 = (event) => {
+      console.log('=== MSA5: handleWorkflowFromMSA3 함수 호출됨 ===');
+      console.log('MSA5: 수신된 이벤트:', event);
+      console.log('MSA5: 이벤트 타입:', typeof event);
+      console.log('MSA5: 이벤트 detail:', event.detail);
+      
       try {
-        //console.log('MSA3에서 워크플로우 데이터 수신:', event);
-        
         // 이벤트 객체에서 워크플로우 데이터 추출
         const workflowData = event.detail || event;
+        console.log('MSA5: 추출된 워크플로우 데이터:', workflowData);
         
         if (!workflowData) {
-          console.error('워크플로우 데이터가 없습니다.');
+          console.error('MSA5: 워크플로우 데이터가 없습니다.');
           showStatusMessage.value = true;
           statusMessage.value = '워크플로우 데이터가 없습니다.';
           setTimeout(() => { showStatusMessage.value = false }, 3000);
           return;
         }
         
-        // 워크플로우 구조 분석 및 로깅
-        logWorkflowStructure(workflowData);
+        // MSA3에서 보낸 데이터 구조 확인
+        console.log('MSA5: 워크플로우 데이터 키:', Object.keys(workflowData));
+        console.log('MSA5: elements 존재 여부:', !!workflowData.elements);
+        console.log('MSA5: elements 타입:', typeof workflowData.elements);
+        console.log('MSA5: elements 길이:', workflowData.elements ? workflowData.elements.length : 'null');
         
-        // 워크플로우 데이터 구조 검사
-        //console.log('워크플로우 데이터 키:', Object.keys(workflowData));
-        
-        // 워크플로우 노드 추출 - 시작/종료 노드 제외
-        let allNodes = [];
-        
-        // 다양한 형식의 노드 데이터 처리
-        if (workflowData.nodes && Array.isArray(workflowData.nodes)) {
-          allNodes = workflowData.nodes;
-        } else if (workflowData.elements && Array.isArray(workflowData.elements)) {
-          // elements에서 노드만 필터링 (엣지 제외)
-          allNodes = workflowData.elements.filter(el => el.type !== 'smoothstep' && el.type !== 'edge');
-        }
-        
-        //console.log('모든 노드 데이터 (길이):', allNodes.length);
-        
-        // 시작/종료 노드 필터링 - 이미 target에 있으므로 제외
-        const nodes = allNodes.filter(node => {
-          if (!node) return false;
+        // MSA3에서 전송한 elements 배열을 직접 사용
+        if (workflowData.elements && Array.isArray(workflowData.elements)) {
+          console.log('MSA5: elements 배열을 직접 처리합니다.');
+          console.log('MSA5: elements 내용:', workflowData.elements);
           
-          // 시작/종료 노드 체크 (다양한 형태 지원)
-          const isStartNode = 
-            node.type === 'start' || 
-            node.id === 'start' || 
-            (node.data && node.data.type === 'start') ||
-            (node.data && node.data.nodeId === 'start') ||
-            (node.label && node.label.toLowerCase().includes('start'));
-            
-          const isEndNode = 
-            node.type === 'end' || 
-            node.id === 'end' || 
-            (node.data && node.data.type === 'end') ||
-            (node.data && node.data.nodeId === 'end') ||
-            (node.label && node.label.toLowerCase().includes('end'));
-            
-          return !(isStartNode || isEndNode);
-        });
-        
-        //console.log('필터링 후 워크플로우 노드 데이터 (길이):', nodes.length);
-        //console.log('필터링 후 워크플로우 노드 데이터 (샘플):', nodes.slice(0, 2));
-        
-        if (nodes.length === 0) {
-          console.error('워크플로우에 매핑할 노드가 없습니다.');
+          // prepareElementsForLoad 함수를 사용하여 요소 처리
+          console.log('MSA5: prepareElementsForLoad 함수 호출 시작');
+          const processedElements = prepareElementsForLoad(workflowData.elements);
+          console.log('MSA5: prepareElementsForLoad 완료, 결과:', processedElements);
+          
+          // 처리된 요소를 워크플로우에 적용
+          elements.value = processedElements;
+          
+          // MSA3에서 불러올 때는 input 이미지를 덮어쓰지 않음
+          // MSA1의 현재 상태를 유지하면서 워크플로우만 불러옴
+          // if (workflowData.input_image_url) {
+          //   // console.log('MSA5: 입력 이미지 URL 설정:', workflowData.input_image_url);
+          //   inputImage.value = workflowData.input_image_url;
+          // }
+          
+          // 워크플로우 이름이 있으면 설정
+          if (workflowData.workflow_name) {
+            // console.log('MSA5: 워크플로우 이름 설정:', workflowData.workflow_name);
+            workflowName.value = workflowData.workflow_name;
+          }
+          
+          // 성공 메시지 표시
           showStatusMessage.value = true;
-          statusMessage.value = '워크플로우에 매핑할 노드가 없습니다.';
+          statusMessage.value = 'MSA3에서 워크플로우를 성공적으로 불러왔습니다.';
           setTimeout(() => { showStatusMessage.value = false }, 3000);
+          
+          console.log('MSA5: 워크플로우 로드 완료');
           return;
         }
         
-        try {
-          // 현재 워크플로우 상태 저장 (복원할 수 있도록)
-          const previousWorkflow = JSON.parse(JSON.stringify(elements.value));
-          //console.log('이전 워크플로우 백업 완료:', previousWorkflow.length);
-        } catch (backupError) {
-          console.warn('이전 워크플로우 백업 실패:', backupError);
-        }
-        
-        // 새 워크플로우 구성을 위해 elements 초기화 (시작/종료 노드만 유지)
-        initializeElements();
-        //console.log('워크플로우 초기화 완료. 노드 생성 시작...');
-        
-        // 노드 위치 계산을 위한 변수
-        const startX = 100;
-        const startY = 200;
-        const nodeSpacingX = 250;
-        const nodeSpacingY = 0;
-        
-        // 생성된 노드 ID 맵핑 (MongoDB ID -> 새 노드 ID)
-        const nodeIdMap = {};
-        
-        // 노드 타입 변환 (MongoDB -> MSA5)
-        const nodeTypeMap = {
-          'median': 'median_filter',   // median -> median_filter로 변환 (백엔드 API 호환성)
-          'blur': 'gaussian_blur',     // blur -> gaussian_blur로 변환 (백엔드 API 호환성)
-          'gamma_correction': 'gamma', // gamma_correction -> gamma로 변환 (백엔드 API 호환성)
-          'anisotropic': 'anisotropic_diffusion', // anisotropic -> anisotropic_diffusion으로 변환
-          'histogram_eq': 'histogram_equalization',
-          'hist_eq': 'histogram_equalization',
-          'histogram': 'histogram_equalization'
-        };
-        
-        // 노드 아이콘 매핑
-        const nodeIconMap = {
-          'median': 'fas fa-brush',
-          'gamma': 'fas fa-sliders-h',
-          'clahe': 'fas fa-chart-line',
-          'blur': 'fas fa-cloud',
-          'sharpen': 'fas fa-mountain',
-          'edge': 'fas fa-border-style',
-          'threshold': 'fas fa-tint',
-          'resize': 'fas fa-expand',
-          'rotate': 'fas fa-sync',
-          'crop': 'fas fa-crop'
-        };
-        
-        // 노드 순서대로 배치
-        const createdNodeIds = []; // 생성된 노드 ID 순서 추적
-        
-        nodes.forEach((node, index) => {
-          try {
-            //console.log(`노드 ${index + 1} 처리 중:`, node);
-            
-            // 노드 타입 결정 (MongoDB 타입을 MSA5 타입으로 변환)
-            let nodeType = '';
-            let originalNodeId = '';
-            
-            // 노드 ID와 타입 추출
-            if (node.id) {
-              originalNodeId = node.id;
-            }
-            
-            if (node.type && typeof node.type === 'string') {
-              nodeType = nodeTypeMap[node.type] || node.type;
-            } else if (node.data && node.data.type && typeof node.data.type === 'string') {
-              nodeType = nodeTypeMap[node.data.type] || node.data.type;
-            } else if (node.data && node.data.nodeId && typeof node.data.nodeId === 'string') {
-              // nodeId에서 타입 추출
-              const parts = node.data.nodeId.split('_');
-              if (parts.length > 0) {
-                nodeType = nodeTypeMap[parts[0]] || parts[0];
-              }
-            } else if (node.name && typeof node.name === 'string') {
-              // 이름에서 타입 추출 시도
-              nodeType = nodeTypeMap[node.name] || node.name;
-            } else if (node.label && typeof node.label === 'string') {
-              // 라벨에서 타입 추출 시도
-              nodeType = nodeTypeMap[node.label] || node.label;
-            } else if (node.data && node.data.label && typeof node.data.label === 'string') {
-              // 데이터 라벨에서 타입 추출 시도
-              nodeType = nodeTypeMap[node.data.label] || node.data.label;
-            } else {
-              console.warn(`노드 ${index + 1}에 유효한 타입이 없습니다:`, node);
-              
-              // 미디언 필터 관련 키워드 확인
-              if (originalNodeId && originalNodeId.toLowerCase().includes('median')) {
-                nodeType = 'median_filter';
-              } else if (JSON.stringify(node).toLowerCase().includes('median') || 
-                         JSON.stringify(node).toLowerCase().includes('미디언')) {
-                nodeType = 'median_filter';
-              } else {
-                // 타입을 결정할 수 없는 경우 기본값 사용
-                nodeType = 'custom';
-              }
-            }
-            
-            // 노드 타입이 한글 이름인 경우 매핑 적용 (예: '미디언 필터' -> 'median_filter')
-            if (nodeTypeMap[nodeType]) {
-              //console.log(`노드 타입 매핑 적용: ${nodeType} -> ${nodeTypeMap[nodeType]}`);
-              nodeType = nodeTypeMap[nodeType];
-            }
-            
-            //console.log(`노드 ${index + 1} 타입:`, nodeType);
-            
-            // 노드 데이터 수집 및 병합
-            const nodeData = {};
-            
-            // 1. 노드 자체의 필드 (node.label 등)
-            Object.entries(node).forEach(([key, value]) => {
-              if (key !== 'id' && key !== 'type' && key !== 'data' && key !== 'params' && 
-                  key !== 'parameters' && key !== 'options' && key !== 'position' && 
-                  key !== 'connections') {
-                nodeData[key] = value;
-              }
-            });
-            
-            // 2. node.data 객체가 있으면 병합
-            if (node.data && typeof node.data === 'object') {
-              Object.entries(node.data).forEach(([key, value]) => {
-                nodeData[key] = value;
-              });
-            }
-            
-            // 3. node.params 객체가 있으면 병합
-            if (node.params && typeof node.params === 'object') {
-              Object.entries(node.params).forEach(([key, value]) => {
-                nodeData[key] = value;
-              });
-            }
-            
-            // 4. node.data.params 객체가 있으면 병합
-            if (node.data && node.data.params && typeof node.data.params === 'object') {
-              Object.entries(node.data.params).forEach(([key, value]) => {
-                // params에서 키가 없는 경우에만 추가
-                if (nodeData[key] === undefined) {
-                  nodeData[key] = value;
-                }
-              });
-            }
-            
-            // 5. 가능한 추가 구조도 병합
-            ['parameters', 'options', 'connections'].forEach(propName => {
-              if (node[propName] && typeof node[propName] === 'object') {
-                Object.entries(node[propName]).forEach(([key, value]) => {
-                  nodeData[key] = value;
-                });
-              }
-              
-              // data 아래의 필드도 확인
-              if (node.data && node.data[propName] && typeof node.data[propName] === 'object') {
-                Object.entries(node.data[propName]).forEach(([key, value]) => {
-                  nodeData[key] = value;
-                });
-              }
-            });
-            
-            //console.log(`노드 ${index + 1} 통합 데이터:`, nodeData);
-            
-            // 파라미터 변환 (MongoDB 형식 -> MSA5 형식)
-            const params = {};
-            
-            // 노드 타입별 기본 파라미터 추가 및 데이터에서 값 추출
-            if (nodeType === 'median_filter') {
-              const kernelSize = extractParamValue(node, ['kernel_size', 'kernelSize', 'kernel', 'size']);
-              params.kernel_size = { 
-                value: parseInt(kernelSize || 3),
-                label: 'Kernel Size',
-                min: 1,
-                max: 21,
-                step: 2
-              };
-            } else if (nodeType === 'gamma') {
-              const gammaValue = extractParamValue(node, ['gamma', 'gamma_value', 'gammaValue']);
-              params.gamma = { 
-                value: parseFloat(gammaValue || 1.0),
-                label: 'Gamma',
-                min: 0.1,
-                max: 5.0,
-                step: 0.1
-              };
-            } else if (nodeType === 'clahe') {
-              const clipLimit = extractParamValue(node, ['clip_limit', 'clipLimit']);
-              params.clip_limit = { 
-                value: parseFloat(clipLimit || 2.0),
-                label: 'Clip Limit',
-                min: 0.5,
-                max: 10.0,
-                step: 0.5
-              };
-              
-              const tileGridSize = extractParamValue(node, ['tile_grid_size', 'tileGridSize', 'tile_size', 'tileSize']);
-              params.tile_grid_size = { 
-                value: parseInt(tileGridSize || 8),
-                label: 'Tile Grid Size',
-                min: 2,
-                max: 16,
-                step: 1
-              };
-            } else if (nodeType === 'gaussian_blur') {
-              const kernelSize = extractParamValue(node, ['kernel_size', 'kernelSize', 'kernel', 'size']);
-              params.kernel_size = { 
-                value: parseInt(kernelSize || 5),
-                label: 'Kernel Size',
-                min: 1,
-                max: 31,
-                step: 2
-              };
-              
-              const sigma = extractParamValue(node, ['sigma', 'sigma_value', 'sigmaValue']);
-              if (sigma !== undefined) {
-                params.sigma = {
-                  value: parseFloat(sigma || 0),
-                  label: 'Sigma',
-                  min: 0,
-                  max: 10,
-                  step: 0.1
-                };
-              }
-            } else if (nodeType === 'sharpen') {
-              const strength = extractParamValue(node, ['strength', 'amount', 'intensity']);
-              params.strength = { 
-                value: parseFloat(strength || 1.0),
-                label: 'Strength',
-                min: 0.1,
-                max: 5.0,
-                step: 0.1
-              };
-            } else if (nodeType === 'threshold') {
-              const threshold = extractParamValue(node, ['threshold', 'thresh', 'threshold_value']);
-              params.threshold = { 
-                value: parseInt(threshold || 128),
-                label: 'Threshold',
-                min: 0,
-                max: 255,
-                step: 1
-              };
-              
-              const maxValue = extractParamValue(node, ['max_value', 'maxValue', 'max']);
-              params.max_value = { 
-                value: parseInt(maxValue || 255),
-                label: 'Max Value',
-                min: 0,
-                max: 255,
-                step: 1
-              };
-            } else if (nodeType === 'brightness') {
-              const factor = extractParamValue(node, ['factor', 'brightness', 'brightness_factor']);
-              params.factor = {
-                value: parseFloat(factor || 1.0),
-                label: 'Brightness Factor',
-                min: 0.0,
-                max: 3.0,
-                step: 0.1
-              };
-            } else if (nodeType === 'contrast') {
-              const factor = extractParamValue(node, ['factor', 'contrast', 'contrast_factor']);
-              params.factor = {
-                value: parseFloat(factor || 1.0),
-                label: 'Contrast Factor',
-                min: 0.0,
-                max: 3.0,
-                step: 0.1
-              };
-            } else if (nodeType === 'resize') {
-              const width = extractParamValue(node, ['width', 'target_width', 'w']);
-              params.width = {
-                value: parseInt(width || 500),
-                label: 'Width',
-                min: 1,
-                max: 4000,
-                step: 1
-              };
-              
-              const height = extractParamValue(node, ['height', 'target_height', 'h']);
-              params.height = {
-                value: parseInt(height || 500),
-                label: 'Height',
-                min: 1,
-                max: 4000,
-                step: 1
-              };
-              
-              const preserveAspectRatio = extractParamValue(node, ['preserve_aspect_ratio', 'preserveAspectRatio', 'keep_ratio']);
-              if (preserveAspectRatio !== undefined) {
-                params.preserve_aspect_ratio = {
-                  value: preserveAspectRatio === true || preserveAspectRatio === 'true' || preserveAspectRatio === 1,
-                  label: 'Preserve Aspect Ratio',
-                  options: [true, false]
-                };
-              }
-            } else {
-              // 기본 파라미터 - 모든 노드에 공통적으로 필요한 enabled 파라미터
-              const enabledValue = extractParamValue(node, ['enabled', 'enable', 'active', 'activated', 'isEnabled']);
-              
-              // MSA3에서 MSA5로 워크플로우를 로드할 때는 enabled 파라미터를 표시하지 않음
-              // 사용자 요청에 따라 Enabled 및 Params 옵션을 표시하지 않고 특정 파라미터만 표시
-              
-              // 추가 파라미터를 찾아서 자동으로 추가
-              // 특정 이름 패턴을 가진 필드를 찾아 파라미터로 변환
-              const paramKeys = Object.keys(nodeData).filter(key => 
-                !['id', 'type', 'label', 'icon', 'connections', 'nodeId', 'enabled', 'enable', 'active', 'activated', 'isEnabled', 'params', '0'].includes(key)
-              );
-              
-              paramKeys.forEach(key => {
-                let value = nodeData[key];
-                
-                // 파라미터 값이 객체인 경우 (예: {value: 5, ...}) 처리
-                if (typeof value === 'object' && value !== null && value.value !== undefined) {
-                  // 이미 MSA5 형식이면 그대로 사용
-                  params[key] = value;
-                } else {
-                  // 기본 파라미터 형식으로 변환
-                  const paramConfig = {
-                    value: value,
-                    label: key.charAt(0).toUpperCase() + key.slice(1).replace(/_/g, ' ')
-                  };
-                  
-                  // 타입에 따른 추가 속성 설정
-                  if (typeof value === 'number') {
-                    if (Number.isInteger(value)) {
-                      paramConfig.min = 0;
-                      paramConfig.max = 1000;
-                      paramConfig.step = 1;
-                    } else {
-                      paramConfig.min = 0;
-                      paramConfig.max = 10;
-                      paramConfig.step = 0.1;
-                    }
-                  } else if (typeof value === 'boolean') {
-                    paramConfig.options = [true, false];
-                  }
-                  
-                  params[key] = paramConfig;
-                }
-              });
-            }
-            
-            // 생성할 노드 ID
-            const nodeId = `${nodeType}_${Date.now() + index}`;
-            nodeIdMap[originalNodeId] = nodeId;
-            
-            // 노드 아이콘 설정
-            const icon = nodeIconMap[nodeType] || 'fas fa-cog';
-            
-            // 노드 레이블 설정 (이름 가독성 개선)
-            let label = nodeData.label || '';
-            if (!label) {
-              // 타입 기반 레이블 생성
-              switch (nodeType) {
-                case 'median':
-                  label = '미디언 필터';
-                  break;
-                case 'gamma':
-                  label = '감마 보정';
-                  break;
-                case 'clahe':
-                  label = 'CLAHE';
-                  break;
-                case 'blur':
-                  label = '블러';
-                  break;
-                case 'sharpen':
-                  label = '샤프닝';
-                  break;
-                case 'edge':
-                  label = '엣지 검출';
-                  break;
-                case 'threshold':
-                  label = '이진화';
-                  break;
-                case 'resize':
-                  label = '크기 조정';
-                  break;
-                case 'rotate':
-                  label = '회전';
-                  break;
-                case 'crop':
-                  label = '자르기';
-                  break;
-                default:
-                  label = nodeType.charAt(0).toUpperCase() + nodeType.slice(1);
-              }
-            }
-            
-            // 노드 위치 계산
-            const position = {
-              x: startX + (index + 1) * nodeSpacingX,
-              y: startY + index * nodeSpacingY
-            };
-            
-            // 노드 생성
-            const newNode = {
-              id: nodeId,
-              type: 'custom',  // 모든 노드는 custom 타입으로 표시됨
-              position,
-              data: {
-                nodeId: nodeType,  // 이 값이 실제 API 엔드포인트를 결정함
-                icon,
-                label,
-                params
-              }
-            };
-            
-            //console.log(`새 노드 생성: ${nodeId}`, newNode);
-            
-            // 특별한 경우에 대한 백엔드 호환성 확인
-            if (label === '미디언 필터' && nodeType !== 'median_filter') {
-              //console.log(`미디언 필터 노드 타입 수정: ${nodeType} -> median_filter`);
-              newNode.data.nodeId = 'median_filter';
-            }
-            
-            elements.value.push(newNode);
-            createdNodeIds.push(nodeId);
-            
-          } catch (nodeError) {
-            console.error(`노드 ${index + 1} 처리 중 오류:`, nodeError);
-          }
-        });
-        
-        // 노드 간 연결 생성
-        try {
-          // 시작 노드에서 첫 번째 노드로 연결
-          if (createdNodeIds.length > 0) {
-            const firstNodeId = createdNodeIds[0];
-            const startToFirstEdge = {
-              id: `e_start_${firstNodeId}`,
-              source: 'start',
-              target: firstNodeId,
-              type: 'smoothstep'
-            };
-            elements.value.push(startToFirstEdge);
-            //console.log('시작 노드에서 첫 번째 노드로 연결 생성:', startToFirstEdge);
-          }
-          
-          // 노드 간 순차적 연결
-          for (let i = 0; i < createdNodeIds.length - 1; i++) {
-            const sourceId = createdNodeIds[i];
-            const targetId = createdNodeIds[i + 1];
-            const nodeToNodeEdge = {
-              id: `e_${sourceId}_${targetId}`,
-              source: sourceId,
-              target: targetId,
-              type: 'smoothstep'
-            };
-            elements.value.push(nodeToNodeEdge);
-            //console.log(`노드 ${i + 1}에서 노드 ${i + 2}로 연결 생성:`, nodeToNodeEdge);
-          }
-          
-          // 마지막 노드에서 종료 노드로 연결
-          if (createdNodeIds.length > 0) {
-            const lastNodeId = createdNodeIds[createdNodeIds.length - 1];
-            const lastToEndEdge = {
-              id: `e_${lastNodeId}_end`,
-              source: lastNodeId,
-              target: 'end',
-              type: 'smoothstep'
-            };
-            elements.value.push(lastToEndEdge);
-            //console.log('마지막 노드에서 종료 노드로 연결 생성:', lastToEndEdge);
-          }
-        } catch (connectionError) {
-          console.error('노드 연결 생성 중 오류:', connectionError);
-        }
-        
-        // 연결 상태 업데이트
-        updateConnections();
-        
-        // 워크플로우 이름 설정
-        if (workflowData.workflow_name) {
-          workflowName.value = workflowData.workflow_name;
-        } else if (workflowData.name) {
-          workflowName.value = workflowData.name;
-        }
-        
-        // 워크플로우 설명 설정
-        if (workflowData.description) {
-          workflowDescription.value = workflowData.description;
-        }
-        
-        // 입력 이미지 설정
-        if (workflowData.input_image_url) {
-          inputImage.value = workflowData.input_image_url;
-          processedImages['start'] = workflowData.input_image_url;
-        }
-        
-        // 워크플로우 준비 완료
+        // elements가 없는 경우
+        console.warn('MSA5: elements 배열이 없습니다');
         showStatusMessage.value = true;
-        statusMessage.value = `워크플로우 (${createdNodeIds.length}개 노드)가 불러와졌습니다.`;
+        statusMessage.value = '워크플로우에 처리할 요소가 없습니다.';
         setTimeout(() => { showStatusMessage.value = false }, 3000);
         
-        //console.log('워크플로우 로드 완료. 노드 수:', createdNodeIds.length);
-        
       } catch (error) {
-        console.error('MSA3 워크플로우 처리 중 오류 발생:', error);
+        console.error('MSA5: 워크플로우 처리 중 오류 발생:', error);
         showStatusMessage.value = true;
         statusMessage.value = `워크플로우 로드 실패: ${error.message}`;
         setTimeout(() => { showStatusMessage.value = false }, 3000);
       }
-    }
-
-    // 파라미터 값 추출 헬퍼 함수 - 여러 가능한 키 이름에서 값을 찾음
-    const extractParamValue = (data, possibleKeys) => {
-      if (!data || typeof data !== 'object') return undefined;
-      
-      // 값 디버깅 로그
-      //console.log('파라미터 추출 데이터:', data);
-      //console.log('파라미터 가능한 키:', possibleKeys);
-      
-      // 값을 저장할 변수
-      let foundValue;
-      
-      // 직접 키에서 값 찾기
-      for (const key of possibleKeys) {
-        // 직접 키 값
-        if (data[key] !== undefined) {
-          foundValue = data[key];
-          //console.log(`직접 키에서 값 발견: ${key} = ${foundValue}`);
-          
-          // 값이 객체이고 value 속성이 있는 경우
-          if (typeof foundValue === 'object' && foundValue !== null && foundValue.value !== undefined) {
-            //console.log(`${key}.value에서 실제 값 발견: ${foundValue.value}`);
-            return foundValue.value;
-          }
-          
-          return foundValue;
-        }
-      }
-      
-      // 중첩된 구조에서 값 찾기
-      if (data.data && typeof data.data === 'object') {
-        for (const key of possibleKeys) {
-          if (data.data[key] !== undefined) {
-            foundValue = data.data[key];
-            //console.log(`data.${key}에서 값 발견: ${foundValue}`);
-            
-            // 값이 객체이고 value 속성이 있는 경우
-            if (typeof foundValue === 'object' && foundValue !== null && foundValue.value !== undefined) {
-              //console.log(`data.${key}.value에서 실제 값 발견: ${foundValue.value}`);
-              return foundValue.value;
-            }
-            
-            return foundValue;
-          }
-        }
-      }
-      
-      // params 객체에서 값 찾기
-      if (data.params && typeof data.params === 'object') {
-        for (const key of possibleKeys) {
-          if (data.params[key] !== undefined) {
-            foundValue = data.params[key];
-            //console.log(`params.${key}에서 값 발견:`, foundValue);
-            
-            // 값이 객체이고 value 속성이 있는 경우
-            if (typeof foundValue === 'object' && foundValue !== null && foundValue.value !== undefined) {
-              //console.log(`params.${key}.value에서 실제 값 발견: ${foundValue.value}`);
-              return foundValue.value;
-            }
-            
-            return foundValue;
-          }
-        }
-      }
-      
-      // nodeId가 있는지 확인 - 특별 처리
-      if (data.nodeId || data.node_id) {
-        const nodeId = data.nodeId || data.node_id;
-        //console.log(`노드 ID 발견: ${nodeId}`);
-        
-        // 노드 ID 기반 파라미터 찾기
-        const keyParts = nodeId.split('_');
-        if (keyParts.length > 0) {
-          const baseNodeType = keyParts[0];
-          //console.log(`기본 노드 타입: ${baseNodeType}`);
-          
-          // 특정 노드 타입에 대한 기본값 반환
-          if (baseNodeType === 'median') {
-            return possibleKeys.includes('kernel_size') ? 3 : undefined;
-          } else if (baseNodeType === 'gamma') {
-            return possibleKeys.includes('gamma') ? 1.0 : undefined;
-          }
-        }
-      }
-      
-      // connections 객체에서 값 찾기 (일부 워크플로우 포맷에서 사용)
-      if (data.connections && typeof data.connections === 'object') {
-        for (const key of possibleKeys) {
-          if (data.connections[key] !== undefined) {
-            foundValue = data.connections[key];
-            //console.log(`connections.${key}에서 값 발견: ${foundValue}`);
-            return foundValue;
-          }
-        }
-      }
-      
-      // 타입에 기반한 기본값 제공
-      //console.log('값을 찾지 못했습니다. undefined 반환');
-      return undefined;
     }
 
     // 워크플로우 구조 분석 및 로깅 함수
@@ -4629,1611 +4261,5 @@ export default {
 </script>
 
 <style scoped>
-.msa-component {
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  transition: all 0.3s ease;
-  height: 100%;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  outline: none;
-}
 
-/* 로딩 표시기 스타일 */
-.loading-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 2rem;
-  color: #64748b;
-  gap: 0.5rem;
-}
-
-.loading-placeholder i {
-  font-size: 1.5rem;
-  color: #8b5cf6;
-}
-
-.component-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 500;
-  color: #1e293b;
-}
-
-.header-right {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.save-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: #8b5cf6;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  margin-right: 0.5rem;
-}
-
-.process-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: #8b5cf6;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  margin-right: 0.5rem;
-}
-
-.process-btn:hover {
-  background: #7c3aed;
-}
-
-.process-btn:disabled {
-  background: #c4b5fd;
-  cursor: not-allowed;
-}
-
-.maximize-btn {
-  background: none;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  padding: 0.25rem;
-  border-radius: 4px;
-  transition: all 0.2s ease;
-}
-
-.maximize-btn:hover {
-  background: #e2e8f0;
-  color: #1e293b;
-}
-
-.workflow-container {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-  height: calc(100% - 4rem); /* Account for header */
-}
-
-.node-palette {
-  width: 200px;
-  background: #f8fafc;
-  border-right: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.palette-header {
-  padding: 1rem;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 500;
-  color: #1e293b;
-  flex-shrink: 0;
-}
-
-.palette-content {
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.palette-node {
-  padding: 0.75rem;
-  margin-bottom: 0.5rem;
-  background: white;
-  border-radius: 4px;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: move;
-  transition: all 0.2s ease;
-}
-
-.palette-node:hover {
-  border-color: #8b5cf6;
-  box-shadow: 0 2px 4px rgba(139, 92, 246, 0.1);
-}
-
-.workflow-area {
-  flex: 1;
-  position: relative;
-  background: #f8fafc;
-  overflow: hidden;
-  height: 100%;
-  cursor: default;
-  min-width: 0;
-  min-height: 0;
-}
-
-.workflow-area.dragging {
-  cursor: move;
-}
-
-/* Basic node styles */
-.workflow-node {
-  background: white;
-  border-radius: 8px;
-  padding: 1rem;
-  min-width: 180px;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  position: relative;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s ease;
-}
-
-.workflow-node:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transform: translateY(-2px);
-}
-
-/* Node header */
-.node-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: #1e293b;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.node-header i {
-  font-size: 1.1rem;
-  color: #8b5cf6;
-}
-
-/* Node image container */
-.node-image {
-  margin-top: 0.5rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  overflow: hidden;
-  width: 160px;
-  height: 160px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #4ade80;  /* 녹색 배경 */
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.node-image:hover {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.1);
-  transform: scale(1.02);
-}
-
-.node-image img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
-/* 이미지가 있을 때의 스타일 */
-.node-image:has(img) {
-  background: #f8fafc;
-}
-
-/* Start node styles */
-.start-node {
-  width: 180px !important;
-  height: auto !important;
-  min-height: 120px !important;
-  background: linear-gradient(135deg, #a5f3fc, #0ea5e9) !important;
-  color: white !important;
-  border: none !important;
-  border-radius: 8px !important;
-  padding: 8px !important;
-  position: relative !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  z-index: 5 !important;
-  overflow: visible !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
-  transition: all 0.2s ease !important;
-}
-
-.start-node.has-image {
-  min-height: auto !important;
-}
-
-.start-node .node-header {
-  width: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding-bottom: 0.5rem !important;
-  margin-bottom: 0 !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
-}
-
-.start-node.has-image .node-header {
-  justify-content: flex-start !important;
-}
-
-.start-node .node-header i {
-  color: white !important;
-}
-
-.start-node .node-image {
-  width: 150px !important;
-  height: 150px !important;
-  margin-top: 10px !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
-  border-radius: 6px !important;
-  overflow: hidden !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  background: rgba(255, 255, 255, 0.1) !important;
-  position: relative !important;
-  z-index: 6 !important;
-}
-
-.start-node .node-image img {
-  max-width: 100% !important;
-  max-height: 100% !important;
-  object-fit: contain !important;
-  display: block !important;
-}
-
-/* End node styles */
-.end-node {
-  width: 180px !important;
-  height: auto !important;
-  min-height: 120px !important;
-  background: linear-gradient(135deg, #fecaca, #ef4444) !important;
-  color: white !important;
-  border: none !important;
-  border-radius: 8px !important;
-  padding: 8px !important;
-  position: relative !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  z-index: 5 !important;
-  overflow: visible !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
-  transition: all 0.2s ease !important;
-}
-
-.end-node.has-image {
-  min-height: auto !important;
-}
-
-.end-node .node-header {
-  width: 100% !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding-bottom: 0.5rem !important;
-  margin-bottom: 0 !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
-}
-
-.end-node.has-image .node-header {
-  justify-content: flex-start !important;
-}
-
-.end-node .node-header i {
-  color: white !important;
-}
-
-.end-node .node-image {
-  width: 150px !important;
-  height: 150px !important;
-  margin-top: 10px !important;
-  border: 1px solid rgba(255, 255, 255, 0.3) !important;
-  border-radius: 6px !important;
-  overflow: hidden !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  background: rgba(255, 255, 255, 0.1) !important;
-  position: relative !important;
-  z-index: 6 !important;
-}
-
-.end-node .node-image img {
-  max-width: 100% !important;
-  max-height: 100% !important;
-  object-fit: contain !important;
-  display: block !important;
-}
-
-/* Image indicators */
-.image-loaded-indicator {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 16px;
-  height: 16px;
-  background-color: #22c55e;
-  border-radius: 50%;
-  border: 2px solid white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-  z-index: 10;
-}
-
-.image-not-loaded {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: rgba(0,0,0,0.05);
-  color: #64748b;
-  font-size: 12px;
-}
-
-.msa-component.maximized {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100vw;
-  height: 100vh;
-  border-radius: 0;
-  z-index: 9999;
-}
-
-.msa-component.maximized .workflow-container {
-  height: calc(100vh - 4rem);
-}
-
-.options-panel {
-  width: 280px;
-  background: white;
-  border-left: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  z-index: 1000;
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s ease;
-}
-
-.options-panel.fullscreen-panel {
-  right: 0;
-  position: fixed;
-  height: 100%;
-  top: 0;
-  z-index: 10000;
-  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.1);
-}
-
-.options-panel.hidden {
-  transform: translateX(100%);
-}
-
-.options-panel.visible {
-  transform: translateX(0);
-}
-
-.panel-header {
-  padding: 1.25rem;
-  background: rgba(139, 92, 246, 0.1);
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.panel-header h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #7c3aed;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 6px;
-  transition: all 0.2s ease;
-}
-
-.close-btn:hover {
-  background: #e2e8f0;
-  color: #1e293b;
-}
-
-.panel-content {
-  padding: 1.25rem;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.param-item {
-  margin-bottom: 0.25rem;
-}
-
-.param-item label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: #1e293b;
-}
-
-.param-input {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  background: #f8fafc;
-  transition: all 0.2s ease;
-}
-
-.param-input:focus {
-  outline: none;
-  border-color: #8b5cf6;
-  background: white;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
-}
-
-select.param-input {
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M6 8L2 4h8z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0.75rem center;
-  padding-right: 2.5rem;
-}
-
-/* Merge node styles */
-.merge-node {
-  background: white;
-  border-radius: 8px;
-  padding: 1rem;
-  min-width: 180px;
-  border: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  position: relative;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-.merge-node .node-header {
-  background: rgba(139, 92, 246, 0.05);
-  padding: 0.75rem;
-  border-radius: 6px;
-  margin-bottom: 0.5rem;
-}
-
-.merge-node .node-header i {
-  color: #8b5cf6;
-}
-
-.merge-node .node-image {
-  background: #f8fafc;
-  border: 1px dashed #cbd5e1;
-}
-
-.merge-node .node-image:hover {
-  border-color: #8b5cf6;
-  background: rgba(139, 92, 246, 0.05);
-}
-
-/* Node handle styles */
-:deep(.vue-flow__handle) {
-  width: 12px !important;
-  height: 12px !important;
-  border-radius: 50% !important;
-  background: #8b5cf6 !important;
-  border: 2px solid white !important;
-  box-shadow: 0 0 0 2px #8b5cf6 !important;
-  transition: transform 0.2s ease !important;
-  cursor: crosshair !important;
-  transform: none !important;
-  position: absolute !important;
-}
-
-:deep(.vue-flow__handle:hover) {
-  background: #7c3aed !important;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.3) !important;
-  transform: scale(1.1) !important;
-}
-
-:deep(.vue-flow__handle-left) {
-  left: -6px !important;
-}
-
-:deep(.vue-flow__handle-right) {
-  right: -6px !important;
-}
-
-/* Merge node handle positions */
-.merge-node :deep(.vue-flow__handle-left) {
-  left: -6px !important;
-}
-
-.merge-node :deep(.vue-flow__handle-right) {
-  right: -6px !important;
-}
-
-.merge-node :deep(.vue-flow__handle-top) {
-  top: -6px !important;
-}
-
-/* Selected node style */
-:deep(.selected) {
-  box-shadow: 0 0 0 2px #8b5cf6 !important;
-  border-color: #8b5cf6 !important;
-}
-
-/* 이미지 프리뷰 팝업 스타일 */
-.image-preview-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100000;
-  backdrop-filter: blur(5px);
-  transform: translateZ(0);
-}
-
-.image-preview-container {
-  position: relative;
-  width: 90vw;
-  max-width: 1400px;
-  max-height: 95vh;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 20px 35px rgba(0, 0, 0, 0.3);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: popup-fade-in 0.3s ease-out;
-}
-
-.preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.25rem 1.5rem;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.preview-header h3 {
-  margin: 0;
-  color: #1e293b;
-  font-size: 1.25rem;
-  font-weight: 600;
-}
-
-.preview-content {
-  padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  overflow: auto;
-  max-height: calc(95vh - 70px);
-}
-
-.preview-image {
-  max-width: 100%;
-  max-height: 85vh;
-  object-fit: contain;
-  min-width: 500px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-}
-
-.preview-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-top: 15px;
-  width: 100%;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 20px;
-  background: #8b5cf6;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.action-btn:hover {
-  background: #7c3aed;
-  transform: translateY(-1px);
-}
-
-.similar-btn {
-  background: #0ea5e9;
-}
-
-.similar-btn:hover {
-  background: #0284c7;
-}
-
-.msa6-btn {
-  background: #10b981;
-}
-
-.msa6-btn:hover {
-  background: #059669;
-}
-
-.close-preview-btn {
-  background: none;
-  border: none;
-  color: #64748b;
-  font-size: 1.2rem;
-  cursor: pointer;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.2s ease;
-}
-
-.close-preview-btn:hover {
-  background: #e2e8f0;
-  color: #1e293b;
-  transform: scale(1.05);
-}
-
-/* 워크플로우 저장 다이얼로그 스타일 */
-.save-workflow-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100000;
-  backdrop-filter: blur(5px);
-}
-
-.save-workflow-dialog {
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
-  width: 90%;
-  max-width: 600px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: popup-fade-in 0.3s ease-out;
-}
-
-@keyframes popup-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.dialog-header {
-  padding: 15px 20px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.dialog-header h3 {
-  margin: 0;
-  color: #1e293b;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.dialog-content {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.dialog-footer {
-  padding: 15px 20px;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.form-group label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #4b5563;
-}
-
-.workflow-name-input {
-  padding: 10px 15px;
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
-  font-size: 14px;
-  transition: all 0.2s;
-}
-
-.workflow-name-input:focus {
-  outline: none;
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
-}
-
-.workflow-desc-input {
-  padding: 10px 15px;
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
-  font-size: 14px;
-  min-height: 80px;
-  resize: vertical;
-  transition: all 0.2s;
-}
-
-.workflow-desc-input:focus {
-  outline: none;
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
-}
-
-.preview-info {
-  display: flex;
-  gap: 20px;
-  margin-top: 10px;
-}
-
-.preview-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.preview-item label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #4b5563;
-}
-
-.preview-image-container {
-  height: 120px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #f8fafc;
-  overflow: hidden;
-}
-
-.mini-preview {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
-.no-image {
-  height: 120px;
-  border: 1px dashed #d1d5db;
-  border-radius: 6px;
-  background: #f8fafc;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #9ca3af;
-  font-size: 13px;
-}
-
-.cancel-btn {
-  padding: 8px 15px;
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
-  background: white;
-  color: #4b5563;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.cancel-btn:hover {
-  background: #f3f4f6;
-}
-
-.save-btn {
-  padding: 8px 20px;
-  border-radius: 6px;
-  border: none;
-  background: #8b5cf6;
-  color: white;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.save-btn:hover {
-  background: #7c3aed;
-}
-
-.save-btn:disabled {
-  background: #c4b5fd;
-  cursor: not-allowed;
-}
-
-/* 상태 메시지 스타일 */
-.status-message {
-  position: absolute;
-  top: 4rem;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #3b82f6;
-  color: white;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  z-index: 50;
-  animation: fade-in-out 3s forwards;
-  max-width: 90%;
-}
-
-.status-message.error {
-  background: #ef4444;
-}
-
-.status-message i {
-  font-size: 1.25rem;
-}
-
-@keyframes fade-in-out {
-  0% { opacity: 0; transform: translate(-50%, -10px); }
-  10% { opacity: 1; transform: translate(-50%, 0); }
-  80% { opacity: 1; transform: translate(-50%, 0); }
-  100% { opacity: 0; transform: translate(-50%, -10px); }
-}
-
-/* 워크플로우 오류 표시 스타일 */
-.workflow-error-highlight {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(239, 68, 68, 0.1);
-  border: 2px dashed #ef4444;
-  border-radius: 8px;
-  pointer-events: none;
-  z-index: 5;
-  animation: pulse-error 2s infinite;
-}
-
-@keyframes pulse-error {
-  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-}
-
-/* 워크플로우 요약 스타일 */
-.workflow-summary {
-  margin-top: 20px;
-  border-top: 1px solid #e5e7eb;
-  padding-top: 15px;
-}
-
-.workflow-summary label {
-  display: block;
-  font-size: 14px;
-  font-weight: 500;
-  color: #4b5563;
-  margin-bottom: 10px;
-}
-
-.workflow-nodes-container {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.workflow-node-list {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 8px 0;
-  max-width: 100%;
-}
-
-.workflow-node {
-  min-width: 80px;
-  padding: 8px 12px;
-  background: white;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  position: relative;
-}
-
-.workflow-node:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  right: -12px;
-  top: 50%;
-  width: 16px;
-  height: 2px;
-  background: #d1d5db;
-  transform: translateY(-50%);
-}
-
-.workflow-node i {
-  font-size: 16px;
-  color: #6b7280;
-}
-
-.workflow-node span {
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
-}
-
-.start-node-mini {
-  background: #0ea5e9;
-  border: none;
-  color: white;
-}
-
-.start-node-mini i, .start-node-mini span {
-  color: white;
-}
-
-.end-node-mini {
-  background: #ef4444;
-  border: none;
-  color: white;
-}
-
-.end-node-mini i, .end-node-mini span {
-  color: white;
-}
-
-.workflow-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 15px;
-  padding: 8px 12px;
-  background: #f9fafb;
-  border-radius: 6px;
-}
-
-.stat-item {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: #6b7280;
-}
-
-.stat-value {
-  font-weight: 600;
-  color: #111827;
-}
-
-.cancel-btn {
-  padding: 8px 15px;
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
-  background: white;
-  color: #4b5563;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.export-btn {
-  padding: 8px 20px;
-  border-radius: 6px;
-  border: none;
-  background: #3b82f6;
-  color: white;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.2s;
-}
-
-.export-btn i {
-  font-size: 0.9rem;
-}
-
-.export-btn:hover {
-  background: #2563eb;
-  transform: translateY(-1px);
-}
-
-.export-btn:disabled {
-  background: #93c5fd;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.input-help-text {
-  font-size: 12px;
-  color: #64748b;
-  margin-top: 4px;
-  display: block;
-  line-height: 1.4;
-}
-
-/* 중복 이름 확인 팝업 스타일 */
-.duplicate-name-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100000;
-  backdrop-filter: blur(5px);
-}
-
-.duplicate-name-dialog {
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
-  width: 90%;
-  max-width: 600px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: popup-fade-in 0.3s ease-out;
-}
-
-@keyframes popup-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.dialog-header {
-  padding: 15px 20px;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.dialog-header h3 {
-  margin: 0;
-  color: #1e293b;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.dialog-content {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.dialog-footer {
-  padding: 15px 20px;
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
-.warning-icon {
-  font-size: 2rem;
-  color: #ef4444;
-}
-
-.ok-btn {
-  padding: 8px 20px;
-  border-radius: 6px;
-  border: none;
-  background: #3b82f6;
-  color: white;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.ok-btn:hover {
-  background: #2563eb;
-}
-
-/* 입력 필드 오류 스타일 */
-.input-error {
-  border-color: #ef4444 !important;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2) !important;
-  animation: shake 0.4s ease-in-out;
-}
-
-@keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-5px); }
-  40%, 80% { transform: translateX(5px); }
-}
-
-/* 중복 이름 오류 메시지 스타일 */
-.input-error-message {
-  color: #ef4444;
-  font-size: 14px;
-  margin-top: 5px;
-}
-
-.input-error-message i {
-  margin-right: 5px;
-}
-
-/* 선택된 엣지 스타일 */
-:deep(.vue-flow__edge.selected) {
-  z-index: 1000 !important;
-}
-
-:deep(.vue-flow__edge.selected .vue-flow__edge-path) {
-  stroke: #8b5cf6 !important;
-  stroke-width: 3px !important;
-  filter: drop-shadow(0 0 5px rgba(139, 92, 246, 0.7)) !important;
-}
-
-:deep(.vue-flow__edge.selected .vue-flow__edge-text) {
-  font-weight: bold !important;
-}
-
-:deep(.vue-flow__edge:hover .vue-flow__edge-path) {
-  stroke: #8b5cf6 !important;
-  stroke-width: 2px !important;
-  cursor: pointer !important;
-}
-
-/* 워크플로우 오류 팝업 스타일 */
-.workflow-error-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100000;
-  backdrop-filter: blur(5px);
-}
-
-.workflow-error-dialog {
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
-  width: 90%;
-  max-width: 600px;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: popup-fade-in 0.3s ease-out;
-}
-
-.error-icon {
-  font-size: 2.5rem;
-  color: #ef4444;
-  display: flex;
-  justify-content: center;
-  margin-bottom: 10px;
-}
-
-.error-message {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.error-main-message {
-  font-size: 18px;
-  font-weight: 500;
-  color: #ef4444;
-  margin: 0 0 5px 0;
-}
-
-.error-details {
-  background: #fef2f2;
-  border-radius: 6px;
-  padding: 15px;
-  color: #991b1b;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.error-tips {
-  margin-top: 15px;
-  background: #f0f9ff;
-  border-radius: 6px;
-  padding: 15px;
-}
-
-.error-tips h4 {
-  margin: 0 0 10px 0;
-  color: #0284c7;
-  font-size: 16px;
-}
-
-.error-tips ul {
-  margin: 0;
-  padding-left: 20px;
-}
-
-.error-tips li {
-  margin-bottom: 8px;
-  color: #0369a1;
-  font-size: 14px;
-}
-
-/* 첫 번째 노드로 연결선 */
-.workflow-node-connection {
-  height: 30px;
-  display: flex;
-  align-items: center;
-  width: 24px;
-  position: relative;
-  z-index: 1;
-}
-
-.connection-line {
-  height: 2px;
-  background: #cbd5e1;
-  width: 100%;
-  position: relative;
-}
-
-.connection-line:before {
-  content: '';
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  background: #cbd5e1;
-  border-radius: 50%;
-  right: 0;
-  top: -2px;
-}
-
-/* 다음 노드로 연결선 (마지막 노드가 아닌 경우) */
-.workflow-node-connection:not(:last-child) {
-  margin-bottom: 10px;
-}
-
-/* 노드 파라미터 스타일 */
-.node-params {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.param-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: #6b7280;
-}
-
-.param-value {
-  font-size: 14px;
-  color: #111827;
-}
-
-.node-params {
-  font-size: 0.8rem;
-  color: #64748b;
-  background: rgba(255,255,255,0.6);
-  border-radius: 4px;
-  padding: 2px 5px;
-  margin-top: 1px;
-  border: 1px dashed #cbd5e1;
-}
-
-.param-item {
-  display: flex;
-  justify-content: space-between;
-  gap: 4px;
-  padding: 0px 0;
-  border-bottom: 1px dotted #e2e8f0;
-  line-height: 1.1;
-}
-
-.param-item:last-child {
-  border-bottom: none;
-}
-
-.param-name {
-  font-weight: 500;
-  color: #475569;
-  flex-shrink: 0;
-}
-
-.param-value {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 180px;
-}
-
-.save-workflow-modal {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 9999;
-}
-
-.save-workflow-content {
-  background-color: #fff;
-  padding: 2rem;
-  border-radius: 8px;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
-  width: 90%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.save-workflow-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.save-workflow-header h2 {
-  margin: 0;
-  font-size: 1.5rem;
-  color: #1e293b;
-}
-
-.save-workflow-body {
-  margin-bottom: 1.5rem;
-}
-
-.save-workflow-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
-}
-
-.save-workflow-modal input[type="text"] {
-  width: 100%;
-  padding: 0.75rem;
-  margin-bottom: 1rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 1rem;
-  outline: none;
-  transition: all 0.2s;
-}
-
-.save-workflow-modal input[type="text"]:focus {
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
-}
-
-.save-workflow-footer .cancel-btn {
-  padding: 0.75rem 1.25rem;
-  background-color: #f1f5f9;
-  color: #475569;
-  font-weight: 500;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.save-workflow-footer .cancel-btn:hover {
-  background-color: #e2e8f0;
-}
-
-.save-workflow-footer .save-btn {
-  padding: 0.75rem 1.5rem;
-  background-color: #8b5cf6;
-  color: white;
-  font-weight: 500;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.save-workflow-footer .save-btn:hover {
-  background-color: #7c3aed;
-  transform: translateY(-1px);
-}
-
-.node-summary-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
-  background-color: #f8fafc;
-  margin-bottom: 0.5rem;
-}
-
-.node-summary-item .node-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 50%;
-  background-color: #eef2ff;
-  color: #6366f1;
-  flex-shrink: 0;
-}
-
-.node-summary-item .node-info {
-  flex-grow: 1;
-}
-
-.node-summary-item .node-label {
-  font-weight: 500;
-  color: #1e293b;
-  margin-bottom: 0.25rem;
-}
-
-.node-summary-item .node-params {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.node-summary-item .param-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: #64748b;
-}
-
-.node-summary-item .param-name {
-  font-weight: 500;
-  color: #4b5563;
-}
-
-.node-summary-item .node-connector {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #94a3b8;
-  flex-shrink: 0;
-}
 </style> 

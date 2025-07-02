@@ -166,295 +166,7 @@ async def process_object_detection(image: UploadFile = File(...), params: str = 
             status_code=400,
             content={"status": "error", "message": str(e)}
         )
-
-# 이미지 스타일 전이를 위한 외부 API 호출 (예시)
-@router.post("/style-transfer")
-async def process_style_transfer(image: UploadFile = File(...), style_image: UploadFile = File(None), params: str = Form(...)):
-    """외부 ML API를 통한 스타일 전이 처리"""
-    params = json.loads(params)
     
-    try:
-        # 컨텐츠 이미지 데이터 읽기
-        content_image_data = await image.read()
-        content_img = decode_image(content_image_data)
-        original_format = content_img.format  # 원본 이미지 형식 저장
-        
-        # 파라미터 추출
-        style_strength = params.get("strength", 0.8)
-        style_name = params.get("style", "starry_night")
-        
-        # 스타일 이미지가 제공된 경우
-        style_img_base64 = None
-        if style_image:
-            style_image_data = await style_image.read()
-            style_img = decode_image(style_image_data)
-            
-            # 스타일 이미지를 base64로 인코딩
-            style_buffered = io.BytesIO()
-            style_img.save(style_buffered, format="JPEG")
-            style_img_base64 = base64.b64encode(style_buffered.getvalue()).decode('utf-8')
-        
-        # 컨텐츠 이미지를 base64로 인코딩
-        content_buffered = io.BytesIO()
-        content_img.save(content_buffered, format="JPEG")
-        content_img_base64 = base64.b64encode(content_buffered.getvalue()).decode('utf-8')
-        
-        # 로깅
-        print(f"[외부 API] 스타일 전이 요청 준비: 스타일={style_name}, 강도={style_strength}")
-        
-        # 외부 API 엔드포인트 (예시)
-        api_endpoint = "https://api.example.com/style-transfer"
-        api_key = "YOUR_API_KEY"  # 실제 키로 대체해야 함
-        
-        # API 요청 데이터 준비
-        api_payload = {
-            "content_image": content_img_base64,
-            "style_name": style_name,
-            "style_strength": style_strength
-        }
-        
-        # 스타일 이미지가 있는 경우 추가
-        if style_img_base64:
-            api_payload["style_image"] = style_img_base64
-        
-        # API 헤더 준비
-        api_headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
-        
-        # 실제 외부 API 호출 (예시 - 실제 구현 시 활성화)
-        # response = requests.post(api_endpoint, json=api_payload, headers=api_headers)
-        # response.raise_for_status()
-        # result = response.json()
-        # result_img_base64 = result["styled_image"]
-        # result_img_data = base64.b64decode(result_img_base64)
-        # result_img = Image.open(io.BytesIO(result_img_data))
-        
-        # 테스트용 응답 모의 (외부 API 연동 없이 예시로 반환)
-        # 간단한 필터 효과 적용으로 스타일 전이 시뮬레이션
-        if style_name == "sketch":
-            # 스케치 효과 적용
-            cv_image = pil_to_cv2(content_img)
-            gray = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-            inv = 255 - gray
-            blurred = cv2.GaussianBlur(inv, (21, 21), 0)
-            inv_blur = 255 - blurred
-            result_cv = cv2.divide(gray, inv_blur, scale=256.0)
-            result_img = cv2_to_pil(result_cv).convert('RGB')
-        elif style_name == "watercolor":
-            # 수채화 효과 시뮬레이션
-            result_img = content_img.filter(ImageFilter.BLUR).filter(ImageFilter.EDGE_ENHANCE)
-            enhancer = ImageEnhance.Color(result_img)
-            result_img = enhancer.enhance(1.5)
-        else:
-            # 기본 세피아 효과
-            result_img = content_img.convert('L')
-            result_img = ImageOps.colorize(result_img, "#704214", "#C0C080")
-            
-        # 처리 정보 로깅
-        print(f"스타일 전이 완료: 스타일={style_name}")
-        
-        # 원본 이미지 형식을 유지하여 이미지 반환
-        result_img.format = original_format  # 원본 형식 정보 설정
-        
-        # 이미지를 바이너리로 변환하여 반환
-        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
-        
-        # 적절한 MIME 타입 설정
-        mime_type = f"image/{format_used.lower()}" if format_used != "JPEG" else "image/jpeg"
-        
-        return Response(content=img_bytes, media_type=mime_type, 
-                        headers={"X-Process-Status": "success"})
-    except Exception as e:
-        print(f"스타일 전이 오류: {str(e)}")
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": str(e)}
-        )
-
-# 크기 조정 처리
-@router.post("/resize")
-async def process_resize(image: UploadFile = File(...), params: str = Form(...)):
-    """이미지 크기 조정 처리"""
-    params = json.loads(params)
-    
-    try:
-        image_data = await image.read()
-        img = decode_image(image_data)
-        original_format = img.format  # 원본 이미지 형식 저장
-        
-        width = params.get("width", 100)
-        height = params.get("height", 100)
-        mode = params.get("mode", "stretch")
-        
-        result_img = None
-        if mode == "stretch":
-            result_img = img.resize((width, height), Image.LANCZOS)
-        elif mode == "fit":
-            img.thumbnail((width, height), Image.LANCZOS)
-            result_img = img
-        elif mode == "fill":
-            img_ratio = img.width / img.height
-            target_ratio = width / height
-            
-            if img_ratio > target_ratio:  # 이미지가 더 넓은 경우
-                new_height = height
-                new_width = int(height * img_ratio)
-            else:  # 이미지가 더 높은 경우
-                new_width = width
-                new_height = int(width / img_ratio)
-            
-            resized = img.resize((new_width, new_height), Image.LANCZOS)
-            
-            # 중앙 자르기
-            left = (resized.width - width) // 2
-            top = (resized.height - height) // 2
-            right = left + width
-            bottom = top + height
-            
-            result_img = resized.crop((left, top, right, bottom))
-        
-        # 원본 이미지 형식 유지
-        result_img.format = original_format
-        
-        # 처리 정보 로깅
-        print(f"이미지 크기 조정: {width}x{height}, 모드: {mode}, 형식: {original_format}")
-        
-        # 적절한 MIME 타입 설정
-        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
-        
-        # 이미지를 바이너리로 변환하여 반환
-        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
-        return Response(content=img_bytes, media_type=mime_type, 
-                        headers={"X-Process-Status": "success"})
-    except Exception as e:
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": str(e)}
-        )
-
-# 이미지 자르기 처리
-@router.post("/crop")
-async def process_crop(image: UploadFile = File(...), params: str = Form(...)):
-    """이미지 자르기 처리"""
-    params = json.loads(params)
-    
-    try:
-        image_data = await image.read()
-        img = decode_image(image_data)
-        original_format = img.format  # 원본 이미지 형식 저장
-        
-        x = params.get("x", 0)
-        y = params.get("y", 0)
-        width = params.get("width", 100)
-        height = params.get("height", 100)
-        
-        # 좌표 범위 검증
-        if x < 0 or y < 0 or width <= 0 or height <= 0:
-            raise ValueError("잘못된 자르기 좌표 또는 크기입니다.")
-        
-        if x + width > img.width or y + height > img.height:
-            raise ValueError("자르기 영역이 이미지 범위를 벗어납니다.")
-        
-        # 이미지 자르기
-        result_img = img.crop((x, y, x + width, y + height))
-        
-        # 원본 이미지 형식 유지
-        result_img.format = original_format
-        
-        # 처리 정보 로깅
-        print(f"이미지 자르기: x={x}, y={y}, 너비={width}, 높이={height}, 형식: {original_format}")
-        
-        # 적절한 MIME 타입 설정
-        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
-        
-        # 이미지를 바이너리로 변환하여 반환
-        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
-        return Response(content=img_bytes, media_type=mime_type, 
-                        headers={"X-Process-Status": "success"})
-    except Exception as e:
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": str(e)}
-        )
-
-# 이미지 회전 처리
-@router.post("/rotate")
-async def process_rotate(image: UploadFile = File(...), params: str = Form(...)):
-    print(f'rotate 진입')
-    """이미지 회전 처리"""
-    params = json.loads(params)
-    
-    try:
-        image_data = await image.read()
-        img = decode_image(image_data)
-        original_format = img.format  # 원본 이미지 형식 저장
-        
-        angle = params.get("angle", 0)
-        
-        # 이미지 회전
-        result_img = img.rotate(angle, expand=True, resample=Image.BICUBIC)
-        
-        # 원본 이미지 형식 유지
-        result_img.format = original_format
-        
-        # 처리 정보 로깅
-        print(f"이미지 회전: 각도={angle}, 형식: {original_format}")
-        
-        # 적절한 MIME 타입 설정
-        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
-        
-        # 이미지를 바이너리로 변환하여 반환
-        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
-        return Response(content=img_bytes, media_type=mime_type, 
-                        headers={"X-Process-Status": "success"})
-    except Exception as e:
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": str(e)}
-        )
-
-# 이미지 뒤집기 처리
-@router.post("/flip")
-async def process_flip(image: UploadFile = File(...), params: str = Form(...)):
-    """이미지 뒤집기 처리"""
-    params = json.loads(params)
-    
-    try:
-        image_data = await image.read()
-        img = decode_image(image_data)
-        original_format = img.format  # 원본 이미지 형식 저장
-        
-        direction = params.get("direction", "horizontal")
-        
-        # 이미지 뒤집기
-        if direction == "horizontal":
-            result_img = ImageOps.mirror(img)
-        elif direction == "vertical":
-            result_img = ImageOps.flip(img)
-        else:
-            raise ValueError("유효하지 않은 뒤집기 방향입니다.")
-        
-        # 원본 이미지 형식 유지
-        result_img.format = original_format
-        
-        # 처리 정보 로깅
-        print(f"이미지 뒤집기: 방향={direction}, 형식: {original_format}")
-        
-        # 적절한 MIME 타입 설정
-        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
-        
-        # 이미지를 바이너리로 변환하여 반환
-        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
-        return Response(content=img_bytes, media_type=mime_type, 
-                        headers={"X-Process-Status": "success"})
-    except Exception as e:
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": str(e)}
-        )
-
 # 밝기 조정 처리
 @router.post("/brightness")
 async def process_brightness(image: UploadFile = File(...), params: str = Form(...)):
@@ -662,122 +374,6 @@ async def process_threshold(image: UploadFile = File(...), params: str = Form(..
             content={"status": "error", "message": str(e)}
         )
 
-# 엣지 검출 처리
-@router.post("/edge")
-async def process_edge(image: UploadFile = File(...), params: str = Form(...)):
-    """엣지 검출 처리"""
-    params = json.loads(params)
-    
-    try:
-        image_data = await image.read()
-        img = decode_image(image_data)
-        original_format = img.format  # 원본 이미지 형식 저장
-        
-        method = params.get("method", "canny")
-        
-        # PIL에서 OpenCV로 변환
-        cv_img = pil_to_cv2(img)
-        
-        if method == "canny":
-            # 그레이스케일 변환
-            gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-            
-            # 가우시안 블러로 노이즈 제거
-            blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-            
-            # Canny 엣지 검출
-            low_threshold = params.get("low_threshold", 50)
-            high_threshold = params.get("high_threshold", 150)
-            edges = cv2.Canny(blurred, low_threshold, high_threshold)
-            
-            # 3채널 이미지로 변환
-            result_cv = cv2.cvtColor(edges, cv2.COLOR_GRAY2BGR)
-        elif method == "sobel":
-            # 그레이스케일 변환
-            gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-            
-            # Sobel 엣지 검출
-            sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=3)
-            sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=3)
-            
-            # 결과 합치기
-            sobel_combined = cv2.magnitude(sobelx, sobely)
-            
-            # 정규화 및 8비트 이미지로 변환
-            sobel_8u = cv2.normalize(sobel_combined, None, 0, 255, cv2.NORM_MINMAX, cv2.CV_8U)
-            
-            # 3채널 이미지로 변환
-            result_cv = cv2.cvtColor(sobel_8u, cv2.COLOR_GRAY2BGR)
-        else:
-            raise ValueError("지원하지 않는 엣지 검출 방법입니다.")
-        
-        # OpenCV에서 PIL로 변환
-        result_img = cv2_to_pil(result_cv)
-        
-        # 원본 이미지 형식 유지
-        result_img.format = original_format
-        
-        # 처리 정보 로깅
-        print(f"엣지 검출: 방법={method}, 형식: {original_format}")
-        
-        # 적절한 MIME 타입 설정
-        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
-        
-        # 이미지를 바이너리로 변환하여 반환
-        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
-        return Response(content=img_bytes, media_type=mime_type, 
-                        headers={"X-Process-Status": "success"})
-    except Exception as e:
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": str(e)}
-        )
-
-# 색상 조정 처리
-@router.post("/hue")
-async def process_hue(image: UploadFile = File(...), params: str = Form(...)):
-    """색상 조정 처리"""
-    params = json.loads(params)
-    
-    try:
-        image_data = await image.read()
-        img = decode_image(image_data)
-        original_format = img.format  # 원본 이미지 형식 저장
-        
-        hue_factor = params.get("hue_factor", 0)
-        
-        # HSV 변환 및 색상 조정
-        cv_img = pil_to_cv2(img)
-        hsv = cv2.cvtColor(cv_img, cv2.COLOR_BGR2HSV)
-        
-        # 색상 채널 조정 (0-179 범위)
-        hsv[:, :, 0] = (hsv[:, :, 0] + int(hue_factor * 179)) % 180
-        
-        # 다시 BGR로 변환
-        result_cv = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
-        
-        # OpenCV에서 PIL로 변환
-        result_img = cv2_to_pil(result_cv)
-        
-        # 원본 이미지 형식 유지
-        result_img.format = original_format
-        
-        # 처리 정보 로깅
-        print(f"색상 조정: 색상 계수={hue_factor}, 형식: {original_format}")
-        
-        # 적절한 MIME 타입 설정
-        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
-        
-        # 이미지를 바이너리로 변환하여 반환
-        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
-        return Response(content=img_bytes, media_type=mime_type, 
-                        headers={"X-Process-Status": "success"})
-    except Exception as e:
-        return JSONResponse(
-            status_code=400,
-            content={"status": "error", "message": str(e)}
-        )
-
 # 감마 보정
 @router.post("/gamma")
 async def process_gamma(image: UploadFile = File(...), params: str = Form(...)):
@@ -839,9 +435,9 @@ async def process_histogram_equalization(image: UploadFile = File(...), params: 
         original_format = img.format  # 원본 이미지 형식 저장
         
         # 파라미터 추출
-        enabled = params.get("enabled", True)
+        apply = params.get("apply", True)
         
-        if not enabled:
+        if not apply:
             # 처리하지 않고 원본 반환
             img_bytes, format_used = encode_image_to_bytes(img, format=original_format)
             
@@ -1195,7 +791,7 @@ async def process_normalize(image: UploadFile = File(...), params: str = Form(..
 # 이미지 병합 처리
 @router.post("/merge")
 async def process_merge(images: List[UploadFile] = File(...), params: str = Form(...), format: str = Form(None)):
-    """이미지 병합 처리"""
+    """이미지 병합 처리 - 픽셀별 RGB 채널 연산"""
     params = json.loads(params)
     
     try:
@@ -1212,23 +808,12 @@ async def process_merge(images: List[UploadFile] = File(...), params: str = Form
             if hasattr(img, 'format') and img.format:
                 formats.append(img.format)
         
-        # 형식 결정 순서:
-        # 1. 명시적으로 지정된 format 매개변수
-        # 2. 첫 번째 이미지의 형식
-        # 3. 가장 많이 사용된 형식
-        # 4. 기본값(PNG)
+        # 형식 결정
         output_format = None
-        
         if format:
             output_format = format.upper()
         elif len(formats) > 0:
-            # 첫 번째 이미지 형식 사용
             output_format = formats[0]
-            
-            # 또는 가장 많이 사용된 형식 사용
-            # from collections import Counter
-            # format_counter = Counter(formats)
-            # output_format = format_counter.most_common(1)[0][0]
         
         # 기본값 설정
         if not output_format:
@@ -1239,94 +824,58 @@ async def process_merge(images: List[UploadFile] = File(...), params: str = Form
         if len(loaded_images) < 2:
             raise ValueError("병합에는 최소 2개의 이미지가 필요합니다.")
         
-        # 첫 번째 이미지를 기본으로 사용
+        # 병합 연산 파라미터 추출
+        operation = params.get('operation', 'average')
+        
+        if operation not in ['average', 'max', 'min']:
+            operation = 'average'
+        
+        print(f"병합 연산: {operation}")
+        
+        # 첫 번째 이미지를 기준으로 크기 설정
         base_img = loaded_images[0]
+        target_size = base_img.size
         
-        # 병합 방식 확인
-        mode = params.get("mode", "overlay")
+        # 모든 이미지를 같은 크기로 리사이즈하고 RGB 모드로 변환
+        processed_images = []
+        for img in loaded_images:
+            if img.size != target_size:
+                img = img.resize(target_size, Image.LANCZOS)
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
+            processed_images.append(img)
         
-        # 모드에 따른 병합 처리
-        if mode == "horizontal":
-            # 가로로 나열
-            total_width = sum(img.width for img in loaded_images)
-            max_height = max(img.height for img in loaded_images)
-            
-            # 새 이미지 생성
-            result_img = Image.new('RGB', (total_width, max_height))
-            
-            # 이미지 나열
-            x_offset = 0
-            for img in loaded_images:
-                result_img.paste(img, (x_offset, 0))
-                x_offset += img.width
+        # 이미지들을 numpy 배열로 변환
+        image_arrays = []
+        for img in processed_images:
+            img_array = np.array(img, dtype=np.float32)
+            image_arrays.append(img_array)
         
-        elif mode == "vertical":
-            # 세로로 나열
-            max_width = max(img.width for img in loaded_images)
-            total_height = sum(img.height for img in loaded_images)
-            
-            # 새 이미지 생성
-            result_img = Image.new('RGB', (max_width, total_height))
-            
-            # 이미지 나열
-            y_offset = 0
-            for img in loaded_images:
-                result_img.paste(img, (0, y_offset))
-                y_offset += img.height
+        # 배열을 스택으로 쌓기 (이미지 수, 높이, 너비, 3)
+        stacked_arrays = np.stack(image_arrays, axis=0)
         
-        elif mode == "grid":
-            # 그리드 형태로 배치
-            grid_size = int(math.ceil(math.sqrt(len(loaded_images))))
-            
-            # 각 이미지의 최대 크기 계산
-            max_width = max(img.width for img in loaded_images)
-            max_height = max(img.height for img in loaded_images)
-            
-            # 결과 이미지 크기
-            result_width = max_width * grid_size
-            result_height = max_height * ((len(loaded_images) + grid_size - 1) // grid_size)
-            
-            # 새 이미지 생성
-            result_img = Image.new('RGB', (result_width, result_height), color=(255, 255, 255))
-            
-            # 이미지 배치
-            for i, img in enumerate(loaded_images):
-                x = (i % grid_size) * max_width
-                y = (i // grid_size) * max_height
-                result_img.paste(img, (x, y))
+        # 픽셀별 RGB 채널 연산 수행
+        if operation == "max":
+            # 각 픽셀에서 RGB 채널별 최대값
+            result_array = np.max(stacked_arrays, axis=0)
+        elif operation == "min":
+            # 각 픽셀에서 RGB 채널별 최소값
+            result_array = np.min(stacked_arrays, axis=0)
+        else:  # average (기본값)
+            # 각 픽셀에서 RGB 채널별 평균값
+            result_array = np.mean(stacked_arrays, axis=0)
         
-        else:  # overlay 모드 (기본값)
-            # 두 번째 이미지부터 첫 번째 이미지 위에 오버레이
-            result_img = base_img.copy()
-            
-            # 투명도 파라미터
-            opacity = params.get("opacity", 0.5)
-            
-            for img in loaded_images[1:]:
-                # 크기 조정 (첫 번째 이미지에 맞춤)
-                if img.size != result_img.size:
-                    img = img.resize(result_img.size, Image.LANCZOS)
-                
-                # 이미지가 RGBA 모드가 아니면 변환
-                if img.mode != 'RGBA':
-                    img = img.convert('RGBA')
-                
-                # 투명도 적용
-                overlay_array = np.array(img)
-                overlay_array[:, :, 3] = (overlay_array[:, :, 3] * opacity).astype(np.uint8)
-                img = Image.fromarray(overlay_array)
-                
-                # 이미지 합성
-                if result_img.mode != 'RGBA':
-                    result_img = result_img.convert('RGBA')
-                
-                result_img = Image.alpha_composite(result_img, img)
+        # 결과를 uint8로 변환
+        result_array = np.clip(result_array, 0, 255).astype(np.uint8)
+        
+        # PIL 이미지로 변환
+        result_img = Image.fromarray(result_array, 'RGB')
         
         # 결과 이미지에 원본 형식 설정
         result_img.format = output_format
         
         # 처리 정보 로깅
-        print(f"이미지 병합 완료: 모드={mode}, 이미지 수={len(loaded_images)}, 출력 형식={output_format}")
+        print(f"이미지 병합 완료: 연산={operation}, 이미지 수={len(loaded_images)}, 출력 형식={output_format}")
         
         # 이미지를 바이너리로 변환하여 반환
         img_bytes, format_used = encode_image_to_bytes(result_img, format=output_format)

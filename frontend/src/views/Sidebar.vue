@@ -3,7 +3,7 @@
     <div class="sidebar-header">
       <div class="logo-container">
         <img src="@/assets/logo.png" alt="Logo" class="logo" />
-        <span v-if="!isCollapsed">Soft UI Dashboard PRO</span>
+        <span v-if="!isCollapsed">Image Total AI Platform</span>
       </div>
       <button class="toggle-btn" @click="toggleSidebar">
         <i class="fas fa-bars"></i>
@@ -11,7 +11,7 @@
     </div>
     
     <div class="sidebar-content">
-      <div class="section-title">I-APP</div>
+      <div class="section-title">I-TAP</div>
       <nav class="nav-menu">
         <router-link to="/main" class="nav-item" active-class="active">
           <i class="fas fa-image"></i>
@@ -21,14 +21,14 @@
           <i class="fas fa-chart-line"></i>
           <span v-if="!isCollapsed">Analysis</span>
         </router-link>
+        <router-link to="/table-management" class="nav-item" active-class="active">
+          <i class="fas fa-table"></i>
+          <span v-if="!isCollapsed">Table Management</span>
+        </router-link>
       </nav>
 
       <div v-if="isAdmin" class="section-title">ADMIN</div>
       <nav v-if="isAdmin" class="nav-menu">
-        <router-link to="/admin/dashboard" class="nav-item" active-class="active">
-          <i class="fas fa-tachometer-alt"></i>
-          <span v-if="!isCollapsed">Dashboard</span>
-        </router-link>
         <router-link to="/admin/users" class="nav-item" active-class="active">
           <i class="fas fa-users"></i>
           <span v-if="!isCollapsed">User Management</span>
@@ -95,7 +95,7 @@ export default {
 }
 
 .sidebar.collapsed {
-  width: 70px;
+  width: 120px;
 }
 
 .sidebar-header {
@@ -148,19 +148,33 @@ export default {
 }
 
 .sidebar.collapsed .sidebar-header {
-  justify-content: center;
-  padding: 0;
+  justify-content: space-between;
+  padding: 0 0.5rem;
 }
 
 .sidebar.collapsed .logo-container {
-  display: none;
+  display: flex;
 }
 
 .sidebar.collapsed .toggle-btn {
+  position: static;
   margin: 0;
-  width: 50px;
-  height: 50px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+}
+
+.sidebar.collapsed .section-title {
+  display: none;
+}
+
+.sidebar.collapsed .nav-item span {
+  display: none;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 0.75rem 0.5rem;
 }
 
 .sidebar-content {
@@ -200,6 +214,10 @@ export default {
 
 .nav-item.active {
   background: var(--primary-600);
+  color: white;
+}
+
+.nav-item.active i {
   color: white;
 }
 

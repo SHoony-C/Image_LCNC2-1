@@ -40,7 +40,7 @@ axios.interceptors.response.use(
     // 401 에러를 처리 (인증 만료)
     if (error.response && error.response.status === 401) {
       // 토큰 만료 또는 인증 오류
-      console.warn('인증 오류 발생, 인증 상태 초기화')
+      // console.warn('인증 오류 발생, 인증 상태 초기화')
       store.commit('auth/CLEAR_AUTH')
       
       // 401 오류 로깅
@@ -117,9 +117,9 @@ app.config.globalProperties.$eventBus = eventBus
 
 // 글로벌 에러 핸들러
 app.config.errorHandler = (err, vm, info) => {
-  console.error('App Error:', err)
-  console.log('Vue Instance:', vm)
-  console.log('Error Info:', info)
+  // console.error('App Error:', err)
+  // console.log('Vue Instance:', vm)
+  // console.log('Error Info:', info)
   
   // 애플리케이션 오류 로깅
   LogService.logAction('app_error', {
@@ -143,7 +143,7 @@ Promise.all([
   app.use(router)
   app.mount('#app')
 }).catch(err => {
-  console.error('앱 초기화 오류:', err)
+  // console.error('앱 초기화 오류:', err)
   // 에러가 발생해도 앱은 시작
   app.use(pinia)
   app.use(store)

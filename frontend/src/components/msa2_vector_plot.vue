@@ -1,9 +1,11 @@
 <template>
   <div class="msa-component">
-    <div class="component-header">
+    <div class="card-header">
       <div class="header-left">
         <i class="fas fa-network-wired"></i>
-        <span>유사 이미지 검색</span>
+        <span>3D Image Similarity Map
+
+</span>
       </div>
     </div>
 
@@ -45,8 +47,9 @@
   height: 48px !important;
   min-height: 48px !important;
   max-height: 48px !important;
-  background-color: rgba(0, 0, 0, 0.02);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  background-color: #6c5ce7;
+  color: white;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
@@ -60,16 +63,22 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  color: white;
 }
 
 .header-left i {
-  color: #555;
+  color: white;
+}
+
+.header-left span {
+  color: white;
+  font-weight: 600;
 }
 
 .content-container {
   display: flex !important;
   flex-direction: column !important;
-  height: calc(100% - 48px) !important;
+  height: calc(100% - 40px) !important;
   width: 100% !important;
   overflow: hidden !important;
   position: relative !important;
@@ -141,6 +150,23 @@
   align-items: center !important;
   gap: 8px !important;
 }
+
+.card-header {
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  background-color: #6c5ce7;
+  color: white;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 8px 12px !important;
+  flex: 0 0 40px !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  border-radius: 8px 8px 0 0;
+}
 </style>
 
 <script>
@@ -153,7 +179,7 @@ window.Plotly = Plotly;
 const DEBUG = true;
 function logDebug(...args) {
   if (DEBUG) {
-    console.log('[MSA4]', ...args);
+    // console.log('[MSA4]', ...args);
   }
 }
 
@@ -226,11 +252,6 @@ export default {
         margin: { l: 0, r: 0, t: 0, b: 0 },
         hovermode: 'closest'
       },
-      plotConfig: {
-        responsive: true,
-        displayModeBar: true,
-        scrollZoom: true
-      },
       showImagePopup: false,
       popupImageUrl: '',
       popupImageFilename: '',
@@ -281,11 +302,11 @@ export default {
     }
   },
   mounted() {
-    logDebug('MSA4 Vector Transform Component mounted');
+    // logDebug('MSA4 Vector Transform Component mounted');
     this.checkVectorsData();
     
     // 전역 이벤트 리스너 설정
-    logDebug('Setting up document-level event listeners');
+    // logDebug('Setting up document-level event listeners');
     window.addEventListener('keydown', this.handleKeyDown);
     
     // MSA1에서 이미지 업데이트 이벤트 리스너 등록
@@ -310,7 +331,7 @@ export default {
     // console.log('%c[MSA4] Component ready for inter-component communication', 
     //   'background: #28a745; color: white; padding: 2px 6px; border-radius: 2px');
     
-    logDebug('MSA4 component initialization complete');
+    // logDebug('MSA4 component initialization complete');
     
     // 타이머로 MSA3 연결 시도 (새로 추가)
     setTimeout(() => {
@@ -320,7 +341,7 @@ export default {
     // 첫 번째 포인트 자동 선택 제거 (불필요한 API 호출 방지)
   },
   beforeUnmount() {
-    logDebug('MSA4 component unmounting');
+    // logDebug('MSA4 component unmounting');
     
     // 이벤트 리스너 정리
     window.removeEventListener('keydown', this.handleKeyDown);
@@ -338,7 +359,7 @@ export default {
       window.removeEventListener('resize', this.resizeHandler);
     }
     
-    logDebug('MSA4 event listeners and observers cleaned up');
+    // logDebug('MSA4 event listeners and observers cleaned up');
   },
   methods: {
     // MSA1 요소 찾기 및 모니터링
@@ -363,7 +384,7 @@ export default {
       for (const selector of selectors) {
         const element = document.querySelector(selector);
         if (element) {
-          logDebug(`MSA1 element found with selector: ${selector}`);
+          // logDebug(`MSA1 element found with selector: ${selector}`);
           this.msa1Element = element;
           this.setupMSA1Listeners(element);
           return;
@@ -384,7 +405,7 @@ export default {
       for (const selector of msa5Selectors) {
         const element = document.querySelector(selector);
         if (element) {
-          logDebug(`MSA5 element found with selector: ${selector}`);
+          // logDebug(`MSA5 element found with selector: ${selector}`);
           this.msa5Element = element;
         }
       }
@@ -392,10 +413,10 @@ export default {
       // 요소를 찾지 못한 경우 재시도
       if (!this.msa1Element && this.msa1FindAttempts < this.maxFindAttempts) {
         this.msa1FindAttempts++;
-        logDebug(`MSA1 element not found, retrying (${this.msa1FindAttempts}/${this.maxFindAttempts})`);
+        // logDebug(`MSA1 element not found, retrying (${this.msa1FindAttempts}/${this.maxFindAttempts})`);
         setTimeout(() => this.findAndMonitorMSA1(), 1000);
       } else if (!this.msa1Element) {
-        logDebug('Failed to find MSA1 element after maximum attempts');
+        // logDebug('Failed to find MSA1 element after maximum attempts');
       }
     },
 
@@ -406,7 +427,7 @@ export default {
       if (fileInputs.length > 0) {
         fileInputs.forEach(input => {
           input.addEventListener('change', this.handleMSA1FileInputChange);
-          logDebug('Added file input change listener to MSA1');
+          // logDebug('Added file input change listener to MSA1');
         });
       }
       
@@ -415,7 +436,7 @@ export default {
       if (images.length > 0) {
         images.forEach(img => {
           img.addEventListener('load', this.handleMSA1ImageLoad);
-          logDebug('Added image load listener to MSA1');
+          // logDebug('Added image load listener to MSA1');
         });
       }
     },
@@ -425,7 +446,7 @@ export default {
       const files = event.target.files;
       if (files && files.length > 0) {
         const file = files[0];
-        logDebug(`MSA1 file input change detected: ${file.name}`);
+        // logDebug(`MSA1 file input change detected: ${file.name}`);
         
         // 파일을 이미지 URL로 변환
         const imageUrl = URL.createObjectURL(file);
@@ -441,7 +462,7 @@ export default {
     handleMSA1ImageLoad(event) {
       const img = event.target;
       if (img.src && img.complete && img.naturalWidth > 0) {
-        logDebug(`MSA1 image loaded: ${img.src}`);
+        // logDebug(`MSA1 image loaded: ${img.src}`);
         // 이미지가 변경되었는지 확인 (타임스탬프 또는 URL 비교)
         const currentTime = Date.now();
         if (currentTime - this.lastImageTimestamp > 1000) { // 1초 이내 중복 방지
@@ -472,9 +493,9 @@ export default {
     
     // 외부에서 직접 호출하는 이미지 처리 핸들러
     handleDirectImageData(imageData) {
-      logDebug('Received direct image data:', imageData);
+      // logDebug('Received direct image data:', imageData);
       if (!imageData || (!imageData.imageUrl && !imageData.url)) {
-        logDebug('Invalid image data received in handleDirectImageData');
+        // logDebug('Invalid image data received in handleDirectImageData');
         return;
       }
       
@@ -491,7 +512,7 @@ export default {
     
     // 기존 메서드들...
     async checkVectorsData() {
-      logDebug('Checking vector data availability');
+      // logDebug('Checking vector data availability');
       
       // Reset all data states before loading
       this.vectors = [];
@@ -507,7 +528,7 @@ export default {
       this.selectedIndex = -1;
       
       if (this.vectors && this.vectors.length > 0) {
-        logDebug(`Vector data already loaded, ${this.vectors.length} vectors available`);
+        // logDebug(`Vector data already loaded, ${this.vectors.length} vectors available`);
         return;
       }
       
@@ -515,7 +536,7 @@ export default {
       this.isLoading = true;
       
       try {
-        logDebug('직접 파일 접근으로 벡터 로드 시도...');
+        // logDebug('직접 파일 접근으로 벡터 로드 시도...');
         
         // Add cache-busting parameter to prevent browser caching
         const timestamp = new Date().getTime();
@@ -540,7 +561,7 @@ export default {
           const metadata = await processedMetadataResponse.json();
           
           if (vectors && vectors.length > 0 && metadata && metadata.length > 0) {
-            logDebug(`직접 파일에서 로드: ${vectors.length} 벡터, ${metadata.length} 메타데이터`);
+            // logDebug(`직접 파일에서 로드: ${vectors.length} 벡터, ${metadata.length} 메타데이터`);
             
             // Create new copies of arrays to prevent reference issues
             const vectorsCopy = JSON.parse(JSON.stringify(vectors));
@@ -557,24 +578,13 @@ export default {
         
         throw new Error('직접 파일 접근 실패');
       } catch (fileError) {
-        logDebug(`직접 파일 접근 오류: ${fileError.message}`);
+        // logDebug(`직접 파일 접근 오류: ${fileError.message}`);
         this.loadingComplete = true;
         this.isLoading = false;
         this.showMessage('벡터 데이터를 로드할 수 없습니다', 'error');
       }
     },
     
-    
-    // 타임스탬프 제거 함수
-    removeTimestamp(filename) {
-      if (!filename) return filename;
-      return filename.replace(/^\d{8}_\d{6}_/, '');
-    },
-    
-    // 이미지명 정규화 함수 (타임스탬프 제거)
-    normalizeImageName(filename) {
-      return this.removeTimestamp(filename);
-    },
     
 
     async extractVectors() {
@@ -615,16 +625,9 @@ export default {
         this.message.show = false;
       }, 3000);
     },
-    
-    initializeMarkerStyles() {
-      // 이 메서드는 더 이상 사용하지 않음 - 비반응형 접근법으로 대체됨
-      logDebug('initializeMarkerStyles is now deprecated');
-      // 기존 반응형 로직 대신 createPlot 및 highlightSelectedPoint에서 
-      // 비반응형 배열을 직접 생성하여 사용함
-    },
-    
+        
     projectVectorsWith3DPCA(vectors) {
-      logDebug('Projecting vectors to 3D space...');
+      // logDebug('Projecting vectors to 3D space...');
       if (!vectors || vectors.length === 0) {
         console.error('No vectors to project');
         return [];
@@ -682,147 +685,6 @@ export default {
       return Math.sqrt(dx*dx + dy*dy + dz*dz);
     },
     
-    // 유사 이미지 검색 함수 수정
-    findSimilarImages(filename) {
-      if (!filename) {
-        logDebug('No filename provided for finding similar images');
-        return Promise.resolve([]);
-      }
-      
-      logDebug(`Finding similar images for: ${filename}`);
-      this.isProcessing = true;
-      this.loadingMessage = '유사 이미지 검색 중...';
-      
-      // API 엔드포인트 경로 수정 (/api/msa4/ -> /api/)
-      const apiUrl = `http://localhost:8000/api/similar-images/${encodeURIComponent(filename)}`;
-      
-      return fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
-      })
-      .then(response => {
-        if (!response.ok) {
-          // API 호출 실패 시 내부적으로 유사 이미지 찾기
-          logDebug(`API returned status: ${response.status}, using internal similar image finder`);
-          // 파일명으로 인덱스 찾기
-          const index = this.labels.findIndex(label => 
-            label === filename || this.normalizeImageName(label) === this.normalizeImageName(filename)
-          );
-          
-          if (index !== -1) {
-            // 인덱스를 찾은 경우 내부 계산 사용
-            const fallbackSimilarImages = this.getFallbackSimilarImages(index, filename);
-            return { status: 'success', similar_images: fallbackSimilarImages.fallbackSimilarImages };
-          } else {
-            throw new Error(`Image not found in vectors: ${filename}`);
-          }
-        }
-        return response.json();
-      })
-      .then(data => {
-        logDebug(`Received similar images data: ${data.similar_images?.length || 0} images`);
-        
-        let resultImages = [];
-        
-        if (data.status === 'success' && data.similar_images && data.similar_images.length > 0) {
-          // 상위 4개만 선택
-          const topSimilarImages = data.similar_images.slice(0, 4).map(item => ({
-            filename: item.filename,
-            similarity: item.similarity,
-            url: this.getImageUrl(item.filename)
-          }));
-          
-          // 유사도(similarity)를 기준으로 내림차순 정렬
-          topSimilarImages.sort((a, b) => b.similarity - a.similarity);
-          
-          this.similarImages = topSimilarImages;
-          resultImages = topSimilarImages;
-          logDebug(`Processed ${topSimilarImages.length} similar images`);
-          
-          // MSA3로 유사 이미지 데이터 전송
-          this.$eventBus.emit('similar-images-found', topSimilarImages);
-          
-          // 커스텀 이벤트로도 전달
-          const event = new CustomEvent('msa2-to-msa3-similar-images', {
-            detail: topSimilarImages,
-            bubbles: true
-          });
-          document.dispatchEvent(event);
-        } else {
-          this.similarImages = [];
-          if (data.status === 'error') {
-            this.displayErrorMessage(data.message || '유사 이미지를 찾을 수 없습니다');
-          }
-        }
-        
-        return resultImages;
-      })
-      .catch(error => {
-        console.error('Error finding similar images:', error);
-        this.displayErrorMessage('유사 이미지 검색 중 오류가 발생했습니다');
-        // 오류 발생 시 최후의 수단으로 로컬 계산 시도
-        try {
-          // 파일명으로 인덱스 찾기 시도
-          const index = this.labels.findIndex(label => 
-            label === filename || this.normalizeImageName(label) === this.normalizeImageName(filename)
-          );
-          
-          if (index !== -1) {
-            const fallbackImages = this.getFallbackSimilarImages(index, filename);
-            if (fallbackImages && fallbackImages.fallbackSimilarImages && fallbackImages.fallbackSimilarImages.length > 0) {
-              this.similarImages = fallbackImages.fallbackSimilarImages;
-              
-              // MSA3로 폴백 유사 이미지 데이터 전송
-              this.$eventBus.emit('similar-images-found', fallbackImages.fallbackSimilarImages);
-              
-              // 커스텀 이벤트로도 전달
-              const event = new CustomEvent('msa2-to-msa3-similar-images', {
-                detail: fallbackImages.fallbackSimilarImages,
-                bubbles: true
-              });
-              document.dispatchEvent(event);
-              
-              this.displayErrorMessage('API 호출 실패, 로컬 계산된 유사 이미지를 표시합니다', 'warning');
-              return fallbackImages.fallbackSimilarImages;
-            }
-          }
-        } catch (fallbackError) {
-          console.error('Fallback image finding failed:', fallbackError);
-        }
-        this.similarImages = [];
-        return [];
-      })
-      .finally(() => {
-        this.isProcessing = false;
-      });
-    },
-
-    // 유사 이미지 클릭 처리
-    handleSimilarImageClick(filename) {
-      logDebug(`Similar image clicked: ${filename}`);
-      
-      // 재귀 방지 (이미 이미지 선택 처리 중이면 무시)
-      if (this.isSelectingImageFlag) {
-        logDebug('Already in image selection process, ignoring similar image click');
-        return;
-      }
-      
-      // setTimeout으로 콜 스택 초기화
-      setTimeout(() => {
-        this.selectImage(filename);
-      }, 0);
-    },
-
-    // 유사도 값 포맷팅 (필터 대신 메소드 사용)
-    formatSimilarity(similarity) {
-      // Prevent double multiplication of percentage values
-      if (similarity > 1) {
-        return Math.round(parseFloat(similarity)); // Already a percentage
-      }
-      return Math.round(parseFloat(similarity) * 100);
-    },
 
     // 에러 메시지 표시 함수 추가
     displayErrorMessage(message) {
@@ -838,7 +700,7 @@ export default {
 
     // ResizeObserver 설정 함수 개선
     setupResizeObserver() {
-      logDebug('Setting up ResizeObserver');
+      // logDebug('Setting up ResizeObserver');
       
       // 기존 ResizeObserver 정리
       if (this.resizeObserver) {
@@ -848,7 +710,7 @@ export default {
       // 컨테이너 요소 찾기
       const container = this.$el.querySelector('.content-container');
       if (!container) {
-        logDebug('Content container not found');
+        // logDebug('Content container not found');
         return;
       }
       
@@ -882,7 +744,7 @@ export default {
       
       // 컨테이너 관찰 시작
       this.resizeObserver.observe(container);
-      logDebug('ResizeObserver setup complete');
+      // logDebug('ResizeObserver setup complete');
     },
     
     // 리사이즈 처리 로직을 별도 함수로 분리
@@ -890,7 +752,7 @@ export default {
       try {
         for (const entry of entries) {
           const { width, height } = entry.contentRect;
-          logDebug(`Container size changed: ${width}x${height}`);
+          // logDebug(`Container size changed: ${width}x${height}`);
           
           // Plotly 플롯이 존재하고 DOM에 표시되어 있는 경우에만 리사이즈
           const plotDiv = document.getElementById('plotly-visualization');
@@ -902,13 +764,13 @@ export default {
                 width: plotDiv.clientWidth,
                 height: plotDiv.clientHeight
               });
-              logDebug('Plot resized successfully');
+              // logDebug('Plot resized successfully');
             } catch (error) {
               console.error('Error resizing plot:', error);
             }
             });
           } else {
-            logDebug('Plot not ready for resize');
+            // logDebug('Plot not ready for resize');
           }
         }
       } catch (err) {
@@ -918,18 +780,18 @@ export default {
 
     // 3D 시각화 생성 함수 추가
     createVisualization() {
-      logDebug('Creating 3D visualization');
+      // logDebug('Creating 3D visualization');
       
       // 시각화 컨테이너 요소 선택
       const container = document.getElementById('plotly-visualization');
       if (!container) {
-        logDebug('Visualization container not found');
+        // logDebug('Visualization container not found');
         return;
       }
       
       // 컨테이너 크기 확인
       if (container.clientWidth === 0 || container.clientHeight === 0) {
-        logDebug('Container has zero dimensions, delaying visualization creation');
+        // logDebug('Container has zero dimensions, delaying visualization creation');
         // 컨테이너 크기가 설정될 때까지 지연
         setTimeout(() => this.createVisualization(), 100);
         return;
@@ -974,11 +836,6 @@ export default {
         height: container.clientHeight
       };
       
-      // Plotly 옵션 설정
-      const config = {
-        responsive: true,
-        displayModeBar: false
-      };
       
       // 그래프 초기화
       try {
@@ -987,24 +844,6 @@ export default {
           window.Plotly.purge(container);
         }
         
-        // 새 플롯 생성
-        window.Plotly.newPlot(container, emptyData, layout, config)
-          .then(() => {
-            // console.log('Initial empty visualization created successfully');
-            // 빈 플롯 참조 저장
-            this.plot = container;
-            
-            // 점 클릭 이벤트 리스너 추가
-            container.on('plotly_click', (eventData) => {
-              // console.log('plotly_click 이벤트 발생:', eventData);
-              this.handlePointClick(eventData);
-            });
-            
-            // console.log('클릭 이벤트 리스너가 등록되었습니다.');
-          })
-          .catch(error => {
-            // console.error('Error creating initial visualization:', error);
-          });
       } catch (error) {
         console.error('Error creating Plotly visualization:', error);
       }
@@ -1016,7 +855,7 @@ export default {
         // 클릭한 점의 데이터 포인트 정보 가져오기
         const point = data.points[0];
         if (!point) {
-          logDebug('No point data in click event');
+          // logDebug('No point data in click event');
           return;
         }
         
@@ -1057,12 +896,12 @@ export default {
     
     // 거리 기반으로 유사 이미지 찾기
     findSimilarImagesByDistance(selectedIndex) {
-      logDebug(`Finding similar images for index ${selectedIndex} using distance-based method`);
+      // logDebug(`Finding similar images for index ${selectedIndex} using distance-based method`);
       
       return new Promise((resolve, reject) => {
         try {
           if (!this.projectedVectors || !this.projectedVectors[selectedIndex]) {
-            logDebug('No projected vectors available');
+            // logDebug('No projected vectors available');
             resolve([]);
             return;
           }
@@ -1107,7 +946,7 @@ export default {
           iAppDistances.sort((a, b) => a.distance - b.distance);
           analysisDistances.sort((a, b) => a.distance - b.distance);
           
-          logDebug(`I-app 태그 이미지: ${iAppDistances.length}개, Analysis 태그 이미지: ${analysisDistances.length}개`);
+          // logDebug(`I-app 태그 이미지: ${iAppDistances.length}개, Analysis 태그 이미지: ${analysisDistances.length}개`);
           
           // 각 태그별로 정확히 3개씩 선택
           const topIAppImages = iAppDistances.slice(0, 3);
@@ -1134,7 +973,7 @@ export default {
           const similarImages = [...iappImages, ...analysisImages];
           
           // 유사 이미지 개수 로그
-          logDebug(`태그별 유사 이미지 처리 완료 - I-app: ${iappImages.length}개, Analysis: ${analysisImages.length}개, 총: ${similarImages.length}개`);
+          // logDebug(`태그별 유사 이미지 처리 완료 - I-app: ${iappImages.length}개, Analysis: ${analysisImages.length}개, 총: ${similarImages.length}개`);
           
           // 현재 객체에도 저장
           this.similarImages = similarImages;
@@ -1169,7 +1008,7 @@ export default {
       let imageFilename = encodeURIComponent(filename);
       
       // 디버깅용 로그
-      logDebug(`Getting image URL for: ${filename} (encoded: ${imageFilename})`);
+      // logDebug(`Getting image URL for: ${filename} (encoded: ${imageFilename})`);
       
       // 이미 완전한 URL인 경우 그대로 반환
       if (filename.startsWith('http://') || filename.startsWith('https://')) {
@@ -1182,7 +1021,7 @@ export default {
 
     // 벡터 데이터 처리 함수
     processVectorData(vectors, labels) {
-      logDebug(`Processing vector data: ${vectors.length} vectors, ${labels?.length || 0} labels`);
+      // logDebug(`Processing vector data: ${vectors.length} vectors, ${labels?.length || 0} labels`);
       
       // 유효성 검사
       if (!vectors || vectors.length === 0) {
@@ -1194,15 +1033,15 @@ export default {
       this.vectors = [...vectors]; // Create a new copy
       
       // 라벨 확인 - 콘솔에 출력해서 실제 이미지 파일명 확인
-      console.log('Original labels received:', labels);
+      // console.log('Original labels received:', labels);
       
       if (labels && Array.isArray(labels) && labels.length > 0) {
         this.labels = [...labels]; // Create a new copy
-        logDebug(`Using ${labels.length} original image labels`);
+        // logDebug(`Using ${labels.length} original image labels`);
       } else {
         // 라벨이 없는 경우에만 생성
         this.labels = Array(vectors.length).fill().map((_, i) => `fallback_${i+1}`);
-        logDebug('No labels provided, using fallback labels');
+        // logDebug('No labels provided, using fallback labels');
       }
       
       this.imageLabels = [...this.labels]; // Create a new copy
@@ -1212,7 +1051,7 @@ export default {
         this.projectedVectors = this.projectVectorsWith3DPCA([...vectors]); // Create a new copy
         
         if (!this.projectedVectors || this.projectedVectors.length === 0) {
-          logDebug('Failed to project vectors, cannot visualize');
+          // logDebug('Failed to project vectors, cannot visualize');
           this.displayErrorMessage('벡터 데이터를 시각화할 수 없습니다.');
           return;
         }
@@ -1236,7 +1075,7 @@ export default {
     
     // 인덱스로 이미지 선택하는 함수 (Plotly 이벤트용)
     selectImageByIndex(index) {
-      console.log(`======= 이미지 선택 시작 (인덱스: ${index}) =======`);
+      // console.log(`======= 이미지 선택 시작 (인덱스: ${index}) =======`);
       
       // 인덱스 유효성 검사
       if (index === undefined || index === null || isNaN(index)) {
@@ -1259,7 +1098,7 @@ export default {
       
       // 동일한 이미지 재선택 방지
       if (this.selectedIndex === index) {
-        console.log(`이미 선택된 이미지입니다 (인덱스: ${index}, 파일명: ${this.labels[index]})`);
+        // console.log(`이미 선택된 이미지입니다 (인덱스: ${index}, 파일명: ${this.labels[index]})`);
         return;
       }
       
@@ -1271,10 +1110,10 @@ export default {
         this.selectedIndex = index;
         this.selectedFilename = this.labels[index];
         
-        console.log(`선택된 이미지 정보 업데이트 완료:`);
-        console.log(`- 인덱스: ${this.selectedIndex}`);
-        console.log(`- 파일명: ${this.selectedFilename}`);
-        console.log(`- 좌표: ${JSON.stringify(this.projectedVectors[index])}`);
+        // console.log(`선택된 이미지 정보 업데이트 완료:`);
+        // console.log(`- 인덱스: ${this.selectedIndex}`);
+        // console.log(`- 파일명: ${this.selectedFilename}`);
+        // console.log(`- 좌표: ${JSON.stringify(this.projectedVectors[index])}`);
         
         // 선택한 이미지 정보 구성
         const selectedImage = {
@@ -1285,12 +1124,12 @@ export default {
         
         // 3D 그래프에서 선택된 점 강조 표시
         try {
-          console.log('3D 그래프에서 선택된 점 강조 표시 시작...');
+          // console.log('3D 그래프에서 선택된 점 강조 표시 시작...');
           const plotContainer = document.getElementById('plotly-visualization');
           if (plotContainer) {
             // 새로운 하이라이트 메서드 호출
             this.highlightPointByColor(index);
-            console.log('3D 그래프 점 강조 표시 요청 완료');
+            // console.log('3D 그래프 점 강조 표시 요청 완료');
           } else {
             console.error('plotly-visualization 요소를 찾을 수 없습니다');
             
@@ -1299,7 +1138,7 @@ export default {
               const retryContainer = document.getElementById('plotly-visualization');
               if (retryContainer) {
                 this.highlightPointByColor(index);
-                console.log('3D 그래프 점 강조 표시 지연 재시도 완료');
+                // console.log('3D 그래프 점 강조 표시 지연 재시도 완료');
               } else {
                 console.error('plotly-visualization 요소를 재시도에서도 찾을 수 없습니다');
               }
@@ -1312,7 +1151,7 @@ export default {
         // 전역 객체에 직접 저장
         if (window.MSASharedData) {
           window.MSASharedData.currentImage = selectedImage;
-          console.log('MSA2: 전역 데이터에 이미지 정보 저장 완료');
+          // console.log('MSA2: 전역 데이터에 이미지 정보 저장 완료');
         } else {
           console.warn('MSA2: 전역 MSASharedData 객체가 없습니다');
           // 전역 객체가 없으면 생성
@@ -1320,7 +1159,7 @@ export default {
             currentImage: selectedImage,
             similarImages: []
           };
-          console.log('MSA2: 전역 MSASharedData 객체 생성 완료');
+          // console.log('MSA2: 전역 MSASharedData 객체 생성 완료');
         }
         
         // 유사 이미지 찾기
@@ -1329,7 +1168,7 @@ export default {
             // 전역 객체에 유사 이미지 저장
             if (window.MSASharedData) {
               window.MSASharedData.similarImages = similarImages;
-              console.log(`MSA2: 유사 이미지 정보를 MSA3로 전송합니다: ${similarImages.length} 개`);
+              // console.log(`MSA2: 유사 이미지 정보를 MSA3로 전송합니다: ${similarImages.length} 개`);
             }
             
             // 이벤트 발생 및 데이터 전송
@@ -1342,215 +1181,13 @@ export default {
             this.sendImageDataToMSA3(selectedImage);
           });
         
-        console.log(`======= 이미지 선택 완료 (인덱스: ${index}) =======`);
+        // console.log(`======= 이미지 선택 완료 (인덱스: ${index}) =======`);
       } catch (error) {
         console.error('MSA2: 이미지 선택 처리 중 오류 발생:', error);
       }
     },
     
-    // 별도 함수로 유사 이미지 검색을 분리
-    findSimilarImagesForIndex(index, filename) {
-      if (!filename) {
-        this._isProcessingSelection = false;
-        return;
-      }
-      
-      logDebug(`Finding similar images for index ${index}: ${filename}`);
-      this.isProcessing = true;
-      this.loadingMessage = '유사 이미지 검색 중...';
-      
-      // API 엔드포인트로 요청
-      const apiUrl = `http://localhost:8000/api/similar-images/${encodeURIComponent(filename)}`;
-      
-      // 로컬 변수로 현재 요청 추적
-      const requestId = Date.now();
-      this.lastSimilarImagesRequestId = requestId;
-      
-      // 요청 타임아웃 설정 (10초)
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('API 요청 타임아웃')), 10000);
-      });
-      
-      // 실제 API 요청
-      const fetchPromise = fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-      
-      // Promise.race로 타임아웃 처리
-      Promise.race([fetchPromise, timeoutPromise])
-      .then(response => {
-          // 요청이 취소되었거나 다른 요청이 들어온 경우
-        if (this.lastSimilarImagesRequestId !== requestId) {
-            console.log('요청이 취소되었거나 새로운 요청으로 대체되었습니다.');
-          return null;
-        }
-        
-        if (!response.ok) {
-          // API 오류시 기본 유사도 함수 사용
-          logDebug(`API returned error ${response.status}, using fallback similar images`);
-          return this.getFallbackSimilarImages(index, filename);
-        }
-          
-          return response.json().catch(error => {
-            console.error('JSON 파싱 오류:', error);
-            return this.getFallbackSimilarImages(index, filename);
-          });
-      })
-      .then(data => {
-          // 요청이 취소되었거나 데이터가 없는 경우
-        if (!data || this.lastSimilarImagesRequestId !== requestId) {
-          return;
-        }
-        
-        try {
-          if (data.status === 'success' && data.similar_images && data.similar_images.length > 0) {
-            // 태그별로 유사 이미지 처리
-            const processedSimilarImages = data.similar_images.map(img => ({
-              filename: img.filename,
-              similarity: img.similarity > 1 ? img.similarity : img.similarity * 100, // 백분율로 변환
-              url: img.image_url || img.url || this.getImageUrl(img.filename),
-              tag_type: img.tag_type || (img.filename && img.filename.includes('_before') ? 'I-app' : 'Analysis'),
-              workflow_name: null // Will be populated from MongoDB
-            }));
-            
-            logDebug(`API에서 반환된 유사 이미지 개수: ${processedSimilarImages.length}`);
-            
-            // 태그별로 분류
-            const iappImages = processedSimilarImages.filter(img => img.tag_type === 'I-app');
-            const analysisImages = processedSimilarImages.filter(img => img.tag_type === 'Analysis');
-            
-            logDebug(`태그별 이미지 개수 - I-app: ${iappImages.length}, Analysis: ${analysisImages.length}`);
-            
-            // 유사도(similarity)를 기준으로 내림차순 정렬
-            iappImages.sort((a, b) => b.similarity - a.similarity);
-            analysisImages.sort((a, b) => b.similarity - a.similarity);
-            
-            // 각 태그별로 상위 3개씩 선택
-            const selectedIappImages = iappImages.slice(0, 3);
-            const selectedAnalysisImages = analysisImages.slice(0, 3);
-            
-            // 태그별 이미지 결합
-            this.similarImages = [...selectedIappImages, ...selectedAnalysisImages];
-            
-            logDebug(`처리 후 최종 유사 이미지 개수: ${this.similarImages.length} (I-app: ${selectedIappImages.length}, Analysis: ${selectedAnalysisImages.length})`);
-          } else if (data.fallbackSimilarImages) {
-            // 폴백 데이터 사용
-            this.similarImages = data.fallbackSimilarImages;
-          } else {
-            // API에서 데이터를 받지 못한 경우 폴백 사용
-            const fallbackData = this.getFallbackSimilarImages(index, filename);
-            if (fallbackData && fallbackData.fallbackSimilarImages) {
-              this.similarImages = fallbackData.fallbackSimilarImages;
-            }
-          }
-        } catch (processError) {
-          console.error('유사 이미지 데이터 처리 오류:', processError);
-          // 오류 발생 시 폴백 사용
-          const fallbackData = this.getFallbackSimilarImages(index, filename);
-          if (fallbackData && fallbackData.fallbackSimilarImages) {
-            this.similarImages = fallbackData.fallbackSimilarImages;
-          }
-        }
-      })
-      .catch(error => {
-        console.error('Error finding similar images:', error);
-          
-        // 폴백 방식으로 유사 이미지 찾기
-          try {
-            const fallbackData = this.getFallbackSimilarImages(index, filename);
-            if (fallbackData && fallbackData.fallbackSimilarImages) {
-              this.similarImages = fallbackData.fallbackSimilarImages;
-            }
-          } catch (fallbackError) {
-            console.error('Fallback similar images error:', fallbackError);
-            this.similarImages = [];
-          }
-      })
-      .finally(() => {
-        this.isProcessing = false;
-          // 처리 완료 플래그 설정
-          this._isProcessingSelection = false;
-      });
-    },
     
-    // API 오류 시 대체 유사 이미지 제공 (로컬 계산)
-    getFallbackSimilarImages(index, filename) {
-      logDebug(`Using fallback method to find similar images for ${filename}`);
-      
-      // 벡터 데이터가 없으면 빈 배열 반환
-      if (!this.projectedVectors || !this.projectedVectors[index]) {
-        return { fallbackSimilarImages: [] };
-      }
-      
-      // 현재 선택된 이미지의 벡터
-      const selectedVector = this.projectedVectors[index];
-      const selectedIsIApp = this.labels[index] && this.labels[index].includes('_before');
-      
-      // 모든 이미지와의 거리 계산 및 태그별 분류
-      const iappDistances = [];
-      const analysisDistances = [];
-      
-      for (let idx = 0; idx < this.projectedVectors.length; idx++) {
-        // 자기 자신 제외
-        if (idx === index) continue;
-        
-        const vector = this.projectedVectors[idx];
-        const isIApp = this.labels[idx] && this.labels[idx].includes('_before');
-        const distance = this.calculate3DDistance(selectedVector, vector);
-        
-        const item = {
-          index: idx,
-          filename: this.labels[idx],
-          distance: distance,
-          tag_type: isIApp ? 'I-app' : 'Analysis'
-        };
-        
-        // 태그별로 분류
-        if (isIApp) {
-          iappDistances.push(item);
-        } else {
-          analysisDistances.push(item);
-        }
-      }
-      
-      // 거리 기준으로 정렬 (가까운 순)
-      iappDistances.sort((a, b) => a.distance - b.distance);
-      analysisDistances.sort((a, b) => a.distance - b.distance);
-      
-      logDebug(`Found distances - I-app: ${iappDistances.length}, Analysis: ${analysisDistances.length}`);
-      
-      // 각 태그별로 가장 가까운 이미지 3개씩 선택
-      const nearestIApp = iappDistances.slice(0, 3);
-      const nearestAnalysis = analysisDistances.slice(0, 3);
-      
-      // 이미지 변환 함수
-      const transformToSimilarImage = (item) => {
-        // 거리를 유사도로 변환 (1 - 정규화된 거리)
-        const maxDistance = 1.732; // 3D 공간에서 최대 거리 (대략적 값)
-        const normalizedDistance = Math.min(item.distance / maxDistance, 1);
-        const similarity = Math.round((1 - normalizedDistance) * 100);
-        
-        return {
-          filename: item.filename,
-          similarity: similarity,
-          url: this.getImageUrl(item.filename),
-          tag_type: item.tag_type
-        };
-      };
-      
-      // 변환 및 결합
-      const iappImages = nearestIApp.map(transformToSimilarImage);
-      const analysisImages = nearestAnalysis.map(transformToSimilarImage);
-      const fallbackSimilarImages = [...iappImages, ...analysisImages];
-      
-      logDebug(`Fallback similar images by tag - I-app: ${iappImages.length}, Analysis: ${analysisImages.length}, Total: ${fallbackSimilarImages.length}`);
-      this.similarImages = fallbackSimilarImages;
-      
-      return { fallbackSimilarImages };
-    },
     
     // 플롯 마커 업데이트 함수 (선택된 점 강조)
     updatePlotMarkers(selectedIndex) {
@@ -1577,7 +1214,7 @@ export default {
         try {
           // 그래프가 비어있거나 데이터가 없는 경우 새로 그래프 생성
           if (!container.data || container.data.length === 0) {
-            console.log('플롯이 비어있어 새로 생성합니다');
+            // console.log('플롯이 비어있어 새로 생성합니다');
             this.createPlot();
           return;
         }
@@ -1585,7 +1222,7 @@ export default {
         // 이전에 선택된 점이 있다면 그 정보 저장
           const prevSelectedIndex = this.selectedIndex !== selectedIndex ? this.selectedIndex : -1;
           
-          console.log(`마커 스타일 업데이트 시작: 인덱스 ${selectedIndex}, 이전 인덱스 ${prevSelectedIndex}`);
+          // console.log(`마커 스타일 업데이트 시작: 인덱스 ${selectedIndex}, 이전 인덱스 ${prevSelectedIndex}`);
           
           // 기존 트레이스 확인
           const existingTraces = container.data || [];
@@ -1600,7 +1237,7 @@ export default {
           
           // 하이라이트 트레이스 삭제
           if (existingTraces.length > baseTraceCount) {
-            console.log(`기존 하이라이트 트레이스 제거: ${existingTraces.length - baseTraceCount}개`);
+            // console.log(`기존 하이라이트 트레이스 제거: ${existingTraces.length - baseTraceCount}개`);
             
             // 삭제할 트레이스 인덱스 계산
             const tracesToDelete = [];
@@ -1634,7 +1271,7 @@ export default {
             // 삭제 후 새 트레이스 추가
             deleteTracesAsync()
         .then(() => {
-                console.log('기존 트레이스 삭제 완료, 새 트레이스 추가 중...');
+                // console.log('기존 트레이스 삭제 완료, 새 트레이스 추가 중...');
                 setTimeout(() => {
                   this.addSelectedPointTraces(container, selectedIndex, prevSelectedIndex);
                 }, 100);
@@ -1648,7 +1285,7 @@ export default {
               });
         } else {
             // 삭제할 트레이스가 없으면 바로 새 트레이스 추가
-            console.log('기존 트레이스 없음, 새 트레이스 직접 추가');
+            // console.log('기존 트레이스 없음, 새 트레이스 직접 추가');
             this.addSelectedPointTraces(container, selectedIndex, prevSelectedIndex);
           }
       } catch (error) {
@@ -1656,7 +1293,7 @@ export default {
           
           // 오류 복구 시도 - 그래프 재생성
           try {
-            console.log('오류 복구: 그래프 재생성 시도');
+            // console.log('오류 복구: 그래프 재생성 시도');
             this.createPlot();
             
             // 그래프 생성 후 점 선택 재시도
@@ -1803,14 +1440,14 @@ export default {
           // 트레이스 추가 시도
           Plotly.addTraces(container, traces)
             .then(() => {
-              console.log(`선택된 점 ${selectedIndex}와 유사한 점들 트레이스 추가 완료 (총 ${traces.length}개)`);
+              // console.log(`선택된 점 ${selectedIndex}와 유사한 점들 트레이스 추가 완료 (총 ${traces.length}개)`);
             })
             .catch(err => {
               console.error('트레이스 추가 오류:', err);
               
               // 오류 발생 시 단순 선택 트레이스만 추가 시도
               if (traces.length > 1) {
-                console.log('단순 선택 트레이스만 추가 시도...');
+                // console.log('단순 선택 트레이스만 추가 시도...');
                 Plotly.addTraces(container, [selectedPointTrace])
                   .catch(e => console.error('단순 선택 트레이스 추가도 실패:', e));
               }
@@ -1852,12 +1489,12 @@ export default {
 
     // MSA3와 직접 연결 시도 (새로 추가)
     connectToMSA3() {
-      console.log('MSA2: MSA3와 직접 연결 시도...');
+      // console.log('MSA2: MSA3와 직접 연결 시도...');
       
       // MSA3 컴포넌트 찾기
       const msa3El = document.querySelector('.msa3-container');
       if (msa3El) {
-        console.log('MSA2: MSA3 컴포넌트를 DOM에서 찾았습니다');
+        // console.log('MSA2: MSA3 컴포넌트를 DOM에서 찾았습니다');
         
         // 이미 선택된 이미지가 있는지 확인
         if (this.selectedIndex >= 0 && this.selectedFilename) {
@@ -1882,19 +1519,19 @@ export default {
               window.MSASharedData.similarImages = this.similarImages;
             }
             
-            console.log('MSA2: 전역 데이터에 이미지 정보 저장 완료');
+            // console.log('MSA2: 전역 데이터에 이미지 정보 저장 완료');
           }
         } else {
-          console.log('MSA2: 아직 선택된 이미지가 없습니다');
+          // console.log('MSA2: 아직 선택된 이미지가 없습니다');
         }
       } else {
-        console.log('MSA2: MSA3 컴포넌트를 찾을 수 없습니다');
+        // console.log('MSA2: MSA3 컴포넌트를 찾을 수 없습니다');
       }
     },
     
     // MSA3로 이미지 데이터 전송하는 함수
     sendImageDataToMSA3(imageData) {
-      console.log('MSA2: MSA3로 이미지 데이터 전송 시작');
+      // console.log('MSA2: MSA3로 이미지 데이터 전송 시작');
       
       try {
         // Vue 이벤트 버스를 통한 전송
@@ -1927,14 +1564,14 @@ export default {
               const analysisCount = similarImages.filter(img => img.tag_type === 'Analysis').length;
               
               // 로그 메시지 수정
-              console.log(`선택된 이미지 1개 / ${similarImages.length}개의 (tag별 I-app: ${iAppCount}, Analysis: ${analysisCount}) 유사 이미지 전송 완료`);
+              // console.log(`선택된 이미지 1개 / ${similarImages.length}개의 (tag별 I-app: ${iAppCount}, Analysis: ${analysisCount}) 유사 이미지 전송 완료`);
             }
           })
           .catch(error => {
             console.error('유사 이미지 검색 및 전송 오류:', error);
           });
         
-        console.log('MSA2: MSA3로 이미지 데이터 전송 완료');
+        // console.log('MSA2: MSA3로 이미지 데이터 전송 완료');
       } catch (error) {
         console.error('MSA2: MSA3로 이미지 데이터 전송 오류:', error);
       }
@@ -1942,7 +1579,7 @@ export default {
     
     // 3D 플롯 생성 - 완전히 새로운 방식 (더 간단하게)
     createPlot() {
-      logDebug('초간단 3D 시각화 생성 시작');
+      // logDebug('초간단 3D 시각화 생성 시작');
       
       // 1. 컨테이너 확인
       const container = document.getElementById('plotly-visualization');
@@ -1974,7 +1611,7 @@ export default {
         return;
       }
       
-      console.log(`3D 그래프 생성: ${this.projectedVectors.length}개 포인트`);
+      // console.log(`3D 그래프 생성: ${this.projectedVectors.length}개 포인트`);
       
       // 3. 유효한 벡터 필터링
       const validIndices = [];
@@ -2086,6 +1723,8 @@ export default {
         
         const plotConfig = {
           responsive: false, // 반응형 비활성화 (크기 고정)
+          displayModeBar: false,
+          scrollZoom: true,
           displaylogo: false,
           // WebGL 성능 최적화 옵션 추가
           showSendToCloud: false,
@@ -2132,7 +1771,7 @@ export default {
                 // 카메라 위치 저장 (회전 상태 유지용)
                 if (eventData['scene.camera'].eye) {
                   this.currentCameraPosition.eye = eventData['scene.camera'].eye;
-                  console.log('카메라 위치 저장:', JSON.stringify(this.currentCameraPosition.eye));
+                  // console.log('카메라 위치 저장:', JSON.stringify(this.currentCameraPosition.eye));
                 }
                 if (eventData['scene.camera'].up) {
                   this.currentCameraPosition.up = eventData['scene.camera'].up;
@@ -2180,7 +1819,7 @@ export default {
     // 색상 기반 점 하이라이트 (트레이스 추가/제거 방식 대신 색상 업데이트)
     highlightPointByColor(index) {
       try {
-        console.log(`색상 기반 점 하이라이트: 인덱스 ${index}`);
+        // console.log(`색상 기반 점 하이라이트: 인덱스 ${index}`);
         
         // 컨테이너 확인
         const container = document.getElementById('plotly-visualization');
@@ -2387,7 +2026,7 @@ export default {
     
     // 인덱스로 이미지 선택하는 함수 (Plotly 이벤트용)
     selectImageByIndex(index) {
-      console.log(`======= 이미지 선택 시작 (인덱스: ${index}) =======`);
+      // console.log(`======= 이미지 선택 시작 (인덱스: ${index}) =======`);
       
       // 인덱스 유효성 검사
       if (index === undefined || index === null || isNaN(index)) {
@@ -2402,7 +2041,7 @@ export default {
       
       // 동일한 이미지 재선택 방지
       if (this.selectedIndex === index) {
-        console.log(`이미 선택된 이미지입니다 (인덱스: ${index}, 파일명: ${this.labels[index]})`);
+        // console.log(`이미 선택된 이미지입니다 (인덱스: ${index}, 파일명: ${this.labels[index]})`);
         return;
       }
       
@@ -2414,9 +2053,9 @@ export default {
         this.selectedIndex = index;
         this.selectedFilename = this.labels[index];
         
-        console.log(`선택된 이미지 정보 업데이트 완료:`);
-        console.log(`- 인덱스: ${this.selectedIndex}`);
-        console.log(`- 파일명: ${this.selectedFilename}`);
+        // console.log(`선택된 이미지 정보 업데이트 완료:`);
+        // console.log(`- 인덱스: ${this.selectedIndex}`);
+        // console.log(`- 파일명: ${this.selectedFilename}`);
         
         // 선택한 이미지 정보 구성
         const selectedImage = {
@@ -2427,20 +2066,20 @@ export default {
         
         // 3D 그래프에서 선택된 점 강조 표시
         try {
-          console.log('3D 그래프에서 선택된 점 강조 표시 시작...');
+          // console.log('3D 그래프에서 선택된 점 강조 표시 시작...');
           
           // 색상 기반 하이라이트 함수 호출
           this.highlightPointByColor(index);
           
-          console.log('3D 그래프 점 강조 표시 요청 완료');
+          // console.log('3D 그래프 점 강조 표시 요청 완료');
         } catch (plotError) {
-          console.error('3D 그래프 점 강조 표시 중 오류:', plotError);
+          // console.error('3D 그래프 점 강조 표시 중 오류:', plotError);
         }
         
         // 전역 객체에 직접 저장
         if (window.MSASharedData) {
           window.MSASharedData.currentImage = selectedImage;
-          console.log('MSA2: 전역 데이터에 이미지 정보 저장 완료');
+          // console.log('MSA2: 전역 데이터에 이미지 정보 저장 완료');
       } else {
           window.MSASharedData = {
             currentImage: selectedImage,
@@ -2460,13 +2099,13 @@ export default {
             this.sendImageDataToMSA3(selectedImage);
           })
           .catch(error => {
-            console.error('유사 이미지 찾기 오류:', error);
+            // console.error('유사 이미지 찾기 오류:', error);
             this.sendImageDataToMSA3(selectedImage);
           });
         
-        console.log(`======= 이미지 선택 완료 (인덱스: ${index}) =======`);
+        // console.log(`======= 이미지 선택 완료 (인덱스: ${index}) =======`);
       } catch (error) {
-        console.error('이미지 선택 처리 중 오류 발생:', error);
+        // console.error('이미지 선택 처리 중 오류 발생:', error);
       }
     },
     
@@ -2481,7 +2120,7 @@ export default {
         
         // 라벨 배열이 없거나 비어있으면 기본값 반환
         if (!this.labels || this.labels.length === 0) {
-          console.warn('라벨 배열이 비어있거나 정의되지 않았습니다. 빈 태그 그룹을 반환합니다.');
+          // console.warn('라벨 배열이 비어있거나 정의되지 않았습니다. 빈 태그 그룹을 반환합니다.');
           return tagGroups;
         }
       
@@ -2489,7 +2128,7 @@ export default {
       for (let i = 0; i < this.labels.length; i++) {
         const label = this.labels[i];
           if (!label) {
-            console.warn(`인덱스 ${i}의 라벨이 undefined 또는 null입니다. 건너뜁니다.`);
+            // console.warn(`인덱스 ${i}의 라벨이 undefined 또는 null입니다. 건너뜁니다.`);
             continue;
           }
           
@@ -2502,125 +2141,21 @@ export default {
       
       return tagGroups;
       } catch (error) {
-        console.error('태그 그룹 생성 오류:', error);
+        // console.error('태그 그룹 생성 오류:', error);
         return { 'I-app': [], 'Analysis': [] };
       }
-    },
-    
-    // 이벤트 리스너 초기화 (별도 함수로 분리)
-    initPlotEventListeners(container) {
-      try {
-        // 점 클릭 이벤트 리스너
-        container.on('plotly_click', (data) => {
-          if (!data || !data.points || data.points.length === 0) return;
-          
-          try {
-            const point = data.points[0];
-            const pointIndex = point.pointIndex;
-            const curveNumber = point.curveNumber;
-            
-            console.log(`Plotly 점 클릭 이벤트: 트레이스 ${curveNumber}, 포인트 ${pointIndex}`);
-            
-            // customdata에서 원본 인덱스 가져오기
-            let actualIndex;
-            if (point.customdata !== undefined) {
-              actualIndex = point.customdata;
-            } else {
-              // I-app 또는 Analysis 태그 그룹에서 인덱스 찾기
-              const tagGroups = this.getTagGroups();
-              const groupKey = curveNumber === 0 ? 'I-app' : 'Analysis';
-              actualIndex = tagGroups[groupKey][pointIndex];
-            }
-            
-            console.log(`클릭된 포인트의 실제 인덱스: ${actualIndex}`);
-            
-            if (actualIndex !== undefined && actualIndex >= 0) {
-              this.selectImageByIndex(actualIndex);
-            }
-          } catch (error) {
-            console.error('점 클릭 이벤트 처리 오류:', error);
-          }
-        });
-        
-        // 더블 클릭 리셋 이벤트
-        container.on('plotly_doubleclick', () => {
-          console.log('그래프 더블클릭: 원래 뷰로 재설정합니다.');
-        });
-        
-        console.log('Plotly 이벤트 리스너 등록 완료');
-      } catch (error) {
-        console.error('이벤트 리스너 초기화 오류:', error);
-      }
-    },
-    
-    // 유사한 점들 태그별 하이라이트
-    highlightSimilarPointsByTag(selectedIndex) {
-      const tagGroups = this.getTagGroups();
-      const selectedTag = this.labels[selectedIndex].includes('_before') ? 'I-app' : 'Analysis';
-      const sameTagIndices = tagGroups[selectedTag] || [];
-      
-      // 같은 태그 내에서 선택된 점과 다른 점들 사이의 거리 계산
-      const distances = [];
-      for (const index of sameTagIndices) {
-        if (index === selectedIndex) continue;
-        
-        const distance = this.calculate3DDistance(
-          this.projectedVectors[selectedIndex],
-          this.projectedVectors[index]
-        );
-        
-        distances.push({
-          index,
-          distance,
-          similarity: 1 - Math.min(distance, 1) // 거리를 유사도로 변환 (0-1 범위)
-        });
-      }
-      
-      // 유사도 기준으로 정렬
-      distances.sort((a, b) => a.distance - b.distance);
-      
-      // 상위 3개만 선택 (가장 유사한 포인트들)
-      const topSimilar = distances.slice(0, 3);
-      
-      if (topSimilar.length === 0) {
-        return []; // 유사한 점이 없으면 빈 배열 반환
-      }
-      
-      // 유사 포인트 트레이스 생성
-      const similarPointsTrace = {
-          type: 'scatter3d',
-          mode: 'markers',
-        x: topSimilar.map(p => this.projectedVectors[p.index][0]),
-        y: topSimilar.map(p => this.projectedVectors[p.index][1]),
-        z: topSimilar.map(p => this.projectedVectors[p.index][2]),
-        text: topSimilar.map(p => `${this.labels[p.index]} (유사도: ${Math.round(p.similarity * 100)}%)`),
-        hoverinfo: 'text',
-          marker: {
-          size: 7,
-          color: 'rgba(0, 255, 0, 1)', // 녹색
-          symbol: 'circle',
-          line: {
-            color: 'white',
-            width: 1
-          }
-        },
-        name: '태그 내 유사 이미지',
-          showlegend: true
-        };
-        
-      return [similarPointsTrace];
     },
     
     // MSA1에서 유사 이미지 데이터 수신 처리 (새로 추가)
     handleSimilarImagesFromMSA1(event) {
       try {
-        console.log('[MSA2] MSA1에서 유사 이미지 데이터 수신:', event.detail);
+        // console.log('[MSA2] MSA1에서 유사 이미지 데이터 수신:', event.detail);
         
         const { mainImage, similarImages, uploadedVector, totalCompared } = event.detail;
         
         // 업로드된 이미지의 3D 벡터가 있으면 처리
         if (uploadedVector && uploadedVector.length === 3) {
-          console.log('[MSA2] 업로드된 이미지의 3D 벡터:', uploadedVector);
+          // console.log('[MSA2] 업로드된 이미지의 3D 벡터:', uploadedVector);
           // 업로드된 벡터를 기존 벡터 데이터에 추가할 수 있음 (선택사항)
         }
         
@@ -2631,7 +2166,7 @@ export default {
         this.selectedImage = mainImage;
         this.selectedImageName = mainImage.filename;
         
-        console.log(`[MSA2] 총 ${totalCompared || 0}개 이미지와 비교하여 ${similarImages.length}개 유사 이미지 발견`);
+        // console.log(`[MSA2] 총 ${totalCompared || 0}개 이미지와 비교하여 ${similarImages.length}개 유사 이미지 발견`);
         
         // 플롯 업데이트
         this.updatePlotWithSimilarImages(mainImage, similarImages);
@@ -2639,17 +2174,17 @@ export default {
         // MSA3에 이미지 선택 이벤트 전송
         this.sendImageSelectedToMSA3(mainImage, similarImages);
         
-        console.log('[MSA2] Base64 유사 이미지 데이터 처리 완료');
+        // console.log('[MSA2] Base64 유사 이미지 데이터 처리 완료');
         
       } catch (error) {
-        console.error('[MSA2] 유사 이미지 데이터 처리 오류:', error);
+        // console.error('[MSA2] 유사 이미지 데이터 처리 오류:', error);
       }
     },
     
     // 유사 이미지로 플롯 업데이트
     updatePlotWithSimilarImages(mainImage, similarImages) {
       try {
-        console.log('[MSA2] 유사 이미지로 플롯 업데이트 시작');
+        // console.log('[MSA2] 유사 이미지로 플롯 업데이트 시작');
         
         // 기존 벡터 데이터가 없으면 처리할 수 없음
         if (!this.projectedVectors || this.projectedVectors.length === 0) {
@@ -2677,7 +2212,7 @@ export default {
           });
         }
         
-        console.log('[MSA2] 메인 이미지 인덱스:', mainImageIndex, '파일명:', mainImage.filename);
+        // console.log('[MSA2] 메인 이미지 인덱스:', mainImageIndex, '파일명:', mainImage.filename);
         
         // 메인 이미지를 찾았으면 기존 updatePlotMarkers 함수 호출
         if (mainImageIndex !== -1) {
@@ -2687,16 +2222,16 @@ export default {
           // 기존 updatePlotMarkers 함수 호출 (기존 로직 그대로 사용)
           this.updatePlotMarkers(mainImageIndex);
           
-          console.log('[MSA2] 기존 updatePlotMarkers 함수로 플롯 업데이트 완료');
+          // console.log('[MSA2] 기존 updatePlotMarkers 함수로 플롯 업데이트 완료');
         } else {
-          console.warn('[MSA2] 메인 이미지를 찾을 수 없습니다:', mainImage.filename);
+          // console.warn('[MSA2] 메인 이미지를 찾을 수 없습니다:', mainImage.filename);
           
           // 유사 이미지 검색 결과의 첫 번째 이미지를 메인 이미지로 사용
           if (similarImages && similarImages.length > 0) {
-            console.log('[MSA2] 유사 이미지 검색 결과의 첫 번째 이미지를 메인 이미지로 사용합니다');
+            // console.log('[MSA2] 유사 이미지 검색 결과의 첫 번째 이미지를 메인 이미지로 사용합니다');
             
             const firstSimilarImage = similarImages[0];
-            console.log('[MSA2] 첫 번째 유사 이미지:', firstSimilarImage.filename);
+            // console.log('[MSA2] 첫 번째 유사 이미지:', firstSimilarImage.filename);
             
             // 첫 번째 유사 이미지로 인덱스 다시 검색
             const fallbackIndex = this.labels.findIndex(label => {
@@ -2707,7 +2242,7 @@ export default {
                              this.compareFilenames(label, firstSimilarImage.filename);
                 
                 if (match) {
-                  console.log(`[MSA2] 유사 이미지로 매칭 발견! 라벨: "${label}", 파일명: "${firstSimilarImage.filename}"`);
+                  // console.log(`[MSA2] 유사 이미지로 매칭 발견! 라벨: "${label}", 파일명: "${firstSimilarImage.filename}"`);
                 }
                 
                 return match;
@@ -2715,19 +2250,19 @@ export default {
               return false;
             });
             
-            console.log('[MSA2] 유사 이미지로 찾은 인덱스:', fallbackIndex);
+            // console.log('[MSA2] 유사 이미지로 찾은 인덱스:', fallbackIndex);
             
             // 유사 이미지로 찾았으면 해당 인덱스로 플롯 업데이트
             if (fallbackIndex !== -1) {
               // 기존 점 클릭과 완전히 동일한 방식으로 처리
               this.selectImageByIndex(fallbackIndex);
-              console.log('[MSA2] 유사 이미지를 메인 이미지로 사용하여 기존 점 클릭과 동일하게 처리 완료');
+              // console.log('[MSA2] 유사 이미지를 메인 이미지로 사용하여 기존 점 클릭과 동일하게 처리 완료');
             } else {
               console.warn('[MSA2] 유사 이미지도 기존 데이터에서 찾을 수 없습니다');
-              console.log('[MSA2] 사용 가능한 라벨들 (처음 10개):', this.labels.slice(0, 10));
+              // console.log('[MSA2] 사용 가능한 라벨들 (처음 10개):', this.labels.slice(0, 10));
             }
           } else {
-            console.log('[MSA2] 사용 가능한 라벨들 (처음 10개):', this.labels.slice(0, 10));
+            // console.log('[MSA2] 사용 가능한 라벨들 (처음 10개):', this.labels.slice(0, 10));
           }
         }
         
@@ -2735,189 +2270,8 @@ export default {
         console.error('[MSA2] 플롯 업데이트 오류:', error);
       }
     },
-    
-    // 유사 이미지용 플롯 마커 업데이트 함수
-    updatePlotMarkersForSimilarImages(mainImageIndex, similarIndices) {
-      try {
-        const container = document.getElementById('plotly-visualization');
-        if (!container) {
-          console.error('[MSA2] 시각화 컨테이너를 찾을 수 없습니다');
-          return;
-        }
         
-        // Plotly 그래프가 있는지 확인
-        if (!container.data || container.data.length === 0) {
-          console.log('[MSA2] 플롯이 비어있어 새로 생성합니다');
-          this.createVisualization();
-          return;
-        }
-        
-        // 기존 트레이스 확인 및 하이라이트 트레이스 제거
-        const existingTraces = container.data || [];
-        let baseTraceCount = 0;
-        
-        // 기본 데이터 트레이스 수 확인
-        for (const trace of existingTraces) {
-          if (trace.name === 'I-app' || trace.name === 'Analysis' || 
-              trace.name === '모든 포인트' || trace.name === 'All Points' ||
-              !trace.name || trace.name === '') {
-            baseTraceCount++;
-          }
-        }
-        
-        // 하이라이트 트레이스가 있으면 제거
-        if (existingTraces.length > baseTraceCount) {
-          const tracesToDelete = [];
-          for (let i = baseTraceCount; i < existingTraces.length; i++) {
-            tracesToDelete.push(i);
-          }
-          
-          if (tracesToDelete.length > 0) {
-            window.Plotly.deleteTraces(container, tracesToDelete)
-              .then(() => {
-                console.log('[MSA2] 기존 하이라이트 트레이스 제거 완료');
-                setTimeout(() => {
-                  this.addSimilarImageTraces(container, mainImageIndex, similarIndices);
-                }, 100);
-              })
-              .catch(error => {
-                console.error('[MSA2] 트레이스 삭제 오류:', error);
-                this.addSimilarImageTraces(container, mainImageIndex, similarIndices);
-              });
-          } else {
-            this.addSimilarImageTraces(container, mainImageIndex, similarIndices);
-          }
-        } else {
-          this.addSimilarImageTraces(container, mainImageIndex, similarIndices);
-        }
-        
-      } catch (error) {
-        console.error('[MSA2] 유사 이미지 마커 업데이트 오류:', error);
-        // 실패 시 기본 시각화 업데이트 시도
-        this.updatePlotVisualization();
-      }
-    },
-    
-    // 유사 이미지 트레이스 추가
-    addSimilarImageTraces(container, mainImageIndex, similarIndices) {
-      try {
-        const traces = [];
-        
-        // 메인 이미지 트레이스 (빨간색, 큰 크기)
-        if (mainImageIndex !== -1 && this.projectedVectors[mainImageIndex]) {
-          const coords = this.projectedVectors[mainImageIndex];
-          const mainTrace = {
-            type: 'scatter3d',
-            mode: 'markers',
-            x: [coords[0]],
-            y: [coords[1]],
-            z: [coords[2]],
-            text: [`${this.labels[mainImageIndex]} (메인 이미지)`],
-            hoverinfo: 'text',
-            marker: {
-              size: 12,
-              color: 'rgba(255, 0, 0, 1)',
-              symbol: 'circle',
-              opacity: 1,
-              line: {
-                color: 'white',
-                width: 2
-              }
-            },
-            name: '메인 이미지',
-            showlegend: true
-          };
-          traces.push(mainTrace);
-        }
-        
-        // 유사 이미지들 트레이스 (초록색, 중간 크기)
-        if (similarIndices.length > 0) {
-          const similarX = [];
-          const similarY = [];
-          const similarZ = [];
-          const similarText = [];
-          
-          similarIndices.forEach(index => {
-            if (this.projectedVectors[index]) {
-              const coords = this.projectedVectors[index];
-              similarX.push(coords[0]);
-              similarY.push(coords[1]);
-              similarZ.push(coords[2]);
-              similarText.push(`${this.labels[index]} (유사 이미지)`);
-            }
-          });
-          
-          if (similarX.length > 0) {
-            const similarTrace = {
-              type: 'scatter3d',
-              mode: 'markers',
-              x: similarX,
-              y: similarY,
-              z: similarZ,
-              text: similarText,
-              hoverinfo: 'text',
-              marker: {
-                size: 9,
-                color: 'rgba(0, 255, 0, 0.8)',
-                symbol: 'circle',
-                opacity: 0.8,
-                line: {
-                  color: 'white',
-                  width: 1
-                }
-              },
-              name: '유사 이미지',
-              showlegend: true
-            };
-            traces.push(similarTrace);
-          }
-        }
-        
-        // 트레이스 추가
-        if (traces.length > 0) {
-          window.Plotly.addTraces(container, traces)
-            .then(() => {
-              console.log('[MSA2] 유사 이미지 트레이스 추가 완료');
-            })
-            .catch(error => {
-              console.error('[MSA2] 트레이스 추가 오류:', error);
-            });
-        }
-        
-      } catch (error) {
-        console.error('[MSA2] 유사 이미지 트레이스 생성 오류:', error);
-      }
-    },
-    
-    // 플롯 시각화 업데이트 함수 추가
-    updatePlotVisualization() {
-      try {
-        const container = document.getElementById('plotly-visualization');
-        if (!container || !this.projectedVectors || this.projectedVectors.length === 0) {
-          console.log('[MSA2] 플롯 업데이트 조건 불충족');
-          return;
-        }
-        
-        // 현재 데이터로 플롯 업데이트
-        const updateData = {
-          x: [this.projectedVectors.map(v => v[0])],
-          y: [this.projectedVectors.map(v => v[1])],
-          z: [this.projectedVectors.map(v => v[2])],
-          'marker.color': [this.markerColors],
-          'marker.size': [this.markerSizes],
-          text: [this.labels]
-        };
-        
-        window.Plotly.restyle(container, updateData, 0);
-        console.log('[MSA2] 플롯 시각화 업데이트 완료');
-        
-      } catch (error) {
-        console.error('[MSA2] 플롯 시각화 업데이트 오류:', error);
-        // 실패 시 전체 재생성
-        this.createVisualization();
-      }
-    },
-    
+      
     // 파일명 비교 함수
     compareFilenames(filename1, filename2) {
       try {
@@ -2935,70 +2289,6 @@ export default {
       }
     },
     
-    // 기본 벡터 생성
-    generateDefaultVectors(mainImage, similarImages) {
-      try {
-        const allImages = [mainImage, ...(similarImages || [])];
-        const vectorCount = Math.max(allImages.length, 10); // 최소 10개
-        
-        this.vectors = [];
-        for (let i = 0; i < vectorCount; i++) {
-          // 파일명 기반 해시를 이용한 일관된 벡터 생성
-          const filename = i < allImages.length ? allImages[i].filename : `default_${i}`;
-          const vector = this.generateHashBasedVector(filename);
-          this.vectors.push(vector);
-        }
-        
-        this.projectedVectors = this.vectors;
-        console.log('[MSA2] 기본 벡터 생성 완료:', this.vectors.length);
-        
-      } catch (error) {
-        console.error('[MSA2] 기본 벡터 생성 오류:', error);
-      }
-    },
-    
-    // 기본 라벨 생성
-    generateDefaultLabels(mainImage, similarImages) {
-      try {
-        const allImages = [mainImage, ...(similarImages || [])];
-        this.labels = allImages.map(img => img.filename);
-        this.imageLabels = this.labels;
-        
-        // 부족한 라벨 채우기
-        while (this.labels.length < (this.vectors ? this.vectors.length : 10)) {
-          this.labels.push(`default_${this.labels.length}`);
-        }
-        
-        console.log('[MSA2] 기본 라벨 생성 완료:', this.labels.length);
-        
-      } catch (error) {
-        console.error('[MSA2] 기본 라벨 생성 오류:', error);
-      }
-    },
-    
-    // 해시 기반 벡터 생성
-    generateHashBasedVector(filename) {
-      try {
-        // 간단한 해시 함수
-        let hash = 0;
-        for (let i = 0; i < filename.length; i++) {
-          const char = filename.charCodeAt(i);
-          hash = ((hash << 5) - hash) + char;
-          hash = hash & hash; // 32bit 정수로 변환
-        }
-        
-        // 3D 벡터 생성 (0~1 사이 값)
-        const x = Math.abs(hash % 1000) / 1000;
-        const y = Math.abs((hash >> 10) % 1000) / 1000;
-        const z = Math.abs((hash >> 20) % 1000) / 1000;
-        
-        return [x, y, z];
-        
-      } catch (error) {
-        console.error('[MSA2] 해시 벡터 생성 오류:', error);
-        return [Math.random(), Math.random(), Math.random()];
-      }
-    },
     
     // MSA3에 이미지 선택 이벤트 전송
     sendImageSelectedToMSA3(mainImage, similarImages) {
@@ -3012,7 +2302,7 @@ export default {
         });
         document.dispatchEvent(msa3Event);
         
-        console.log('[MSA2] MSA3에 이미지 선택 이벤트 전송됨');
+        // console.log('[MSA2] MSA3에 이미지 선택 이벤트 전송됨');
         
       } catch (error) {
         console.error('[MSA2] MSA3 이벤트 전송 오류:', error);
@@ -3022,7 +2312,7 @@ export default {
     // 백엔드로부터 최유사 이미지 수신 처리 (새로 추가)
     handleSimilarImageFromBackend(event) {
       try {
-        console.log('[MSA2] 백엔드로부터 최유사 이미지 수신:', event.detail);
+        // console.log('[MSA2] 백엔드로부터 최유사 이미지 수신:', event.detail);
         
         const { filename, similarity, source_image, tag_type, index } = event.detail;
         
@@ -3031,13 +2321,13 @@ export default {
           return;
         }
         
-        console.log(`[MSA2] 최유사 이미지 수신됨: ${filename} (유사도: ${similarity}%, 원본: ${source_image}, 인덱스: ${index})`);
+        // console.log(`[MSA2] 최유사 이미지 수신됨: ${filename} (유사도: ${similarity}%, 원본: ${source_image}, 인덱스: ${index})`);
         
         // 백엔드에서 제공한 인덱스가 있으면 우선 사용
         if (typeof index === 'number' && index >= 0) {
-          console.log('[MSA2] 백엔드에서 제공한 인덱스 사용:', index);
+          // console.log('[MSA2] 백엔드에서 제공한 인덱스 사용:', index);
           this.selectImageByIndex(index);
-          console.log('[MSA2] 백엔드 인덱스로 최유사 이미지 선택 완료');
+          // console.log('[MSA2] 백엔드 인덱스로 최유사 이미지 선택 완료');
           return;
         }
         
@@ -3055,15 +2345,15 @@ export default {
           });
         }
         
-        console.log('[MSA2] 최유사 이미지 인덱스:', imageIndex, '파일명:', filename);
+        // console.log('[MSA2] 최유사 이미지 인덱스:', imageIndex, '파일명:', filename);
         
         if (imageIndex !== -1) {
           // 기존 select point 기능 호출
           this.selectImageByIndex(imageIndex);
-          console.log('[MSA2] 최유사 이미지를 기존 select point 기능에 연동 완료');
+          // console.log('[MSA2] 최유사 이미지를 기존 select point 기능에 연동 완료');
         } else {
-          console.warn('[MSA2] 최유사 이미지를 기존 데이터에서 찾을 수 없습니다:', filename);
-          console.log('[MSA2] 사용 가능한 라벨들 (처음 10개):', this.labels ? this.labels.slice(0, 10) : []);
+          // console.warn('[MSA2] 최유사 이미지를 기존 데이터에서 찾을 수 없습니다:', filename);
+          // console.log('[MSA2] 사용 가능한 라벨들 (처음 10개):', this.labels ? this.labels.slice(0, 10) : []);
         }
         
       } catch (error) {
@@ -3072,7 +2362,7 @@ export default {
     },
   },
   created() {
-    logDebug('MSA2VectorTransform component created');
+    // logDebug('MSA2VectorTransform component created');
     
     // 초기화 시 선택된 점이 없도록 설정
     this.selectedIndex = -1;
@@ -3118,7 +2408,7 @@ export default {
   },
   
   beforeDestroy() {
-    logDebug('MSA2VectorTransform component unmounting');
+    // logDebug('MSA2VectorTransform component unmounting');
     
     // WebGL 컨텍스트 정리
     this.cleanupWebGLContexts();
@@ -3143,7 +2433,7 @@ export default {
       this.$eventBus.off('select-image-by-filename', this.handleSelectImageByFilename);
     }
     
-    logDebug('MSA4 event listeners and observers cleaned up');
+    // logDebug('MSA4 event listeners and observers cleaned up');
   },
 }
 </script>

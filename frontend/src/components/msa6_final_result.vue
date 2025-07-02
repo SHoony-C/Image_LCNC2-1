@@ -1,9 +1,9 @@
 <template>
   <div class="msa-component" :class="{ maximized: isMaximized }">
-    <div class="component-header">
+    <div class="card-header">
       <div class="header-left">
-        <i class="fas fa-image"></i>
-        <span>최종 결과</span>
+        <i class="fas fa-flag-checkered"></i>
+        <span>I-TAP Result</span>
       </div>
       <div class="header-right">
         <button @click="toggleMaximize" class="maximize-btn">
@@ -37,6 +37,7 @@
       :showPopup="showMeasurementPopup"
       :measurements="measurements"
       @update:showPopup="showMeasurementPopup = $event"
+      @update:measurements="handleMeasurementsUpdate"
       @close="closeMeasurementPopup"
       @measurement-added="handleMeasurementAdded"
       @measurement-removed="handleMeasurementRemoved"
@@ -79,7 +80,7 @@ export default {
     
     // 팝업 닫힘 이벤트 리스너 추가
     window.addEventListener('msa6-popup-closed', () => {
-      console.log('MSA6: 팝업 닫힘 이벤트 수신')
+      // console.log('MSA6: 팝업 닫힘 이벤트 수신')
       this.showMeasurementPopup = false
       this.$nextTick(() => this.closeMeasurementPopup())
     })
@@ -282,29 +283,35 @@ export default {
     },
     handleMeasurementAdded(measurement) {
       // console.log('MSA6: 측정 결과 추가됨', measurement);
-      this.measurements.push(measurement);
+      // Create a new array instead of mutating directly
+      this.measurements = [...this.measurements, measurement];
       
       // 히스토리 저장은 측정 컴포넌트 내부에서 처리하므로 여기서는 제거
     },
     handleMeasurementRemoved(measurement) {
       // console.log('MSA6: 측정 결과 제거됨', measurement);
       if (measurement.itemId) {
-        // itemId로 삭제하는 경우
+        // itemId로 삭제하는 경우 - create new array instead of mutating
         this.measurements = this.measurements.filter(m => m.itemId !== measurement.itemId);
       } else if (measurement.id) {
-        // id로 삭제하는 경우
+        // id로 삭제하는 경우 - create new array instead of mutating
         this.measurements = this.measurements.filter(m => m.id !== measurement.id);
       } else {
-        // 전체 객체로 삭제하는 경우
+        // 전체 객체로 삭제하는 경우 - create new array instead of mutating
         const index = this.measurements.indexOf(measurement);
         if (index > -1) {
-          this.measurements.splice(index, 1);
+          this.measurements = this.measurements.filter((_, i) => i !== index);
         }
       }
     },
     handleMeasurementsCleared() {
       // console.log('MSA6: 모든 측정 결과 제거됨');
+      // Create new empty array instead of mutating
       this.measurements = [];
+    },
+    handleMeasurementsUpdate(measurements) {
+      // console.log('MSA6: 측정 결과 업데이트됨', measurements);
+      this.measurements = measurements;
     }
   }
 }
@@ -323,21 +330,32 @@ export default {
   flex-direction: column;
 }
 
-.component-header {
+.card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
-  background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 16px;
+  background-color: #6c5ce7;
+  color: white;
+  margin-bottom: 1rem;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  font-weight: 500;
-  color: #1e293b;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.header-left i {
+  font-size: 1.2rem;
+  color: white;
+}
+
+.header-left span {
+  font-size: 1rem;
+  font-weight: 600;
+  color: white;
 }
 
 .maximize-btn {

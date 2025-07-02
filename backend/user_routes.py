@@ -584,6 +584,16 @@ async def get_user_statistics(db: Session = Depends(get_db)):
         active_users_result = db.execute(active_users_query, {"thirty_days_ago": thirty_days_ago}).fetchone()
         active_users = active_users_result.count if active_users_result else 0
         
+        # 2-1. 실시간 사용자 수 (최근 4시간 내 활동한 고유 사용자 수)
+        four_hours_ago = datetime.now() - timedelta(hours=4)
+        active_sessions_query = text("""
+            SELECT COUNT(DISTINCT username) as count 
+            FROM image_app.user_count 
+            WHERE action_time > :four_hours_ago
+        """)
+        active_sessions_result = db.execute(active_sessions_query, {"four_hours_ago": four_hours_ago}).fetchone()
+        active_sessions = active_sessions_result.count if active_sessions_result else 0
+        
         # 3. 최근 30일 내 새로 가입한 사용자 수
         new_users_query = text("""
             SELECT COUNT(*) as count 
@@ -622,6 +632,34 @@ async def get_user_statistics(db: Session = Depends(get_db)):
                 "is_active": user.is_active
             }
             for user in recent_users_result
+        ]
+        
+        # 4-1. 최근 접속자 100명 (페이지 방문 액션 기반, 사용자명 unique)
+        recent_visitors_query = text("""
+            SELECT 
+                uc.username,
+                COALESCE(u.department, uc.department) as department,
+                MAX(uc.action_time) as last_visit_time,
+                u.email,
+                u.full_name
+            FROM image_app.user_count uc
+            LEFT JOIN image_app.users u ON uc.username = u.username
+            WHERE uc.useraction LIKE 'page_visit%'
+            GROUP BY uc.username, COALESCE(u.department, uc.department), u.email, u.full_name
+            ORDER BY last_visit_time DESC
+            LIMIT 100
+        """)
+        recent_visitors_result = db.execute(recent_visitors_query).fetchall()
+        recent_visitors = [
+            {
+                "user_id": visitor.username,
+                "username": visitor.username,
+                "full_name": visitor.full_name,
+                "email": visitor.email,
+                "department": visitor.department,
+                "timestamp": visitor.last_visit_time.isoformat() if visitor.last_visit_time else None
+            }
+            for visitor in recent_visitors_result
         ]
         
         # 5. 최근 7일간 일별 활동 수
@@ -682,9 +720,11 @@ async def get_user_statistics(db: Session = Depends(get_db)):
             "statistics": {
                 "total_users": total_users,
                 "active_users": active_users,
+                "active_sessions": active_sessions,
                 "new_users": new_users,
                 "action_count": action_count,
                 "recent_users": recent_users,
+                "recent_visitors": recent_visitors,
                 "daily_activity": daily_activity,
                 "department_stats": department_stats,
                 "top_actions": top_actions

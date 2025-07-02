@@ -147,7 +147,7 @@ export default {
         try {
           data1 = await response1.json();
         } catch (err) {
-          console.error('Error parsing I-app images response:', err);
+          // console.error('Error parsing I-app images response:', err);
           data1 = { status: 'error', message: '응답 파싱 오류', processed: [], errors: [{ error: err.message }] };
         }
         
@@ -174,7 +174,7 @@ export default {
           
           data2 = await response2.json();
         } catch (err) {
-          console.error('Error loading Analysis images:', err);
+          // console.error('Error loading Analysis images:', err);
           data2 = { status: 'error', message: '분석 이미지 로드 오류', processed: [], errors: [{ error: err.message }] };
         }
         
@@ -197,7 +197,7 @@ export default {
           
           // 필터링된 이미지 목록 저장 (로드된 이미지 이름만 추출)
           const loadedImages = combinedProcessed.map(img => img.stored_filename) || [];
-          console.log('로드된 이미지:', loadedImages);
+          // console.log('로드된 이미지:', loadedImages);
           
           try {
             // 벡터 변환 API 호출 (백엔드로 직접 요청)
@@ -220,7 +220,7 @@ export default {
             }
             
             const transformData = await transformResponse.json();
-            console.log('변환 데이터:', transformData);
+            // console.log('변환 데이터:', transformData);
             
             this.processingStatus = {
               type: transformData.status === 'success' ? 'success' : 'warning',
@@ -241,17 +241,17 @@ export default {
               this.vectorResults = transformData.debug_info.processed_filenames.map(filename => ({
                 filename: filename
               }));
-              console.log(`${this.vectorResults.length}개 파일명 로드됨:`, this.vectorResults);
+              // console.log(`${this.vectorResults.length}개 파일명 로드됨:`, this.vectorResults);
             }
             else if (transformData.results && transformData.results.length > 0) {
               this.vectorResults = transformData.results;
-              console.log(`${this.vectorResults.length}개 결과 로드됨:`, this.vectorResults);
+              // console.log(`${this.vectorResults.length}개 결과 로드됨:`, this.vectorResults);
             }
             
             // 원본 이미지 목록 저장
             this.loadedOriginalImages = loadedImages;
           } catch (error) {
-            console.error('Error in vector transformation:', error);
+            // console.error('Error in vector transformation:', error);
             this.processingStatus = {
               type: 'error',
               message: '벡터 변환 중 오류: ' + (error.message || '알 수 없는 오류'),
@@ -272,7 +272,7 @@ export default {
           };
         }
       } catch (error) {
-        console.error('Error loading images:', error);
+        // console.error('Error loading images:', error);
         this.processingStatus = {
           type: 'error',
           message: '서버 통신 오류: ' + (error.message || '알 수 없는 오류'),
@@ -299,7 +299,7 @@ export default {
         const data = await response.json();
         
         if (!data.vectors || !data.vectors.length) {
-          console.warn('No vector data returned from API');
+          // console.warn('No vector data returned from API');
           return { 
             status: 'warning', 
             message: '벡터 데이터가 없습니다', 
@@ -309,15 +309,15 @@ export default {
         
         // 응답 데이터 확인 및 필드 처리
         if (!data.metadata) {
-          console.warn('API response missing metadata field:', data);
+          // console.warn('API response missing metadata field:', data);
           // metadata 필드가 없는 경우, labels가 있는지 확인
           if (data.labels) {
             data.metadata = data.labels; // labels 필드를 metadata로 사용
-            console.log('Using labels field as metadata');
+            // console.log('Using labels field as metadata');
           } else {
             // 둘 다 없는 경우 빈 배열이나 인덱스 기반 이름 생성
             data.metadata = Array(data.vectors.length).fill().map((_, i) => `image_${i+1}`);
-            console.log('Generated fallback metadata');
+            // console.log('Generated fallback metadata');
           }
         }
         
@@ -340,7 +340,7 @@ export default {
           results: results
         };
       } catch (error) {
-        console.error('Error processing vector data:', error);
+        // console.error('Error processing vector data:', error);
         return {
           status: 'error',
           message: '벡터 처리 중 오류가 발생했습니다: ' + error.message,
@@ -440,7 +440,7 @@ export default {
           }
         };
       } catch (error) {
-        console.error('Error resetting vector data:', error);
+        // console.error('Error resetting vector data:', error);
         this.processingStatus = {
           type: 'error',
           message: '벡터 데이터 초기화 중 오류가 발생했습니다: ' + (error.message || '알 수 없는 오류')

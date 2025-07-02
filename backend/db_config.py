@@ -3,7 +3,7 @@ MySQL Database Configuration for LCNC App
 """
 import os
 import datetime
-from sqlalchemy import create_engine, event, MetaData, Table, Column, Integer, String, Float, Boolean, DateTime, Text
+from sqlalchemy import create_engine, event, MetaData, Table, Column, Integer, String, Float, Boolean, DateTime, Text, SmallInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
@@ -61,7 +61,9 @@ msa6_result_cd = Table(
     Column('item_id', String(45)),
     Column('subitem_id', String(45)),
     Column('value', Float),
-    Column('create_time', DateTime, default=datetime.datetime.now)
+    Column('create_time', DateTime, default=datetime.datetime.now),
+    Column('is_deleted', SmallInteger, default=0)
+
 )
 
 # 불량 감지 결과 테이블
@@ -69,16 +71,19 @@ msa6_result_defect = Table(
     'msa6_result_defect',
     lcnc_metadata,
     Column('id', Integer, primary_key=True, autoincrement=True),
-    Column('session_id', String(255), nullable=False),
+    Column('table_name', String(45)),
+    Column('username', String(45)),
+    Column('lot_wafer', String(255)),
     Column('item_id', String(255)),
-    Column('sub_item_id', String(255)),
-    Column('x_pos', Float),
-    Column('y_pos', Float),
-    Column('value', Float),
-    Column('is_bright', Boolean, default=True),
-    Column('is_striated', Boolean, default=False),
-    Column('is_distorted', Boolean, default=False),
-    Column('created_at', DateTime, default=datetime.datetime.now)
+    Column('subitem_id', String(255)),
+    Column('major_axis', Float),
+    Column('minor_axis', Float),
+    Column('area', Float),
+    Column('striated_ratio', Float, default=0.0),  # 줄무늬 비율 (0~1)
+    Column('distorted_ratio', Float, default=0.0),  # 왜곡 비율 (0~1)
+    Column('created_at', DateTime, default=datetime.datetime.now),
+    Column('is_deleted', SmallInteger, default=0)  
+
 )
 
 # LCNC 데이터베이스 연결 설정

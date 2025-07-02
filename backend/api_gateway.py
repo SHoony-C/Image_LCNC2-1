@@ -352,7 +352,6 @@ async def get_workflow_by_image(image_filename: str):
                     status_code=500,
                     content={
                         "error": f"Collection '{workflow_collection.name}' does not exist",
-                        "is_demo_data": False,
                         "timestamp": datetime.now().isoformat()
                     }
                 )
@@ -494,7 +493,6 @@ async def get_workflow_by_image(image_filename: str):
             
             response_data = {
                 "workflow": workflow_data,
-                "is_demo_data": False,
                 "timestamp": datetime.now().isoformat(),
                 "search_criteria": {
                     "original_filename": image_filename,
@@ -516,7 +514,6 @@ async def get_workflow_by_image(image_filename: str):
             status_code=404,
             content={
                 "error": f"Workflow not found for {search_filename}", 
-                "is_demo_data": False,
                 "timestamp": datetime.now().isoformat(),
                 "search_criteria": {
                     "original_filename": image_filename,
@@ -534,7 +531,6 @@ async def get_workflow_by_image(image_filename: str):
             status_code=500,
             content={
                 "error": f"Failed to fetch workflow data: {str(e)}",
-                "is_demo_data": False,
                 "timestamp": datetime.now().isoformat(),
                 "stack_trace": traceback.format_exc()
             }

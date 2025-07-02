@@ -121,13 +121,13 @@ export default {
       // 메인 페이지에서 호출되는 메서드
       // 이미 분석 중이라면 새로운 요청을 무시
       if (this.isAnalyzing) {
-        console.log('MSA4: Already analyzing, ignoring new request');
+        // console.log('MSA4: Already analyzing, ignoring new request');
         return;
       }
       
       // 중복 데이터 체크 - 같은 데이터가 연속으로 오는 경우 무시
       if (this.isDuplicateData(data)) {
-        console.log('MSA4: Duplicate data detected, ignoring request');
+        // console.log('MSA4: Duplicate data detected, ignoring request');
         return;
       }
       
@@ -176,7 +176,7 @@ export default {
       
       // 이미 분석 중이라면 새로운 요청을 보내지 않음
       if (this.isAnalyzing) {
-        console.log('MSA4: Already analyzing, skipping new request');
+        // console.log('MSA4: Already analyzing, skipping new request');
         return;
       }
       

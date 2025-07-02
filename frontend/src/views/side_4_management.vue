@@ -344,15 +344,15 @@ export default {
     };
   },
   created() {
-    console.log("=================================================================");
-    console.log("UserManagement component created - SQL DEBUGGING ACTIVE");
-    console.log("=================================================================");
+    // console.log("=================================================================");
+    // console.log("UserManagement component created - SQL DEBUGGING ACTIVE");
+    // console.log("=================================================================");
     
     // Force a log to appear even if there's an error
     window.setTimeout(() => {
-      console.log("SQL DEBUGGING: Delayed log to verify console is working");
-      console.log("If you see this, console logging is functioning");
-      console.log("=================================================================");
+      // console.log("SQL DEBUGGING: Delayed log to verify console is working");
+      // console.log("If you see this, console logging is functioning");
+      // console.log("=================================================================");
     }, 1000);
     
     this.fetchUsers();
@@ -363,24 +363,24 @@ export default {
       this.error = false;
       
       try {
-        console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
-        console.log("함수 호출: fetchUsers()");
+        // console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
+        // console.log("함수 호출: fetchUsers()");
         
         const token = localStorage.getItem('token');
         if (!token) {
-          console.error("No token found");
+          // console.error("No token found");
           this.error = true;
           this.errorMessage = '인증 토큰이 없습니다. 로그인이 필요합니다.';
           this.$router.push('/main');
           return;
         }
         
-        console.log("API 요청 정보:");
-        console.log("- 엔드포인트: http://localhost:8000/api/users/users");
-        console.log("- 메서드: GET");
-        console.log("- 헤더: Authorization: Bearer " + token.substring(0, 5) + "...[보안을 위해 일부만 표시]");
-        console.log("- 예상 SQL 쿼리: SELECT * FROM users");
-        console.log("요청 시작 시간:", new Date().toISOString());
+        // console.log("API 요청 정보:");
+        // console.log("- 엔드포인트: http://localhost:8000/api/users/users");
+        // console.log("- 메서드: GET");
+        // console.log("- 헤더: Authorization: Bearer " + token.substring(0, 5) + "...[보안을 위해 일부만 표시]");
+        // console.log("- 예상 SQL 쿼리: SELECT * FROM users");
+        // console.log("요청 시작 시간:", new Date().toISOString());
         
         // MySQL 엔드포인트 사용
         const response = await axios.get('http://localhost:8000/api/users/users', {
@@ -389,17 +389,17 @@ export default {
           }
         });
         
-        console.log("요청 완료 시간:", new Date().toISOString());
-        console.log("응답 상태 코드:", response.status);
-        console.log("응답 데이터 구조:");
-        console.log("- status:", response.data.status);
-        console.log("- users 배열 길이:", response.data.users?.length);
+        // console.log("요청 완료 시간:", new Date().toISOString());
+        // console.log("응답 상태 코드:", response.status);
+        // console.log("응답 데이터 구조:");
+        // console.log("- status:", response.data.status);
+        // console.log("- users 배열 길이:", response.data.users?.length);
         
         // 결과 데이터 예시 출력 (첫 번째 사용자만)
         if (response.data.users && response.data.users.length > 0) {
-          console.log("첫 번째 사용자 데이터 예시:");
+          // console.log("첫 번째 사용자 데이터 예시:");
           const firstUser = response.data.users[0];
-          console.log(JSON.stringify(firstUser, null, 2));
+          // console.log(JSON.stringify(firstUser, null, 2));
         }
         
         if (response.data.status === 'success') {
@@ -410,26 +410,26 @@ export default {
             };
           });
           this.filterUsers();
-          console.log("데이터 처리 완료: " + this.users.length + "명의 사용자 데이터 로드됨");
+          // console.log("데이터 처리 완료: " + this.users.length + "명의 사용자 데이터 로드됨");
         } else {
           this.error = true;
           this.errorMessage = '사용자 목록을 불러오는데 실패했습니다.';
-          console.error("API 오류: 성공 상태가 아닙니다.");
+          // console.error("API 오류: 성공 상태가 아닙니다.");
         }
-        console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
+        // console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
       } catch (error) {
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
-        console.error('Failed to fetch users:', error);
-        console.error('Error details:', error.response?.data || error.message);
-        console.error('Error status:', error.response?.status);
-        if (error.response?.config) {
-          console.error('API 요청 정보:', {
-            url: error.response.config.url,
-            method: error.response.config.method,
-            headers: error.response.config.headers
-          });
-        }
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
+        // console.error('Failed to fetch users:', error);
+        // console.error('Error details:', error.response?.data || error.message);
+        // console.error('Error status:', error.response?.status);
+        // if (error.response?.config) {
+        //   console.error('API 요청 정보:', {
+        //     url: error.response.config.url,
+        //     method: error.response.config.method,
+        //     headers: error.response.config.headers
+        //   });
+        // }
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
         
         this.error = true;
         
@@ -496,9 +496,9 @@ export default {
       this.loading = true;
       
       try {
-        console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
-        console.log("함수 호출: updateUser()");
-        console.log("사용자 ID:", this.editingUser.id);
+        // console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
+        // console.log("함수 호출: updateUser()");
+        // console.log("사용자 ID:", this.editingUser.id);
         
         const token = localStorage.getItem('token');
         
@@ -513,13 +513,13 @@ export default {
           userData.password = this.editingUser.password;
         }
         
-        console.log("API 요청 정보:");
-        console.log("- 엔드포인트: http://localhost:8000/api/users/user/" + this.editingUser.id);
-        console.log("- 메서드: PUT");
-        console.log("- 요청 데이터:", JSON.stringify(userData, null, 2));
-        console.log("- 예상 SQL 쿼리: UPDATE users SET email=?, full_name=?, permission=? WHERE id=?");
-        console.log("- 쿼리 파라미터:", [userData.email, userData.full_name, userData.permission, this.editingUser.id]);
-        console.log("요청 시작 시간:", new Date().toISOString());
+        // console.log("API 요청 정보:");
+        // console.log("- 엔드포인트: http://localhost:8000/api/users/user/" + this.editingUser.id);
+        // console.log("- 메서드: PUT");
+        // console.log("- 요청 데이터:", JSON.stringify(userData, null, 2));
+        // console.log("- 예상 SQL 쿼리: UPDATE users SET email=?, full_name=?, permission=? WHERE id=?");
+        // console.log("- 쿼리 파라미터:", [userData.email, userData.full_name, userData.permission, this.editingUser.id]);
+        // console.log("요청 시작 시간:", new Date().toISOString());
         
         // MySQL 엔드포인트에서 MySQL 엔드포인트로 변경
         const response = await axios.put(`http://localhost:8000/api/users/user/${this.editingUser.id}`, userData, {
@@ -528,27 +528,27 @@ export default {
           }
         });
         
-        console.log("요청 완료 시간:", new Date().toISOString());
-        console.log("응답 상태 코드:", response.status);
-        console.log("응답 데이터:", JSON.stringify(response.data, null, 2));
-        console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
+        // console.log("요청 완료 시간:", new Date().toISOString());
+        // console.log("응답 상태 코드:", response.status);
+        // console.log("응답 데이터:", JSON.stringify(response.data, null, 2));
+        // console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
         
         alert('사용자 정보가 업데이트되었습니다.');
         this.showEditModal = false;
         this.fetchUsers();
       } catch (error) {
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
-        console.error('Failed to update user:', error);
-        console.error('Error details:', error.response?.data || error.message);
-        console.error('Error status:', error.response?.status);
-        if (error.response?.config) {
-          console.error('API 요청 정보:', {
-            url: error.response.config.url,
-            method: error.response.config.method,
-            data: JSON.parse(error.response.config.data || '{}')
-          });
-        }
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
+        // console.error('Failed to update user:', error);
+        // console.error('Error details:', error.response?.data || error.message);
+        // console.error('Error status:', error.response?.status);
+        // if (error.response?.config) {
+        //   console.error('API 요청 정보:', {
+        //     url: error.response.config.url,
+        //     method: error.response.config.method,
+        //     data: JSON.parse(error.response.config.data || '{}')
+        //   });
+        // }
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
         
         alert('사용자 정보 업데이트에 실패했습니다.');
       } finally {
@@ -559,8 +559,8 @@ export default {
       this.loading = true;
       
       try {
-        console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
-        console.log("함수 호출: addUser()");
+        // console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
+        // console.log("함수 호출: addUser()");
         
         const token = localStorage.getItem('token');
         
@@ -573,18 +573,18 @@ export default {
         formData.append('permission', this.newUser.permission);
         
         // 사용자 추가 정보 로깅
-        console.log("API 요청 정보:");
-        console.log("- 엔드포인트: http://localhost:8000/api/users/user");
-        console.log("- 메서드: POST");
-        console.log("- 요청 데이터:");
-        console.log("  username:", this.newUser.username);
-        console.log("  email:", this.newUser.email);
-        console.log("  full_name:", this.newUser.fullName);
-        console.log("  permission:", this.newUser.permission);
-        console.log("  password: [보안 정보 - 표시하지 않음]");
-        console.log("- 예상 SQL 쿼리: INSERT INTO users (username, email, full_name, permission, hashed_password) VALUES (?, ?, ?, ?, ?)");
-        console.log("- 쿼리 파라미터:", [this.newUser.username, this.newUser.email, this.newUser.fullName, this.newUser.permission, "[해시된 암호]"]);
-        console.log("요청 시작 시간:", new Date().toISOString());
+        // console.log("API 요청 정보:");
+        // console.log("- 엔드포인트: http://localhost:8000/api/users/user");
+        // console.log("- 메서드: POST");
+        // console.log("- 요청 데이터:");
+        // console.log("  username:", this.newUser.username);
+        // console.log("  email:", this.newUser.email);
+        // console.log("  full_name:", this.newUser.fullName);
+        // console.log("  permission:", this.newUser.permission);
+        // console.log("  password: [보안 정보 - 표시하지 않음]");
+        // console.log("- 예상 SQL 쿼리: INSERT INTO users (username, email, full_name, permission, hashed_password) VALUES (?, ?, ?, ?, ?)");
+        // console.log("- 쿼리 파라미터:", [this.newUser.username, this.newUser.email, this.newUser.fullName, this.newUser.permission, "[해시된 암호]"]);
+        // console.log("요청 시작 시간:", new Date().toISOString());
         
         // API 호출
         const response = await axios.post('http://localhost:8000/api/users/user', formData, {
@@ -593,27 +593,27 @@ export default {
           }
         });
         
-        console.log("요청 완료 시간:", new Date().toISOString());
-        console.log("응답 상태 코드:", response.status);
-        console.log("응답 데이터:", JSON.stringify(response.data, null, 2));
-        console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
+        // console.log("요청 완료 시간:", new Date().toISOString());
+        // console.log("응답 상태 코드:", response.status);
+        // console.log("응답 데이터:", JSON.stringify(response.data, null, 2));
+        // console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
         
         alert('사용자가 성공적으로 추가되었습니다.');
         this.showAddUserModal = false;
         this.resetNewUserForm();
         this.fetchUsers();
       } catch (error) {
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
-        console.error('Failed to add user:', error);
-        console.error('Error details:', error.response?.data || error.message);
-        console.error('Error status:', error.response?.status);
-        if (error.response?.config) {
-          console.error('API 요청 정보:', {
-            url: error.response.config.url,
-            method: error.response.config.method
-          });
-        }
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
+        // console.error('Failed to add user:', error);
+        // console.error('Error details:', error.response?.data || error.message);
+        // console.error('Error status:', error.response?.status);
+        // if (error.response?.config) {
+        //   console.error('API 요청 정보:', {
+        //     url: error.response.config.url,
+        //     method: error.response.config.method
+        //   });
+        // }
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
         
         alert('사용자 추가에 실패했습니다: ' + (error.response?.data?.detail || error.message));
       } finally {
@@ -624,21 +624,21 @@ export default {
       this.loading = true;
       
       try {
-        console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
-        console.log("함수 호출: toggleUserStatus()");
-        console.log("사용자 ID:", user.id);
-        console.log("사용자명:", user.username);
+        // console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
+        // console.log("함수 호출: toggleUserStatus()");
+        // console.log("사용자 ID:", user.id);
+        // console.log("사용자명:", user.username);
         
         const token = localStorage.getItem('token');
         const newStatus = !user.is_active;
         
-        console.log("API 요청 정보:");
-        console.log("- 엔드포인트: http://localhost:8000/api/users/user/" + user.id);
-        console.log("- 메서드: PUT");
-        console.log("- 요청 데이터:", JSON.stringify({ is_active: newStatus }, null, 2));
-        console.log("- 예상 SQL 쿼리: UPDATE users SET is_active = ? WHERE id = ?");
-        console.log("- 쿼리 파라미터:", [newStatus, user.id]);
-        console.log("요청 시작 시간:", new Date().toISOString());
+        // console.log("API 요청 정보:");
+        // console.log("- 엔드포인트: http://localhost:8000/api/users/user/" + user.id);
+        // console.log("- 메서드: PUT");
+        // console.log("- 요청 데이터:", JSON.stringify({ is_active: newStatus }, null, 2));
+        // console.log("- 예상 SQL 쿼리: UPDATE users SET is_active = ? WHERE id = ?");
+        // console.log("- 쿼리 파라미터:", [newStatus, user.id]);
+        // console.log("요청 시작 시간:", new Date().toISOString());
         
         // MySQL 엔드포인트로 변경
         const response = await axios.put(`http://localhost:8000/api/users/user/${user.id}`, 
@@ -650,28 +650,28 @@ export default {
           }
         );
         
-        console.log("요청 완료 시간:", new Date().toISOString());
-        console.log("응답 상태 코드:", response.status);
-        console.log("응답 데이터:", JSON.stringify(response.data, null, 2));
-        console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
+        // console.log("요청 완료 시간:", new Date().toISOString());
+        // console.log("응답 상태 코드:", response.status);
+        // console.log("응답 데이터:", JSON.stringify(response.data, null, 2));
+        // console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
         
         if (response.data.status === 'success') {
           user.is_active = newStatus;
           alert(`사용자가 ${newStatus ? '활성화' : '비활성화'}되었습니다.`);
         }
       } catch (error) {
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
-        console.error('Failed to toggle user status:', error);
-        console.error('Error details:', error.response?.data || error.message);
-        console.error('Error status:', error.response?.status);
-        if (error.response?.config) {
-          console.error('API 요청 정보:', {
-            url: error.response.config.url,
-            method: error.response.config.method,
-            data: JSON.parse(error.response.config.data || '{}')
-          });
-        }
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
+        // console.error('Failed to toggle user status:', error);
+        // console.error('Error details:', error.response?.data || error.message);
+        // console.error('Error status:', error.response?.status);
+        // if (error.response?.config) {
+        //   console.error('API 요청 정보:', {
+        //     url: error.response.config.url,
+        //     method: error.response.config.method,
+        //     data: JSON.parse(error.response.config.data || '{}')
+        //   });
+        // }
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
         
         alert('사용자 상태 변경에 실패했습니다.');
       } finally {
@@ -688,19 +688,19 @@ export default {
       this.loading = true;
       
       try {
-        console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
-        console.log("함수 호출: deleteUser()");
-        console.log("삭제할 사용자 ID:", this.userToDelete.id);
-        console.log("삭제할 사용자명:", this.userToDelete.username);
+        // console.log("------------- SQL 쿼리 디버깅 로그 시작 -------------");
+        // console.log("함수 호출: deleteUser()");
+        // console.log("삭제할 사용자 ID:", this.userToDelete.id);
+        // console.log("삭제할 사용자명:", this.userToDelete.username);
         
         const token = localStorage.getItem('token');
         
-        console.log("API 요청 정보:");
-        console.log("- 엔드포인트: http://localhost:8000/api/users/user/" + this.userToDelete.id);
-        console.log("- 메서드: DELETE");
-        console.log("- 예상 SQL 쿼리: DELETE FROM users WHERE id = ?");
-        console.log("- 쿼리 파라미터:", [this.userToDelete.id]);
-        console.log("요청 시작 시간:", new Date().toISOString());
+        // console.log("API 요청 정보:");
+        // console.log("- 엔드포인트: http://localhost:8000/api/users/user/" + this.userToDelete.id);
+        // console.log("- 메서드: DELETE");
+        // console.log("- 예상 SQL 쿼리: DELETE FROM users WHERE id = ?");
+        // console.log("- 쿼리 파라미터:", [this.userToDelete.id]);
+        // console.log("요청 시작 시간:", new Date().toISOString());
         
         // MySQL 엔드포인트에서 MySQL 엔드포인트로 변경
         const response = await axios.delete(`http://localhost:8000/api/users/user/${this.userToDelete.id}`, {
@@ -709,10 +709,10 @@ export default {
           }
         });
         
-        console.log("요청 완료 시간:", new Date().toISOString());
-        console.log("응답 상태 코드:", response.status);
-        console.log("응답 데이터:", JSON.stringify(response.data, null, 2));
-        console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
+        // console.log("요청 완료 시간:", new Date().toISOString());
+        // console.log("응답 상태 코드:", response.status);
+        // console.log("응답 데이터:", JSON.stringify(response.data, null, 2));
+        // console.log("------------- SQL 쿼리 디버깅 로그 종료 -------------");
         
         if (response.data.status === 'success') {
           this.showDeleteModal = false;
@@ -721,17 +721,17 @@ export default {
           alert('사용자가 삭제되었습니다.');
         }
       } catch (error) {
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
-        console.error('Failed to delete user:', error);
-        console.error('Error details:', error.response?.data || error.message);
-        console.error('Error status:', error.response?.status);
-        if (error.response?.config) {
-          console.error('API 요청 정보:', {
-            url: error.response.config.url,
-            method: error.response.config.method
-          });
-        }
-        console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 -------------');
+        // console.error('Failed to delete user:', error);
+        // console.error('Error details:', error.response?.data || error.message);
+        // console.error('Error status:', error.response?.status);
+        // if (error.response?.config) {
+        //   console.error('API 요청 정보:', {
+        //     url: error.response.config.url,
+        //     method: error.response.config.method
+        //   });
+        // }
+        // console.error('------------- SQL 쿼리 디버깅 로그 오류 종료 -------------');
         
         if (error.response && error.response.status === 400) {
           alert(error.response.data.detail || '사용자 삭제에 실패했습니다.');

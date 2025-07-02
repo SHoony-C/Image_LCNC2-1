@@ -20,6 +20,8 @@ export function createAreaMeasurements() {
     //            `lineCount=${this.lineCount}`,
     //            `area=(${startX.toFixed(0)},${startY.toFixed(0)})-(${endX.toFixed(0)},${endY.toFixed(0)})`);
     
+    const createdMeasurements = []; // 생성된 측정값들을 저장할 배열
+    
     // 기준선 관련 로직을 다시 활성화하여 측정선 자르기
     if (this.measurementMode === 'area-vertical') {
       // console.log(`[createAreaMeasurements] 수직 방향 영역 측정 생성`);
@@ -37,9 +39,14 @@ export function createAreaMeasurements() {
         };
         
         // 기준선이 있는 경우 측정선을 기준선으로 자르기
-        if (this.activeReferenceLine) {
-          measurement = trimMeasurementByReferenceLine(measurement, this.activeReferenceLine);
-          measurement.relativeToReference = this.activeReferenceLine.itemId;
+        // 모든 기준선을 순회하면서 측정선을 자르기
+        if (this.referenceLines.length > 0) {
+          // 모든 기준선에 대해 순차적으로 자르기 적용
+          for (const referenceLine of this.referenceLines) {
+            measurement = trimMeasurementByReferenceLine(measurement, referenceLine);
+          }
+          // 마지막 기준선의 ID를 참조로 설정 (기존 호환성 유지)
+          measurement.relativeToReference = this.activeReferenceLine?.itemId;
         }
         
         // 값 계산
@@ -48,8 +55,8 @@ export function createAreaMeasurements() {
           measurement.end
         );
         
-        // this.measurements.push(measurement); // prop이므로 직접 수정 불가
-        this.$emit('measurement-added', measurement); // 부모에게 이벤트 발생
+        // 측정값을 배열에 추가
+        createdMeasurements.push(measurement);
         this.createBoundedSegments(measurement);
         
         // 개별 라인마다 히스토리 저장하지 않음 - 전체 영역 측정 완료 후 한 번에 처리
@@ -77,9 +84,14 @@ export function createAreaMeasurements() {
         };
         
         // 기준선이 있는 경우 측정선을 기준선으로 자르기
-        if (this.activeReferenceLine) {
-          measurement = trimMeasurementByReferenceLine(measurement, this.activeReferenceLine);
-          measurement.relativeToReference = this.activeReferenceLine.itemId;
+        // 모든 기준선을 순회하면서 측정선을 자르기
+        if (this.referenceLines.length > 0) {
+          // 모든 기준선에 대해 순차적으로 자르기 적용
+          for (const referenceLine of this.referenceLines) {
+            measurement = trimMeasurementByReferenceLine(measurement, referenceLine);
+          }
+          // 마지막 기준선의 ID를 참조로 설정 (기존 호환성 유지)
+          measurement.relativeToReference = this.activeReferenceLine?.itemId;
         }
         
         // 값 계산
@@ -88,8 +100,8 @@ export function createAreaMeasurements() {
           measurement.end
         );
         
-        // this.measurements.push(measurement); // prop이므로 직접 수정 불가
-        this.$emit('measurement-added', measurement); // 부모에게 이벤트 발생
+        // 측정값을 배열에 추가
+        createdMeasurements.push(measurement);
         this.createBoundedSegments(measurement);
         
         // 개별 라인마다 히스토리 저장하지 않음 - 전체 영역 측정 완료 후 한 번에 처리
@@ -97,7 +109,8 @@ export function createAreaMeasurements() {
       this.nextId++;
     }
     
-    // console.log(`[createAreaMeasurements] <<< 종료 - 생성된 측정값: ${this.measurements.length}개`);
+    // console.log(`[createAreaMeasurements] <<< 종료 - 생성된 측정값: ${createdMeasurements.length}개`);
+    return createdMeasurements; // 생성된 측정값들을 반환
   }
   
   // 새로운 함수: 경계가 있는 세그먼트 생성

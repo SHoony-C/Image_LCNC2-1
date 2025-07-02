@@ -8,6 +8,11 @@
     <!-- User icon in top right -->
     <div class="user-auth-section">
       <div v-if="isAuthenticated" class="user-icon-container">
+        <!-- Welcome message -->
+        <div class="welcome-message">
+          {{ (currentUser.username || currentUser.email || 'User') }}님 환영합니다.
+        </div>
+        
         <div class="user-avatar-circle" @click="toggleUserMenu">
           <i class="fas fa-user"></i>
         </div>
@@ -152,6 +157,7 @@ export default {
   display: flex;
   flex-direction: column;
   padding-left: 1rem;
+  align-items: center;
 }
 
 .page-title h1 {
@@ -162,7 +168,7 @@ export default {
 }
 
 .title-underline {
-  width: 80px;
+  width: 180px;
   height: 4px;
   background: var(--primary-500);
   border-radius: 2px;
@@ -175,6 +181,16 @@ export default {
 
 .user-icon-container {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.welcome-message {
+  font-size: 0.9rem;
+  color: var(--primary-700);
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .user-avatar-circle {

@@ -1,10 +1,14 @@
- - analysis 탭 구현
+
+로그인 페이지 / sso 다이렉트로
+sam 구현
+그래프 우상단 모드 삭제
+llm 프롬프트 추가
+
+
 
 ## To Do List (Out - msa6)
 ```
  - 로그인 바로 sso redirect 되게 
- - msa6 팝업 - 결과 저장 - 이미지 이름까지 저장해서 이거 대시보드에서 같이 보여줄 수 있도록
- - 불량 감지 기능 개발
 
 ## To Do List (Out - 기타)
  - Analysis 탭 - 크기 크게 변경하면 그래프 변경 안돼
@@ -21,6 +25,28 @@
 
 ## Done List
 ```
+활성 사용자 제거 다른거로
+
+상단 사용자님 환영합니다.
+lcnc 노드 후보 영역 스크롤
+마지막 workflow 저장만 테스트
+최근 가입 말고 최근 접속 10개 스크롤로 - 액션 유형으로 필터링
+액션 유형은 error 제거
+analysis 탭 드롭다운 선택하자마자 바로 데이터 업데이트돼
+그래프 데이터 변경
+그래프 포인트 호버 시에 IIS 링크
+불량감지 스케일바 설정한 기준으로
+창 크기 변경하면 불량감지 이상해짐
+불량감지 x,y값이상해
+팝업 아래쪽 잘려
+불량 영역 누르면 기준선 안보이게
+단축키
+선 개수 동작 안해
+삭제 안돼
+색상 변경 안돼 
+스케일 바 설정 안돼
+초기화 안돼
+ - 마지막 기준선으로만 잘려 선측정
  - 기준선 기준으로 잘리던거 다시 구현
  - 기준선 단축키
  - LLM 기능 async로
@@ -63,11 +89,3 @@ vue --version
 
 
 
-
-불량 감지 시작 - 1개 영역
-defectDetection.js:35 전달받은 영역 데이터: Proxy(Array) {0: {…}}
-defectDetection.js:39 영역 1 원본 데이터: Proxy(Object) {id: 1, x: 325.22060340321275, y: 168.96979442431984, width: 1128.7292766860023, height: 537.0143762143729, …}
-defectDetection.js:58 영역 1 검증된 데이터: {id: 1, x: 325.22060340321275, y: 168.96979442431984, width: 1128.7292766860023, height: 537.0143762143729, …}
-defectDetection.js:68 감지 시작: 1개 영역
-defectDetection.js:82 영역 1 처리 시작
-main.js:75 App Error: TypeError: Cannot read properties of undefined (reading 'x')

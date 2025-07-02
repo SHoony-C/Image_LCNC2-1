@@ -43,8 +43,11 @@
     "@vue/cli-plugin-vuex": "~5.0.8",
     "@vue/cli-service": "^5.0.8",
     "@vue/compiler-sfc": "^3.2.47",
+    "crypto-browserify": "^3.12.1",
     "eslint": "^8.46.0",
     "eslint-plugin-vue": "^9.16.1",
+    "os-browserify": "^0.3.0",
+    "path-browserify": "^1.0.1",
     "vue-eslint-parser": "^9.3.1"
   },
   "resolutions": {

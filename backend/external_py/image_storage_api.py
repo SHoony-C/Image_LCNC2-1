@@ -31,11 +31,13 @@ lcnc_results = mongo_db[mongo_collection]
 
 # 이미지 저장 경로 설정
 IMAGE_STORE_PATH_WORKFLOW = r"D:\image_set_url\workflow_images"
-IMAGE_STORE_PATH_RESULTS = r"D:\image_set_url\results_images"
+IMAGE_STORE_PATH_RESULTS = r"D:\image_set_url\cd_images"
+IMAGE_STORE_PATH_DEFECTS = r"D:\image_set_url\defect_images"
 
 # 경로가 없으면 생성
 os.makedirs(IMAGE_STORE_PATH_WORKFLOW, exist_ok=True)
 os.makedirs(IMAGE_STORE_PATH_RESULTS, exist_ok=True)
+os.makedirs(IMAGE_STORE_PATH_DEFECTS, exist_ok=True)
 
 # 로그 경로도 생성 (디버깅용)
 LOG_PATH = os.path.join(IMAGE_STORE_PATH_WORKFLOW, "logs")
@@ -371,8 +373,13 @@ async def save_images(data: Dict[str, Any] = Body(...)):
                         
                         log_debug(f"URL 다운로드 및 저장 완료: {adjusted_file_path}")
                         
-                        # 파일 확장자 변경이 있었는지 확인하고 반환 경로 업데이트
-                        return os.path.exists(adjusted_file_path), os.path.basename(adjusted_file_path)
+                        # 파일이 실제로 저장되었는지 확인
+                        if os.path.exists(adjusted_file_path):
+                            log_debug(f"파일 저장 확인: {adjusted_file_path}, 크기: {os.path.getsize(adjusted_file_path)} 바이트")
+                            return True, os.path.basename(adjusted_file_path)
+                        else:
+                            log_debug(f"파일이 생성되지 않음: {adjusted_file_path}")
+                            raise Exception(f"파일이 생성되지 않았습니다: {adjusted_file_path}")
                     else:
                         log_debug(f"URL 다운로드 실패: {response.status_code}")
                         raise HTTPException(status_code=response.status_code, 
@@ -381,9 +388,11 @@ async def save_images(data: Dict[str, Any] = Body(...)):
                 log_debug(f"요청 중 오류: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"이미지 다운로드 중 오류: {str(e)}")
             
-            file_exists = os.path.exists(file_path)
-            log_debug(f"이미지 저장 결과: {file_path} - {'성공' if file_exists else '실패'}")
-            return file_exists, os.path.basename(file_path)
+            # 최종 파일 존재 확인
+            final_path = adjusted_file_path if 'adjusted_file_path' in locals() else file_path
+            file_exists = os.path.exists(final_path)
+            log_debug(f"이미지 저장 결과: {final_path} - {'성공' if file_exists else '실패'}")
+            return file_exists, os.path.basename(final_path)
         else:
             # Base64 인코딩된 이미지 처리
             try:
@@ -502,12 +511,10 @@ async def save_images(data: Dict[str, Any] = Body(...)):
                     # 파일이 실제로 저장되었는지 확인
                     if os.path.exists(adjusted_file_path):
                         log_debug(f"파일 저장 확인: {adjusted_file_path}, 크기: {os.path.getsize(adjusted_file_path)} 바이트")
+                        return True, os.path.basename(adjusted_file_path)
                     else:
                         log_debug(f"파일이 생성되지 않음: {adjusted_file_path}")
                         raise Exception(f"파일이 생성되지 않았습니다: {adjusted_file_path}")
-                        
-                        # 파일 확장자 변경이 있었는지 확인하고 반환 경로 업데이트
-                        return os.path.exists(adjusted_file_path), os.path.basename(adjusted_file_path)
                 except Exception as write_error:
                     log_debug(f"파일 쓰기 오류: {str(write_error)}")
                     raise Exception(f"파일 쓰기 오류: {str(write_error)}")
@@ -515,9 +522,11 @@ async def save_images(data: Dict[str, Any] = Body(...)):
                 log_debug(f"Base64 처리 중 오류: {str(e)}")
                 raise HTTPException(status_code=400, detail=f"유효하지 않은 Base64 데이터 또는 파일 쓰기 오류: {str(e)}")
         
-        file_exists = os.path.exists(file_path)
-        log_debug(f"이미지 저장 결과: {file_path} - {'성공' if file_exists else '실패'}")
-        return file_exists, os.path.basename(file_path)
+        # 최종 파일 존재 확인
+        final_path = adjusted_file_path if 'adjusted_file_path' in locals() else file_path
+        file_exists = os.path.exists(final_path)
+        log_debug(f"이미지 저장 결과: {final_path} - {'성공' if file_exists else '실패'}")
+        return file_exists, os.path.basename(final_path)
     
     # 이미지 파일 저장
     before_saved, before_actual_filename = save_image(before_image, before_path)
@@ -746,4 +755,112 @@ async def upload_end_image(
         return result
     except Exception as e:
         log_debug(f"[upload-end-image] 오류 발생: {str(e)}")
-        return {"status": "error", "message": f"이미지 업로드 실패: {str(e)}"} 
+        return {"status": "error", "message": f"이미지 업로드 실패: {str(e)}"}
+
+@router.post("/save-measurement-images")
+async def save_measurement_images(data: Dict[str, Any] = Body(...)):
+    """
+    측정 결과 이미지(전후 이미지와 측정 내용)를 저장하는 API
+    불량 분석의 경우 defect_images 폴더에, 일반 측정의 경우 results_images 폴더에 저장
+    """
+    try:
+        # 요청 데이터 로깅
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_debug(f"측정 결과 이미지 저장 요청 수신 - {timestamp}")
+        
+        # 필수 필드 확인
+        required_fields = ["before_image", "after_image", "measurement_type"]
+        for field in required_fields:
+            if field not in data:
+                raise HTTPException(status_code=400, detail=f"필수 필드 누락: {field}")
+        
+        before_image = data.get("before_image", "")
+        after_image = data.get("after_image", "")
+        measurement_type = data.get("measurement_type", "measurement")  # 'measurement' 또는 'defect'
+        table_name = data.get("table_name", "")
+        lot_wafer = data.get("lot_wafer", "")
+        title = data.get("title", "")
+        
+        # 저장 경로 결정 - 측정 타입에 따라 폴더 분기
+        if measurement_type == 'defect':
+            storage_path = IMAGE_STORE_PATH_DEFECTS
+            folder_name = "defect_images"
+        else:
+            storage_path = IMAGE_STORE_PATH_RESULTS
+            folder_name = "cd_images"
+        
+        # 테이블별 폴더 생성
+        if table_name:
+            table_folder = os.path.join(storage_path, table_name)
+            os.makedirs(table_folder, exist_ok=True)
+            final_storage_path = table_folder
+        else:
+            final_storage_path = storage_path
+        
+        # 파일명 생성 - 요구사항에 따라 {lot_wafer}_before, {lot_wafer}_after 형식
+        if lot_wafer and lot_wafer != 'unknown':
+            before_filename = f"{lot_wafer}_before.png"
+            after_filename = f"{lot_wafer}_after.png"
+        elif title:
+            sanitized_title = sanitize_filename(title)
+            before_filename = f"{sanitized_title}_before.png"
+            after_filename = f"{sanitized_title}_after.png"
+        else:
+            timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            before_filename = f"measurement_{timestamp_str}_before.png"
+            after_filename = f"measurement_{timestamp_str}_after.png"
+        
+        # 파일 경로 구성
+        before_path = os.path.join(final_storage_path, before_filename)
+        after_path = os.path.join(final_storage_path, after_filename)
+        
+        # save_image 함수를 직접 호출하는 대신 인라인으로 처리
+        def save_base64_image(image_data, file_path):
+            try:
+                # Base64 데이터에서 이미지 추출
+                if ',' in image_data:
+                    header, image_data = image_data.split(',', 1)
+                
+                # Base64 디코딩
+                image_bytes = base64.b64decode(image_data)
+                
+                # 폴더 생성
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                
+                # 파일 저장
+                with open(file_path, "wb") as f:
+                    f.write(image_bytes)
+                
+                return os.path.exists(file_path), os.path.basename(file_path)
+            except Exception as e:
+                log_debug(f"이미지 저장 오류: {str(e)}")
+                return False, ""
+        
+        # 이미지 저장
+        before_saved, before_actual_filename = save_base64_image(before_image, before_path)
+        after_saved, after_actual_filename = save_base64_image(after_image, after_path)
+        
+        log_debug(f"이미지 저장 결과 - 전: {before_saved}({before_actual_filename}), 후: {after_saved}({after_actual_filename})")
+        
+        # 저장 여부 확인
+        if not before_saved or not after_saved:
+            log_debug("이미지 저장 실패 감지")
+            raise HTTPException(status_code=500, detail="이미지 파일이 정상적으로 저장되지 않았습니다.")
+        
+        # 결과 반환
+        result = {
+            "status": "success",
+            "message": f"{measurement_type} 결과 이미지가 {folder_name} 폴더에 성공적으로 저장되었습니다.",
+            "saved_images": {
+                "before_image": before_actual_filename,
+                "after_image": after_actual_filename,
+                "folder": folder_name,
+                "table_name": table_name
+            }
+        }
+        
+        return result
+        
+    except Exception as e:
+        log_debug(f"[save-measurement-images] 오류 발생: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"측정 결과 이미지 저장 실패: {str(e)}") 

@@ -27,7 +27,7 @@ export function createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect) 
   // 팝업이 이미 존재하면 제거
   removeExistingPopup();
   
-  console.log('[popupOverride] 독립 팝업 생성 시작');
+  // console.log('[popupOverride] 독립 팝업 생성 시작');
   
   // 팝업 컨테이너 생성
   const popupDiv = document.createElement('div');
@@ -76,7 +76,7 @@ export function createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect) 
   
   // 팝업을 body에 추가
   document.body.appendChild(popupDiv);
-  console.log('[popupOverride] 팝업 요소가 DOM에 추가됨');
+  // console.log('[popupOverride] 팝업 요소가 DOM에 추가됨');
   
   // 이벤트 리스너 추가
   const magBtn = document.getElementById('magnification-btn');
@@ -84,7 +84,7 @@ export function createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect) 
   
   if (magBtn) {
     magBtn.addEventListener('click', function() {
-      console.log('[popupOverride] 배율 기반 측정 선택됨');
+      // console.log('[popupOverride] 배율 기반 측정 선택됨');
       if (typeof onMagnificationSelect === 'function') {
         onMagnificationSelect();
       }
@@ -94,7 +94,7 @@ export function createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect) 
   
   if (scaleBarBtn) {
     scaleBarBtn.addEventListener('click', function() {
-      console.log('[popupOverride] 수동 스케일바 설정 선택됨');
+      // console.log('[popupOverride] 수동 스케일바 설정 선택됨');
       if (typeof onScaleBarSelect === 'function') {
         onScaleBarSelect();
       }
@@ -114,7 +114,7 @@ export function createScaleChoicePopup(onMagnificationSelect, onScaleBarSelect) 
 function removeExistingPopup() {
   const existingPopup = document.getElementById('scale-choice-popup-override');
   if (existingPopup) {
-    console.log('[popupOverride] 기존 팝업 요소 제거');
+    // console.log('[popupOverride] 기존 팝업 요소 제거');
     existingPopup.parentNode.removeChild(existingPopup);
     popupCreated = false;
   }
@@ -125,11 +125,11 @@ function removeExistingPopup() {
  * @param {HTMLElement} popupElement 제거할 팝업 요소
  */
 function removePopup(popupElement) {
-  console.log('[popupOverride] 팝업 제거 시작');
+  // console.log('[popupOverride] 팝업 제거 시작');
   
   if (popupElement && popupElement.parentNode) {
     popupElement.parentNode.removeChild(popupElement);
-    console.log('[popupOverride] 팝업 요소가 DOM에서 제거됨');
+    // console.log('[popupOverride] 팝업 요소가 DOM에서 제거됨');
   } else {
     removeExistingPopup();
   }
@@ -145,12 +145,12 @@ function removePopup(popupElement) {
  * msa6_no_scale_popup 플래그와 팝업 표시 조건이 양쪽에서 동일하게 처리되어야 합니다.
  */
 export function showScaleDetectionFailurePopup(component) {
-  console.log('[popupOverride] 스케일바 감지 실패 팝업 표시 함수 호출됨');
+  // console.log('[popupOverride] 스케일바 감지 실패 팝업 표시 함수 호출됨');
   
   // 스케일바 자동 감지 팝업 방지 플래그 확인
   const noScalePopup = sessionStorage.getItem('msa6_no_scale_popup') === 'true';
   if (noScalePopup) {
-    console.log('[popupOverride] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
+    // console.log('[popupOverride] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
     // 플래그 제거 (일회성)
     sessionStorage.removeItem('msa6_no_scale_popup');
     return;
@@ -158,19 +158,19 @@ export function showScaleDetectionFailurePopup(component) {
   
   // 팝업이 열려있지 않은 경우 표시하지 않음
   if (component && !component.isVisible) {
-    console.log('[popupOverride] 팝업이 열려있지 않아 스케일바 감지 실패 팝업을 표시하지 않음');
+    // console.log('[popupOverride] 팝업이 열려있지 않아 스케일바 감지 실패 팝업을 표시하지 않음');
     return;
   }
   
   // 이미 팝업이 생성되어 있으면 중복 생성 방지
   if (popupCreated) {
-    console.log('[popupOverride] 이미 팝업이 생성되어 있음, 중복 생성 방지');
+    // console.log('[popupOverride] 이미 팝업이 생성되어 있음, 중복 생성 방지');
     return;
   }
   
   // 콜백 함수 정의
   const onMagnificationSelect = function() {
-    console.log('[popupOverride] 배율 기반 측정 콜백 실행');
+    // console.log('[popupOverride] 배율 기반 측정 콜백 실행');
     if (component) {
       // Vue 컴포넌트 메소드 호출
       if (typeof component.selectScaleMethod === 'function') {
@@ -184,7 +184,7 @@ export function showScaleDetectionFailurePopup(component) {
   };
   
   const onScaleBarSelect = function() {
-    console.log('[popupOverride] 수동 스케일바 설정 콜백 실행');
+    // console.log('[popupOverride] 수동 스케일바 설정 콜백 실행');
     if (component) {
       // Vue 컴포넌트 메소드 호출
       if (typeof component.selectScaleMethod === 'function') {
@@ -224,18 +224,18 @@ export function patchDetectScaleBar(component) {
   
   // 새로운 함수로 대체
   component.detectScaleBar = function() {
-    console.log('[popupOverride] 패치된 detectScaleBar 함수 호출됨');
+    // console.log('[popupOverride] 패치된 detectScaleBar 함수 호출됨');
     
     // 팝업이 열려있지 않은 경우 아무 작업도 하지 않음
     if (!this.isVisible) {
-      console.log('[popupOverride] 팝업이 열려있지 않아 스케일바 감지를 수행하지 않음');
+      // console.log('[popupOverride] 팝업이 열려있지 않아 스케일바 감지를 수행하지 않음');
       return;
     }
     
     // 스케일바 자동 감지 팝업 방지 플래그 확인
     const noScalePopup = sessionStorage.getItem('msa6_no_scale_popup') === 'true';
     if (noScalePopup) {
-      console.log('[popupOverride] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
+      // console.log('[popupOverride] 스케일바 자동 감지 팝업 방지 플래그가 설정되어 있어 팝업을 표시하지 않음');
       // 플래그 제거 (일회성)
       sessionStorage.removeItem('msa6_no_scale_popup');
       return;
@@ -243,7 +243,7 @@ export function patchDetectScaleBar(component) {
     
     // 이미지 데이터가 없는 경우 항상 팝업 표시
     if (!this.imageData && this.scaleMethod === 'scaleBar') {
-      console.log('[popupOverride] 이미지 데이터 없음, 감지 실패 팝업 표시');
+      // console.log('[popupOverride] 이미지 데이터 없음, 감지 실패 팝업 표시');
       this.scaleBarDetected = false;
       
       // 항상 커스텀 팝업 표시 (조건 체크 없이)
@@ -253,12 +253,12 @@ export function patchDetectScaleBar(component) {
     
     // 원본 함수 실행 (이미지 데이터가 있는 경우)
     if (this.imageData) {
-      console.log('[popupOverride] 이미지 데이터 있음, 원본 함수 호출');
+      // console.log('[popupOverride] 이미지 데이터 있음, 원본 함수 호출');
       const result = originalDetectScaleBar.apply(this);
       
       // 스케일바 감지 실패한 경우 항상 팝업 표시 (첫 번째 시도 조건 제거)
       if (!this.scaleBarDetected && this.scaleMethod === 'scaleBar') {
-        console.log('[popupOverride] 스케일바 감지 실패, 팝업 표시');
+        // console.log('[popupOverride] 스케일바 감지 실패, 팝업 표시');
         
         // 커스텀 팝업 표시
         showScaleDetectionFailurePopup(this);
@@ -268,7 +268,7 @@ export function patchDetectScaleBar(component) {
     }
   };
   
-  console.log('[popupOverride] detectScaleBar 함수가 성공적으로 패치됨');
+  // console.log('[popupOverride] detectScaleBar 함수가 성공적으로 패치됨');
   return true;
 }
 
