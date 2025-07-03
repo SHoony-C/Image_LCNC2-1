@@ -426,8 +426,31 @@
                     </tbody>
                   </table>
                 </div>
+                <div class="average-section" v-if="measurementMode !== 'defect' && filteredMeasurements.length > 0">
+                  <div class="stats-container">
+                    <!-- 현재 모드에 따른 통계만 표시 -->
+                    <div class="area-stats">
+                      <div class="stat-item">
+                        <span class="stat-label">평균:</span>
+                        <span class="stat-value">{{ currentAverage.toFixed(2) }}</span>
+                      </div>
+                      <div class="stat-item">
+                        <span class="stat-label">3σ:</span>
+                        <span class="stat-value">{{ currentThreeSigma.toFixed(2) }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <button 
+                    class="download-csv-btn" 
+                    @click="downloadCSV"
+                    title="측정 결과를 CSV 파일로 다운로드">
+                    <i class="fas fa-download"></i>
+                    CSV 다운로드
+                  </button>
+                </div>
                 <div class="results-bottom-bar">
                   <div class="results-summary">
+                    
                     <span>총 측정: {{ measurementMode === 'defect' ? defectMeasurements.length : filteredMeasurements.length }}</span>
                   </div>
                   <button 
@@ -859,7 +882,44 @@ export default {
     }
   },
   computed: {
-    // 현재 표시할 이미지 URL 결정
+    // 현재 모드에 따른 평균
+    currentAverage() {
+      if (this.filteredMeasurements.length === 0) return 0;
+      
+      const sum = this.filteredMeasurements.reduce((total, segment) => {
+        return total + (segment.value || 0);
+      }, 0);
+      
+      return sum / this.filteredMeasurements.length;
+    },
+
+    // 현재 모드에 따른 표준편차
+    currentStandardDeviation() {
+      if (this.filteredMeasurements.length <= 1) return 0;
+      
+      const mean = this.currentAverage;
+      const squaredDifferences = this.filteredMeasurements.map(segment => {
+        const diff = (segment.value || 0) - mean;
+        return diff * diff;
+      });
+      
+      const variance = squaredDifferences.reduce((sum, diff) => sum + diff, 0) / this.filteredMeasurements.length;
+      return Math.sqrt(variance);
+    },
+
+    // 현재 모드에 따른 3σ
+    currentThreeSigma() {
+      return this.currentAverage + (3 * this.currentStandardDeviation);
+    },
+    averageMeasurementValue() {
+      if (this.filteredMeasurements.length === 0) return 0;
+      
+      const sum = this.filteredMeasurements.reduce((total, segment) => {
+        return total + (segment.value || 0);
+      }, 0);
+      
+      return sum / this.filteredMeasurements.length;
+    },
     currentImageUrl() {
       let url;
       if (this.isShowingInputImage) {
@@ -1087,6 +1147,62 @@ export default {
     trimMeasurementByReferenceLine,
     trimSingleMeasurementByReferenceLine,
     
+    downloadCSV() {
+  if (this.filteredMeasurements.length === 0) {
+    this.showNotification('다운로드할 측정 데이터가 없습니다.', 'warning');
+    return;
+  }
+
+  // CSV 헤더
+  const headers = ['Item ID', 'Sub ID', '값'];
+  
+  // CSV 데이터 생성
+  const csvData = this.filteredMeasurements.map(segment => [
+    segment.itemId,
+    segment.subItemId,
+    segment.value?.toFixed(2) || '0.00'
+  ]);
+  
+  // 현재 모드 통계 정보 추가
+  const currentArea = this.isReversed ? '어두운 영역' : '밝은 영역';
+  const statsData = [
+    ['', '', ''],
+    ['통계 정보', '', ''],
+    ['영역', '', currentArea],
+    ['평균', '', this.currentAverage.toFixed(2)],
+    ['표준편차', '', this.currentStandardDeviation.toFixed(2)],
+    ['3σ', '', this.currentThreeSigma.toFixed(2)],
+    ['총 측정 수', '', this.filteredMeasurements.length.toString()]
+  ];
+  
+  // CSV 문자열 생성
+  const csvContent = [
+    headers.join(','),
+    ...csvData.map(row => row.join(',')),
+    ...statsData.map(row => row.join(','))
+  ].join('\n');
+  
+  // 파일명 생성 (현재 시간 포함)
+  const now = new Date();
+  const timestamp = now.toISOString().slice(0, 19).replace(/:/g, '-');
+  const filename = `measurement_results_${timestamp}.csv`;
+  
+  // CSV 파일 다운로드
+  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  
+  if (link.download !== undefined) {
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', filename);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+  
+  this.showNotification('CSV 파일이 다운로드되었습니다.', 'success');
+},
     // 측정값 초기화 함수 추가
     initializeMeasurements() {
       try {
@@ -3616,7 +3732,7 @@ export default {
                
                if (result.status === 'success') {
                  // 생성된 URL을 클립보드에 복사
-                 const fullUrl = `http://localhost:8000${result.url}`;
+                 const fullUrl = `http://localhost:8000/api/msa6/temp_image_url${result.url.replace('/static/temp_image_url/', '/')}`;
                  
                  navigator.clipboard.writeText(fullUrl).then(() => {
                    this.showNotification('측정 결과 포함 이미지 URL이 클립보드에 복사되었습니다.', 'success');

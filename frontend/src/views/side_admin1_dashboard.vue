@@ -1,5 +1,6 @@
 <template>
   <div class="admin-dashboard">
+    <AppHeader :pageTitle="'관리자 대시보드'" />
     <div class="content">
       <div class="admin-stats">
         <div class="stat-card">
@@ -30,6 +31,84 @@
             <h3>저장 공간</h3>
             <p class="stat-value">2.5TB</p>
             <p class="stat-change warning">75% 사용</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 검색 섹션 추가 -->
+      <div class="search-section">
+        <div class="search-card">
+          <h3>사용자 및 이메일 검색</h3>
+          <div class="search-inputs">
+            <div class="search-group">
+              <label for="userSearch">사용자 검색</label>
+              <div class="search-input-wrapper">
+                <input
+                  id="userSearch"
+                  type="text"
+                  v-model="userSearchQuery"
+                  placeholder="사용자명으로 검색..."
+                  class="search-input"
+                  @input="searchUsers"
+                />
+                <i class="fas fa-search search-icon"></i>
+              </div>
+            </div>
+            <div class="search-group">
+              <label for="emailSearch">이메일 검색</label>
+              <div class="search-input-wrapper">
+                <input
+                  id="emailSearch"
+                  type="email"
+                  v-model="emailSearchQuery"
+                  placeholder="이메일 주소로 검색..."
+                  class="search-input"
+                  @input="searchEmails"
+                />
+                <i class="fas fa-envelope search-icon"></i>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 검색 결과 표시 영역 -->
+          <div class="search-results" v-if="userSearchResults.length > 0 || emailSearchResults.length > 0">
+            <div class="results-section" v-if="userSearchResults.length > 0">
+              <h4>사용자 검색 결과</h4>
+              <div class="result-list">
+                <div class="result-item" v-for="user in userSearchResults" :key="user.id">
+                  <div class="result-icon">
+                    <i class="fas fa-user"></i>
+                  </div>
+                  <div class="result-info">
+                    <p class="result-name">{{ user.name }}</p>
+                    <p class="result-detail">{{ user.email }}</p>
+                    <span class="result-status" :class="user.status">{{ user.statusText }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="results-section" v-if="emailSearchResults.length > 0">
+              <h4>이메일 검색 결과</h4>
+              <div class="result-list">
+                <div class="result-item" v-for="email in emailSearchResults" :key="email.id">
+                  <div class="result-icon">
+                    <i class="fas fa-envelope"></i>
+                  </div>
+                  <div class="result-info">
+                    <p class="result-name">{{ email.email }}</p>
+                    <p class="result-detail">{{ email.userName }}</p>
+                    <span class="result-status" :class="email.status">{{ email.statusText }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 검색 결과가 없을 때 -->
+          <div class="no-results" v-if="(userSearchQuery || emailSearchQuery) && userSearchResults.length === 0 && emailSearchResults.length === 0">
+            <i class="fas fa-search"></i>
+            <p>검색 결과가 없습니다.</p>
           </div>
         </div>
       </div>
@@ -95,11 +174,67 @@
 </template>
 
 <script>
+import { ref, reactive } from 'vue';
+import AppHeader from '@/components/AppHeader.vue';
+
 export default {
   name: 'AdminDashboard',
+  components: {
+    AppHeader
+  },
   setup() {
+    // 검색 관련 reactive data
+    const userSearchQuery = ref('');
+    const emailSearchQuery = ref('');
+    const userSearchResults = ref([]);
+    const emailSearchResults = ref([]);
+
+    // 샘플 사용자 데이터 (실제 구현시에는 API에서 데이터를 가져와야 함)
+    const sampleUsers = [
+      { id: 1, name: '김철수', email: 'kimcs@example.com', status: 'active', statusText: '활성' },
+      { id: 2, name: '이영희', email: 'leeyh@example.com', status: 'active', statusText: '활성' },
+      { id: 3, name: '박민수', email: 'parkms@example.com', status: 'inactive', statusText: '비활성' },
+      { id: 4, name: '최지원', email: 'choijw@example.com', status: 'active', statusText: '활성' },
+      { id: 5, name: '정수진', email: 'jungsj@example.com', status: 'pending', statusText: '대기중' }
+    ];
+
+    // 사용자 검색 메서드
+    const searchUsers = () => {
+      if (!userSearchQuery.value.trim()) {
+        userSearchResults.value = [];
+        return;
+      }
+
+      userSearchResults.value = sampleUsers.filter(user =>
+        user.name.toLowerCase().includes(userSearchQuery.value.toLowerCase())
+      );
+    };
+
+    // 이메일 검색 메서드
+    const searchEmails = () => {
+      if (!emailSearchQuery.value.trim()) {
+        emailSearchResults.value = [];
+        return;
+      }
+
+      emailSearchResults.value = sampleUsers.filter(user =>
+        user.email.toLowerCase().includes(emailSearchQuery.value.toLowerCase())
+      ).map(user => ({
+        id: user.id,
+        email: user.email,
+        userName: user.name,
+        status: user.status,
+        statusText: user.statusText
+      }));
+    };
+
     return {
-      // Add your component logic here
+      userSearchQuery,
+      emailSearchQuery,
+      userSearchResults,
+      emailSearchResults,
+      searchUsers,
+      searchEmails
     }
   }
 }
@@ -156,6 +291,7 @@ h1 {
   height: 100%;
   max-width: 1400px; /* 탑바와 동일한 최대 너비 */
   margin: 0 auto;
+  padding: 0 2.5rem;
 }
 
 .admin-stats {
@@ -343,6 +479,194 @@ h1 {
 
 .action-button:hover {
   background: var(--primary-100);
+}
+
+/* 검색 섹션 스타일 */
+.search-section {
+  width: 100%;
+}
+
+.search-card {
+  background: white;
+  border-radius: 1rem;
+  padding: clamp(1.5rem, 3vw, 2rem);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.search-card h3 {
+  font-size: 1.25rem;
+  color: var(--gray-800);
+  margin-bottom: 1.5rem;
+  font-weight: 600;
+}
+
+.search-inputs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.search-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.search-group label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-700);
+}
+
+.search-input-wrapper {
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  padding: 0.75rem 3rem 0.75rem 1rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  background: var(--gray-50);
+  transition: all 0.3s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  background: white;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+.search-icon {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--gray-400);
+  font-size: 0.875rem;
+}
+
+.search-results {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--gray-200);
+}
+
+.results-section {
+  margin-bottom: 1.5rem;
+}
+
+.results-section:last-child {
+  margin-bottom: 0;
+}
+
+.results-section h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--gray-800);
+  margin-bottom: 1rem;
+}
+
+.result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--gray-50);
+  border-radius: 0.5rem;
+  border: 1px solid var(--gray-200);
+  transition: all 0.3s ease;
+}
+
+.result-item:hover {
+  background: var(--primary-50);
+  border-color: var(--primary-200);
+}
+
+.result-icon {
+  width: 40px;
+  height: 40px;
+  background: var(--primary-100);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.result-icon i {
+  font-size: 1rem;
+  color: var(--primary-600);
+}
+
+.result-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.result-name {
+  font-weight: 600;
+  color: var(--gray-800);
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.result-detail {
+  color: var(--gray-600);
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.result-status {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  align-self: flex-start;
+  margin-top: 0.25rem;
+}
+
+.result-status.active {
+  background: var(--success-50, #dcfce7);
+  color: var(--success-700, #15803d);
+}
+
+.result-status.inactive {
+  background: var(--gray-100);
+  color: var(--gray-600);
+}
+
+.result-status.pending {
+  background: var(--warning-50, #fefce8);
+  color: var(--warning-700, #a16207);
+}
+
+.no-results {
+  text-align: center;
+  padding: 2rem;
+  color: var(--gray-500);
+}
+
+.no-results i {
+  font-size: 2rem;
+  margin-bottom: 1rem;
+  color: var(--gray-400);
+}
+
+.no-results p {
+  margin: 0;
+  font-size: 0.875rem;
 }
 
 @media (max-width: 1200px) {

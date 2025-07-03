@@ -1,9 +1,6 @@
 <template>
   <div class="settings-view">
-    <div class="view-header">
-      <h1>System Settings</h1>
-      <p class="subtitle">Configure system preferences and options</p>
-    </div>
+    <AppHeader :pageTitle="'시스템 설정'" />
     <div class="content">
       <div class="settings-section">
         <h2>이미지 벡터 관리</h2>
@@ -94,8 +91,13 @@
 </template>
 
 <script>
+import AppHeader from '@/components/AppHeader.vue';
+
 export default {
   name: 'SettingsView',
+  components: {
+    AppHeader
+  },
   data() {
     return {
       isProcessing: false,

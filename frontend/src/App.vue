@@ -141,15 +141,27 @@ export default {
         const isLoggedIn = await store.dispatch('auth/checkAuth');
         
         if (!isLoggedIn) {
-          // 토큰이 있지만 유효하지 않은 경우에만 로그인 모달 표시
+          // 토큰이 있지만 유효하지 않은 경우
+          // /admin 경로가 아니면 바로 SSO 로그인으로 리다이렉트
+          if (!route.path.startsWith('/admin')) {
+            window.location.href = 'http://localhost:8000/api/auth/google/login';
+            return;
+          }
+          // /admin 경로인 경우에만 로그인 모달 표시
           showLoginModal.value = true;
         }
       } else {
-        // 토큰이 없는 경우에만 OAuth 리다이렉트 확인
+        // 토큰이 없는 경우
         const redirectSuccess = await checkForAuthRedirect();
         
         if (!redirectSuccess) {
-          // 리다이렉트 파라미터도 없고 토큰도 없으면 로그인 모달 표시
+          // 리다이렉트 파라미터도 없고 토큰도 없는 경우
+          // /admin 경로가 아니면 바로 SSO 로그인으로 리다이렉트
+          if (!route.path.startsWith('/admin')) {
+            window.location.href = 'http://localhost:8000/api/auth/google/login';
+            return;
+          }
+          // /admin 경로인 경우에만 로그인 모달 표시
           showLoginModal.value = true;
         }
       }

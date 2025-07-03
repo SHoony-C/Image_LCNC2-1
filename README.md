@@ -1,28 +1,7 @@
 
-로그인 페이지 / sso 다이렉트로
-
-
-
-
-## To Do List (Out - msa6)
-```
- - 로그인 바로 sso redirect 되게 
-
-## To Do List (Out - 기타)
- - Analysis 탭 - 크기 크게 변경하면 그래프 변경 안돼
- 
-```
-
-## To Do List (In)
-```
- - SSO 로그인 (LLM mini 참고)
- - VSEM, TEM 기능 테스트
- - BE 블록 기능 구현
-```
-
-
 ## Done List
 ```
+로그인 페이지 / sso 다이렉트로
 활성 사용자 제거 다른거로
 그래프 우상단 모드 삭제
 sam 구현
@@ -79,7 +58,7 @@ analysis 탭 드롭다운 선택하자마자 바로 데이터 업데이트돼
  
 
 
-## Version - 사내에서 오류나니까 확인
+## Version - 오류 확인
 node -v
 v20.13.1
  npm -v

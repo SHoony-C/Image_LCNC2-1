@@ -1,9 +1,6 @@
 <template>
   <div class="user-management-page">
-    <div class="header">
-      <h1>User Management</h1>
-      <p class="subtitle">Manage system users and permissions</p>
-    </div>
+    <AppHeader :pageTitle="'사용자 관리'" />
 
     <div class="content-wrapper">
       <div v-if="error" class="error-message">
@@ -139,12 +136,11 @@
         <div class="modal-body">
           <form @submit.prevent="addUser">
             <div class="form-group">
-              <label for="username">사용자명 *</label>
+              <label for="username">사용자명</label>
               <input 
                 type="text" 
                 id="username" 
                 v-model="newUser.username"
-                required
                 placeholder="사용자명 입력"
               >
             </div>
@@ -204,10 +200,15 @@
                 <option value="admin">관리자</option>
               </select>
             </div>
-            <button type="submit" class="submit-btn" :disabled="loading">
-              <span v-if="loading"><i class="fas fa-spinner fa-spin"></i> 처리 중...</span>
-              <span v-else>사용자 추가</span>
-            </button>
+            <div class="form-actions">
+              <button type="submit" class="submit-btn" :disabled="loading">
+                <span v-if="loading"><i class="fas fa-spinner fa-spin"></i> 처리 중...</span>
+                <span v-else>사용자 추가</span>
+              </button>
+              <button type="button" class="cancel-btn" @click="showAddUserModal = false">
+                닫기
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -287,10 +288,15 @@
                 <option value="admin">관리자</option>
               </select>
             </div>
-            <button type="submit" class="submit-btn" :disabled="loading">
-              <span v-if="loading"><i class="fas fa-spinner fa-spin"></i> 처리 중...</span>
-              <span v-else>저장</span>
-            </button>
+            <div class="form-actions">
+              <button type="submit" class="submit-btn" :disabled="loading">
+                <span v-if="loading"><i class="fas fa-spinner fa-spin"></i> 처리 중...</span>
+                <span v-else>저장</span>
+              </button>
+              <button type="button" class="cancel-btn" @click="showEditModal = false">
+                닫기
+              </button>
+            </div>
           </form>
         </div>
       </div>
@@ -334,9 +340,13 @@
 
 <script>
 import axios from 'axios';
+import AppHeader from '@/components/AppHeader.vue';
 
 export default {
   name: 'UserManagement',
+  components: {
+    AppHeader
+  },
   data() {
     return {
       users: [],
@@ -495,7 +505,7 @@ export default {
         // 사용자 정보 업데이트
         const userData = {
           email: this.editingUser.email,
-          full_name: this.editingUser.full_name,
+          full_name: this.editingUser.username,
           department: this.editingUser.department,
           permission: this.editingUser.permission
         };
@@ -551,7 +561,7 @@ export default {
           username: this.newUser.username,
           email: this.newUser.email,
           password: this.newUser.password,
-          full_name: this.newUser.fullName,
+          full_name: this.newUser.username,
           department: this.newUser.department,
           permission: this.newUser.permission
         };
@@ -1184,6 +1194,13 @@ export default {
 .confirm-delete-btn:disabled {
   background-color: #feb2b2;
   cursor: not-allowed;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 1.25rem;
 }
 
 @media (max-width: 768px) {

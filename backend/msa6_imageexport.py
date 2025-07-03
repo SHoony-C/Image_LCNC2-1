@@ -80,6 +80,41 @@ async def get_temp_image(filename: str):
                 del file_expirations[filename]
                 raise HTTPException(status_code=410, detail="파일이 만료되었습니다")
         
+        # 사용자 액션 로그 저장
+        try:
+            from sqlalchemy import text
+            from db_config import get_db
+            from fastapi import Depends
+            
+            # DB 세션 가져오기
+            db = next(get_db())
+            
+            # 현재 시간 가져오기
+            current_time = datetime.now()
+            
+            # 쿼리 준비
+            query = text("""
+                INSERT INTO image_app.user_count 
+                (username, department, useraction, action_time) 
+                VALUES (:username, :department, :useraction, :action_time)
+            """)
+            
+            # 파라미터 준비
+            params = {
+                "username": None,
+                "department": None,
+                "useraction": "공유된 측정 이미지 조회",
+                "action_time": current_time
+            }
+            
+            # 쿼리 실행
+            db.execute(query, params)
+            db.commit()
+            
+        except Exception as log_error:
+            # 로깅 실패는 이미지 서빙에 영향을 주지 않도록 무시
+            print(f"사용자 액션 로그 저장 실패: {str(log_error)}")
+        
         return FileResponse(file_path)
         
     except HTTPException:

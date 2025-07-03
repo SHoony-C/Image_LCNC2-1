@@ -183,10 +183,15 @@
                 <option value="admin">관리자</option>
               </select>
             </div>
+            <div class="form-actions">
             <button type="submit" class="submit-btn" :disabled="loading">
               <span v-if="loading"><i class="fas fa-spinner fa-spin"></i> 처리 중...</span>
               <span v-else>사용자 추가</span>
             </button>
+              <button type="button" class="cancel-btn" @click="showAddUserModal = false">
+                닫기
+              </button>
+            </div>
           </form>
         </div>
       </div>

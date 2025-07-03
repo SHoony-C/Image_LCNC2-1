@@ -1782,3 +1782,66 @@
 .copy-url-btn i {
   font-size: 16px;
 }
+
+.average-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  border: 1px solid #e9ecef;
+  justify-content: right;
+}
+
+.stats-container {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex: 1;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-label {
+  font-weight: 600;
+  color: #495057;
+  font-size: 0.9em;
+}
+
+.stat-value {
+  font-weight: bold;
+  color: #007bff;
+  font-size: 1.1em;
+  min-width: 60px;
+  text-align: right;
+}
+
+.download-csv-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 16px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9em;
+  font-weight: 500;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.download-csv-btn:hover {
+  background-color: #218838;
+}
+
+.download-csv-btn i {
+  font-size: 0.8em;
+}

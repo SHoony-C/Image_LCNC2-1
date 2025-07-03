@@ -1,9 +1,6 @@
 <template>
   <div class="user-count-view">
-    <div class="view-header">
-      <h1>사용자 통계</h1>
-      <p class="subtitle">사용자 수 및 활동 분석</p>
-    </div>
+    <AppHeader :pageTitle="'사용자 통계'" />
     
     <div v-if="loading" class="loading-container">
       <div class="loading-spinner">
@@ -31,7 +28,6 @@
           <div class="stat-info">
             <h3>총 사용자 수</h3>
             <p class="stat-value">{{ statistics.total_users }}</p>
-            <p class="stat-change positive" v-if="statistics.total_users_change">{{ statistics.total_users_change > 0 ? '+' : '' }}{{ statistics.total_users_change }}%</p>
           </div>
         </div>
         <div class="stat-card">
@@ -41,7 +37,6 @@
           <div class="stat-info">
             <h3>실시간 사용자 수 (세션 수)</h3>
             <p class="stat-value">{{ statistics.active_sessions || 0 }}</p>
-            <p class="stat-change positive" v-if="statistics.active_sessions_change">{{ statistics.active_sessions_change > 0 ? '+' : '' }}{{ statistics.active_sessions_change }}%</p>
           </div>
         </div>
         <div class="stat-card">
@@ -49,9 +44,8 @@
             <i class="fas fa-bolt"></i>
           </div>
           <div class="stat-info">
-            <h3>신규 action</h3>
+            <h3>Daily Action</h3>
             <p class="stat-value">{{ statistics.action_count }}</p>
-            <p class="stat-change positive" v-if="statistics.new_users_change">{{ statistics.new_users_change > 0 ? '+' : '' }}{{ statistics.new_users_change }}%</p>
           </div>
         </div>
       </div>
@@ -122,7 +116,7 @@
       </div>
       
       <div class="department-section">
-        <h3>부서별 사용자 분포 top 7 ({{ getMonthlyDateRange() }})</h3>
+        <h3>부서별 사용자 분포 top 7 (최근 24시간)</h3>
         <div class="department-chart-container">
           <div v-if="topDepartmentStats && topDepartmentStats.length > 0" class="department-chart">
             <div v-for="(dept, index) in topDepartmentStats" :key="index" class="department-bar-container">
@@ -143,9 +137,13 @@
 
 <script>
 import axios from 'axios';
+import AppHeader from '@/components/AppHeader.vue';
 
 export default {
   name: 'UserCountView',
+  components: {
+    AppHeader
+  },
   
   data() {
     return {
@@ -205,16 +203,13 @@ export default {
       this.error = null;
       
       try {
-        // 현재 달의 시작일과 종료일 계산
+        // 24시간 전부터 현재까지의 기간 계산
         const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth();
-        const startDate = new Date(year, month, 1);
-        const endDate = new Date(year, month + 1, 0);
+        const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         
         // 날짜를 YYYY-MM-DD 형식으로 변환
-        const startDateStr = startDate.toISOString().split('T')[0];
-        const endDateStr = endDate.toISOString().split('T')[0];
+        const startDateStr = yesterday.toISOString().split('T')[0];
+        const endDateStr = now.toISOString().split('T')[0];
         
         const response = await axios.get('http://localhost:8000/api/users/user-statistics', {
           params: {
@@ -282,20 +277,6 @@ export default {
       };
       
       return actionMap[actionType] || actionType;
-    },
-    
-    getMonthlyDateRange() {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth();
-      const startDate = new Date(year, month, 1);
-      const endDate = new Date(year, month + 1, 0);
-      
-      const formatKoreanDate = (date) => {
-        return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일`;
-      };
-      
-      return `${formatKoreanDate(startDate)} ~ ${formatKoreanDate(endDate)}`;
     },
     
     getDepartmentBarHeight(count) {

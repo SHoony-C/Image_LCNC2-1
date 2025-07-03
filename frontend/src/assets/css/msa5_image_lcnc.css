@@ -1281,6 +1281,7 @@ select.param-input {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  width: 100%;
 }
 
 .workflow-node-list {
@@ -1288,12 +1289,36 @@ select.param-input {
   align-items: center;
   gap: 8px;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 8px 0;
   max-width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f4f6;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 웹킷 브라우저용 스크롤바 스타일 */
+.workflow-node-list::-webkit-scrollbar {
+  height: 6px;
+}
+
+.workflow-node-list::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 3px;
+}
+
+.workflow-node-list::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.workflow-node-list::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
 }
 
 .workflow-node {
   min-width: 80px;
+  max-width: 120px;
   padding: 8px 12px;
   background: white;
   border: 1px solid #e5e7eb;
@@ -1304,6 +1329,7 @@ select.param-input {
   gap: 4px;
   font-size: 12px;
   position: relative;
+  flex-shrink: 0;
 }
 
 .workflow-node:not(:last-child)::after {

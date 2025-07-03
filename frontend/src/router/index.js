@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import MainView from '@/views/side_1_main.vue'
 import AnalysisView from '@/views/side_2_analysis.vue'
 import TableManagementView from '@/views/side_3_Table Management.vue'
-import AdminDashboard from '@/views/side_admin1_dashboard.vue'
+import login_modal from '@/components/login_modal.vue'
 import UserManagement from '@/views/side_admin2_users.vue'
 import SettingsView from '@/views/side_admin3_settings.vue'
 import UserCountView from '@/views/side_admin4_user-count.vue'
@@ -29,6 +29,11 @@ const routes = [
     path: '/table-management',
     name: 'TableManagementView',
     component: TableManagementView
+  },
+  {
+    path: '/admin/login',
+    name: 'self_login',
+    component: login_modal,
   },
   {
     path: '/admin/users',
@@ -90,8 +95,14 @@ router.beforeEach(async (to, from, next) => {
       // Store intended destination for after login
       sessionStorage.setItem('redirectAfterLogin', to.fullPath)
       
-      // Allow navigation to continue to root route where login modal will show
-      next({ path: '/' })
+      // /admin 경로로의 접근인 경우에만 로그인 모달을 보여주고, 그 외에는 바로 SSO 로그인
+      if (to.path == '/admin') {
+        // Allow navigation to continue to root route where login modal will show
+        next({ path: '/' })
+      } else {
+        // 바로 SSO 로그인으로 리다이렉트
+        window.location.href = 'http://localhost:8000/api/auth/google/login'
+      }
       return
     }
   }

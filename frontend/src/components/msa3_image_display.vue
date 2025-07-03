@@ -71,7 +71,7 @@
     
     <!-- 이미지 상세 팝업 -->
     <Teleport to="body">
-      <!-- I-App 태그 팝업 -->
+      <!-- I-TAP 태그 팝업 -->
       <ImageIAppPopup 
         v-if="showImagePopup && isIAppTag(selectedImage?.filename)"
         :show="showImagePopup"

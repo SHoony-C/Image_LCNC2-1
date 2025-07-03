@@ -261,8 +261,8 @@ export default {
         this.isAuthenticated = false;
         this.currentUser = null;
         this.authChecked = true;
-        // Automatically show login modal if not authenticated
-        this.showLoginModal = true;
+        // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
+        window.location.href = 'http://localhost:8000/api/auth/google/login';
         return;
       }
       
@@ -281,8 +281,8 @@ export default {
           this.currentUser = null;
           localStorage.removeItem('token');
           localStorage.removeItem('user');
-          // Automatically show login modal if authentication check fails
-          this.showLoginModal = true;
+          // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
+          window.location.href = 'http://localhost:8000/api/auth/google/login';
         }
       } catch (error) {
         console.error('Authentication check error:', error);
@@ -290,12 +290,13 @@ export default {
         this.currentUser = null;
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        // Automatically show login modal if authentication check errors
-        this.showLoginModal = true;
         
         // Check if it's a network error
         if (error.code === 'ERR_NETWORK') {
           this.serverError = true;
+        } else {
+          // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
+          window.location.href = 'http://localhost:8000/api/auth/google/login';
         }
       }
       

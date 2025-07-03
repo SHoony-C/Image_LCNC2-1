@@ -70,18 +70,35 @@
           <div class="chart-card">
             <div class="chart-header">
               <h3>분석 결과</h3>
-              <!-- Legend selector 그래프 영역으로 이동 -->
               <div v-if="dataLoadCompleted && ((loadedChartType === 'measurement' && chartData && chartData.points && chartData.points.length > 0) || (loadedChartType === 'defect' && defectChartData && defectChartData.points && defectChartData.points.length > 0))" class="legend-control">
-                <label for="legend-select">Legend:</label>
-                <select 
-                  id="legend-select"
-                  v-model="legendType" 
-                  class="legend-select-inline"
-                >
-                  <option value="item_id">Item ID</option>
-                  <option value="subitem_id">Sub Item ID</option>
-                  <option value="combined">Item ID + Sub Item ID</option>
-                </select>
+                <!-- Y축 선택 드롭다운 (불량 분석일 때만 표시) -->
+                <div v-if="loadedChartType === 'defect'" class="y-axis-control">
+                  <label for="y-axis-select">Y축 값:</label>
+                  <select 
+                    id="y-axis-select"
+                    v-model="selectedYAxis" 
+                    class="y-axis-select-inline"
+                  >
+                    <option value="area">Area</option>
+                    <option value="major_axis">Major Axis</option>
+                    <option value="minor_axis">Minor Axis</option>
+                    <option value="striated_ratio">Striation Ratio</option>
+                    <option value="distorted_ratio">Distortion Ratio</option>
+                  </select>
+                </div>
+                
+                <div class="legend-control">
+                  <label for="legend-select">Legend:</label>
+                  <select 
+                    id="legend-select"
+                    v-model="legendType" 
+                    class="legend-select-inline"
+                  >
+                    <option value="item_id">Item ID</option>
+                    <option value="subitem_id">Sub Item ID</option>
+                    <option value="combined">Item ID + Sub Item ID</option>
+                  </select>
+                </div>
               </div>
             </div>
             <div class="chart-content" ref="chartContainer">
@@ -157,11 +174,6 @@
                         fill="#666" text-anchor="middle"
                         font-size="12">{{ label }}</text>
                     </g>
-                    <!-- Y-axis title -->
-                    <text :x="15" :y="height/2" 
-                          fill="#666" text-anchor="middle"
-                          font-size="12" font-weight="600"
-                          transform="rotate(-90, 15, ${height/2})">Value</text>
                     <!-- Legend -->
                     <g v-if="legendItems.length > 0" class="legend" :transform="'translate(' + (width - dynamicMargin.right + 10) + ', 20)'">
                       <rect x="0" y="0" :width="180" :height="legendItems.length * 25 + 10" 
@@ -191,6 +203,12 @@
                         fill="#666" text-anchor="end"
                         font-size="12">{{ label.value.toFixed(3) }}</text>
                     </g>
+                    <!-- Y-axis title -->
+                    <!-- <text :x="15" :y="height/2" 
+                          fill="#666" text-anchor="middle"
+                          font-size="12" font-weight="600"
+                          transform="rotate(-90, 15, ${height/2})">{{ yAxisTitle }}</text> -->
+                    
                     <!-- Data points -->
                     <g class="data-points">
                       <circle v-for="(point, index) in getVisibleDefectPoints" :key="point.item_id + '-' + index"
@@ -244,10 +262,10 @@
                         font-size="12">{{ label }}</text>
                     </g>
                     <!-- Y-axis title -->
-                    <text :x="15" :y="height/2" 
+                    <!-- <text :x="15" :y="height/2" 
                           fill="#666" text-anchor="middle"
                           font-size="12" font-weight="600"
-                          transform="rotate(-90, 15, ${height/2})">Area</text>
+                          transform="rotate(-90, 15, ${height/2})">Area</text> -->
                     <!-- Legend -->
                     <g v-if="legendItems.length > 0" class="legend" :transform="'translate(' + (width - dynamicMargin.right + 10) + ', 20)'">
                       <rect x="0" y="0" :width="180" :height="legendItems.length * 25 + 10" 
@@ -329,40 +347,32 @@
                         <span class="detail-value">{{ displayPoint.created_at || 'N/A' }}</span>
                       </div>
                       <div class="detail-item">
-                        <span class="detail-label">면적:</span>
+                        <span class="detail-label">Item ID:</span>
+                        <span class="detail-value">{{ displayPoint.item_id || 'N/A' }}</span>
+                      </div>
+                      <div class="detail-item">
+                        <span class="detail-label">Sub Item ID:</span>
+                        <span class="detail-value">{{ displayPoint.subitem_id || 'N/A' }}</span>
+                      </div>
+                      <div class="detail-item">
+                        <span class="detail-label">Area :</span>
                         <span class="detail-value">{{ (displayPoint.area && typeof displayPoint.area === 'number') ? displayPoint.area.toFixed(3) : 'N/A' }}</span>
                       </div>
                       <div class="detail-item">
-                        <span class="detail-label">장축:</span>
+                        <span class="detail-label">Major Axis:</span>
                         <span class="detail-value">{{ (displayPoint.major_axis && typeof displayPoint.major_axis === 'number') ? displayPoint.major_axis.toFixed(3) : 'N/A' }}</span>
                       </div>
                       <div class="detail-item">
-                        <span class="detail-label">단축:</span>
+                        <span class="detail-label">Minor Axis :</span>
                         <span class="detail-value">{{ (displayPoint.minor_axis && typeof displayPoint.minor_axis === 'number') ? displayPoint.minor_axis.toFixed(3) : 'N/A' }}</span>
                       </div>
                       <div class="detail-item">
-                        <span class="detail-label">줄무늬 비율:</span>
+                        <span class="detail-label">Striation Ratio :</span>
                         <span class="detail-value">{{ (displayPoint.striated_ratio && typeof displayPoint.striated_ratio === 'number') ? displayPoint.striated_ratio.toFixed(3) : 'N/A' }}</span>
                       </div>
                       <div class="detail-item">
-                        <span class="detail-label">왜곡 비율:</span>
+                        <span class="detail-label">Distortion Ratio :</span>
                         <span class="detail-value">{{ (displayPoint.distorted_ratio && typeof displayPoint.distorted_ratio === 'number') ? displayPoint.distorted_ratio.toFixed(3) : 'N/A' }}</span>
-                      </div>
-                      <div class="detail-item">
-                        <span class="detail-label">Value:</span>
-                        <span class="detail-value">{{ displayPoint.value?.toFixed(3) || 'N/A' }}</span>
-                      </div>
-                      <div class="detail-item">
-                        <span class="detail-label">Bright:</span>
-                        <span class="detail-value">{{ displayPoint.is_bright ? 'Yes' : 'No' }}</span>
-                      </div>
-                      <div class="detail-item">
-                        <span class="detail-label">Striated:</span>
-                        <span class="detail-value">{{ displayPoint.is_striated ? 'Yes' : 'No' }}</span>
-                      </div>
-                      <div class="detail-item">
-                        <span class="detail-label">Distorted:</span>
-                        <span class="detail-value">{{ displayPoint.is_distorted ? 'Yes' : 'No' }}</span>
                       </div>
                     </div>
                   </div>
@@ -475,9 +485,9 @@
                   <th>Lot Wafer</th>
                   <th>Item ID</th>
                   <th>Sub ID</th>
-                  <th>면적</th>
-                  <th>장축</th>
-                  <th>단축</th>
+                  <th>Area</th>
+                  <th>Major Axis</th>
+                  <th>Minor Axis</th>
                   <th>Striation Ratio</th>
                   <th>Distortion Ratio</th>
                   <th>Value</th>
@@ -605,10 +615,6 @@
                     <span class="data-label">Value:</span>
                     <span class="data-value highlight">{{ point.value?.toFixed(3) || 'N/A' }}</span>
                   </div>
-                  <div class="data-row">
-                    <span class="data-label">Table:</span>
-                    <span class="data-value">{{ point.table_name || 'N/A' }}</span>
-                  </div>
                 </div>
               </div>
             </template>
@@ -635,47 +641,24 @@
                     <h6>측정 데이터</h6>
                     <div class="data-grid">
                       <div class="data-row">
-                        <span class="data-label">면적:</span>
+                        <span class="data-label">Area :</span>
                         <span class="data-value highlight">{{ (point.area && typeof point.area === 'number') ? point.area.toFixed(3) : 'N/A' }}</span>
                       </div>
                       <div class="data-row">
-                        <span class="data-label">장축:</span>
+                        <span class="data-label">Major Axis:</span>
                         <span class="data-value">{{ (point.major_axis && typeof point.major_axis === 'number') ? point.major_axis.toFixed(3) : 'N/A' }}</span>
                       </div>
                       <div class="data-row">
-                        <span class="data-label">단축:</span>
+                        <span class="data-label">Minor Axis:</span>
                         <span class="data-value">{{ (point.minor_axis && typeof point.minor_axis === 'number') ? point.minor_axis.toFixed(3) : 'N/A' }}</span>
                       </div>
                       <div class="data-row">
-                        <span class="data-label">줄무늬 비율:</span>
+                        <span class="data-label">Striated Ratio:</span>
                         <span class="data-value">{{ (point.striated_ratio && typeof point.striated_ratio === 'number') ? point.striated_ratio.toFixed(3) : 'N/A' }}</span>
                       </div>
                       <div class="data-row">
-                        <span class="data-label">왜곡 비율:</span>
+                        <span class="data-label">Distorted Ratio:</span>
                         <span class="data-value">{{ (point.distorted_ratio && typeof point.distorted_ratio === 'number') ? point.distorted_ratio.toFixed(3) : 'N/A' }}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="data-section">
-                    <h6>특성 데이터</h6>
-                    <div class="data-grid">
-                      <div class="data-row">
-                        <span class="data-label">Bright:</span>
-                        <span class="data-value badge" :class="point.is_bright ? 'badge-yes' : 'badge-no'">
-                          {{ point.is_bright ? 'Yes' : 'No' }}
-                        </span>
-                      </div>
-                      <div class="data-row">
-                        <span class="data-label">Striated:</span>
-                        <span class="data-value badge" :class="point.is_striated ? 'badge-yes' : 'badge-no'">
-                          {{ point.is_striated ? 'Yes' : 'No' }}
-                        </span>
-                      </div>
-                      <div class="data-row">
-                        <span class="data-label">Distorted:</span>
-                        <span class="data-value badge" :class="point.is_distorted ? 'badge-yes' : 'badge-no'">
-                          {{ point.is_distorted ? 'Yes' : 'No' }}
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -705,6 +688,8 @@ export default {
     MSA4LLMAnalysis
   },
   setup() {
+    const selectedYAxis = ref('area') // 기본값은 area
+    
     // 레전드 유무에 따른 동적 margin 계산
     const dynamicMargin = computed(() => {
       const baseMargin = {
@@ -805,6 +790,7 @@ export default {
     // Y축 라벨 계산
     const yAxisLabels = computed(() => {
       if (loadedChartType.value === 'measurement') {
+        // 기존 계측 차트 로직 유지
         if (!chartData.value || !chartData.value.points || !chartData.value.points.length) return []
         
         const values = chartData.value.points.map(p => p.value).filter(v => v !== null && v !== undefined)
@@ -824,9 +810,13 @@ export default {
         
         return labels
       } else if (loadedChartType.value === 'defect') {
+        // 불량 차트 로직 수정 - 선택된 Y축 값 사용
         if (!defectChartData.value || !defectChartData.value.points || !defectChartData.value.points.length) return []
         
-        const values = defectChartData.value.points.map(p => p.value).filter(v => v !== null && v !== undefined)
+        const values = defectChartData.value.points
+          .map(p => p[selectedYAxis.value])
+          .filter(v => v !== null && v !== undefined && typeof v === 'number')
+        
         if (values.length === 0) return []
         
         const minValue = Math.min(...values)
@@ -845,6 +835,23 @@ export default {
       }
       
       return []
+    })
+
+    const yAxisTitle = computed(() => {
+      if (loadedChartType.value === 'measurement') {
+        return 'Value'
+      } else if (loadedChartType.value === 'defect') {
+        // 선택된 Y축에 따라 제목 변경
+        const titleMap = {
+          'area': 'Area',
+          'major_axis': 'Major Axis',
+          'minor_axis': 'Minor Axis',
+          'striated_ratio': 'Striation Ratio',
+          'distorted_ratio': 'Distortion Ratio'
+        }
+        return titleMap[selectedYAxis.value] || 'Area'
+      }
+      return 'Value'
     })
 
     // 범례 아이템 계산
@@ -1553,6 +1560,13 @@ export default {
       }
     }, { immediate: true })
 
+    watch(selectedYAxis, () => {
+      if (defectData.value && defectData.value.length > 0 && dataLoadCompleted.value && loadedChartType.value === 'defect') {
+        // Y축 변경 시 차트 포인트만 재계산 (전체 데이터 재처리 불필요)
+        // getVisibleDefectPoints와 yAxisLabels가 computed이므로 자동으로 업데이트됨
+      }
+    })
+
     const showImagePopup = (image) => {
       // 분석 타입에 따라 날짜 결정
       let displayDate = 'N/A';
@@ -1624,10 +1638,9 @@ export default {
         dateToXMap[date] = dynamicMargin.value.left + (index * xStep);
       });
       
-      // 선택된 Y축 값의 범위 계산 (기본값: area)
-      const selectedYField = 'area'; // 나중에 동적으로 변경 가능
+      // 선택된 Y축 값의 범위 계산 (동적으로 변경)
       const values = defectChartData.value.points
-        .map(p => p[selectedYField])
+        .map(p => p[selectedYAxis.value])
         .filter(v => v !== null && v !== undefined && typeof v === 'number');
       
       if (values.length === 0) return [];
@@ -1638,7 +1651,7 @@ export default {
       
       return defectChartData.value.points.map((point) => {
         const x = dateToXMap[point.created_at || point.date];
-        const yValue = point[selectedYField];
+        const yValue = point[selectedYAxis.value];
         const y = typeof yValue === 'number' 
           ? height.value - dynamicMargin.value.bottom - ((yValue - minValue) / valueRange) * plotHeight
           : height.value - dynamicMargin.value.bottom;
@@ -2116,7 +2129,9 @@ export default {
       legendType,
       dataLoadCompleted,
       loadedChartType,
-      isSameGroup
+      isSameGroup,
+      selectedYAxis,
+      yAxisTitle
     }
   }
 }

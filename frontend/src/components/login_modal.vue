@@ -311,7 +311,7 @@ export default {
     },
     handleSSOLogin() {
       // SSO 로그인 페이지로 리다이렉트
-      window.location.href = 'http://localhost:8000/api/auth/auth_sh';
+      window.location.href = 'http://localhost:8000/api/auth/google/login';
     },
     handleGoogleLogin() {
       // Google OAuth 로그인 엔드포인트로 리다이렉트
@@ -324,13 +324,13 @@ export default {
         
         // 디버깅용 URL 로깅
         const loginUrl = `${baseUrl}/api/auth/google/login`;
-        console.log('Google 로그인 URL:', loginUrl);
+        console.log('SSO 로그인 URL:', loginUrl);
         
         // 직접 리다이렉트 (fetch 요청 제거하여 더 간단하게)
         window.location.href = loginUrl;
       } catch (error) {
-        console.error('Google 로그인 리다이렉트 오류:', error);
-        this.error = '구글 로그인 처리 중 오류가 발생했습니다.';
+        console.error('로그인 리다이렉트 오류:', error);
+        this.error = 'SSO 로그인 처리 중 오류가 발생했습니다.';
       }
     }
   }

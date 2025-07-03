@@ -88,12 +88,12 @@ async def google_login():
         
         # URL 생성 - AuthorizeUrl 사용
         auth_url = f"{config.IDP_Config['AuthorizeUrl']}?{urllib.parse.urlencode(params)}"
-        print(f"Google OAuth 인증 URL: {auth_url}")
+        print(f"OAuth 인증 URL: {auth_url}")
         
-        print("===== Google OAuth 로그인 리다이렉트 =====\n")
+        print("===== OAuth 로그인 리다이렉트 =====\n")
         return RedirectResponse(url=auth_url)
     except Exception as e:
-        print(f"Google 로그인 리다이렉트 오류: {str(e)}")
+        print(f"로그인 리다이렉트 오류: {str(e)}")
         print(traceback.format_exc())
         return {"error": str(e)}
 
