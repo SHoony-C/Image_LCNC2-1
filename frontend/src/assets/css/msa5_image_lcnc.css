@@ -208,7 +208,6 @@
   font-weight: 500;
   color: #1e293b;
   padding-bottom: 4px;
-  border-bottom: 1px solid #f1f5f9;
 }
 
 .node-header i {
@@ -278,9 +277,8 @@
   width: 100% !important;
   display: flex !important;
   align-items: center !important;
-  padding-bottom: 0.5rem !important;
   margin-bottom: 0 !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+  justify-content: center;
 }
 
 .start-node.has-image .node-header {
@@ -343,9 +341,7 @@
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  padding-bottom: 0.5rem !important;
   margin-bottom: 0 !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
 }
 
 .end-node.has-image .node-header {
@@ -406,20 +402,92 @@
   font-size: 12px;
 }
 
+/* 최대화 상태 - absolute positioning으로 다른 MSA들을 가리도록 수정 */
 .msa-component.maximized {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100vw;
-  height: 100vh;
-  border-radius: 0;
-  z-index: 9999;
+  position: absolute !important;
+  top: -104% !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 205% !important;
+  border-radius: 0 !important;
+  z-index: 10000 !important;
+  background: white !important;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.5) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* side_1_main.vue의 msa-grid 내에서 최대화될 때 */
+.msa-grid .msa-card.msa5 .msa-component.maximized {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 10000 !important;
+  background: white !important;
+  box-shadow: 0 0 50px rgba(0, 0, 0, 0.5) !important;
+  border-radius: 8px !important;
+}
+
+/* msa-grid 자체를 기준으로 최대화 (사이드바 제외) */
+.msa-grid {
+  position: relative; /* 자식 요소의 absolute positioning 기준점 */
+}
+
+.msa-grid .msa5 {
+  position: relative; /* 최대화 시 기준점 역할 */
+}
+
+/* 최대화 시 사이드바가 열려있어도 msa-grid 영역에서만 최대화 */
+.sidebar-open .msa-grid .msa-component.maximized {
+  left: 0 !important;
+  width: 100% !important;
 }
 
 .msa-component.maximized .workflow-container {
-  height: calc(100vh - 4rem);
+  height: calc(100% - 4rem) !important;
+  width: 100% !important;
+}
+
+/* 최대화 시 전처리 옵션 영역 세로 확장 */
+.msa-component.maximized .node-palette {
+  height: 90% !important;
+  min-height: calc(90vh - 8rem) !important;
+}
+
+.msa-component.maximized .preprocessing-nodes-wrapper {
+  height: calc(100% - 500px) !important;
+  min-height: calc(100vh - 650px) !important;
+  flex: 1 !important;
+}
+
+.msa-component.maximized .preprocessing-nodes-container {
+  height: 100% !important;
+  min-height: calc(100vh - 700px) !important;
+  max-height: calc(100vh - 550px) !important;
+}
+
+/* 최대화 시 개별 노드 아이템 높이 줄이기 */
+.msa-component.maximized .palette-node {
+  padding: 8px 12px !important;
+  min-height: 45px !important;
+  font-size: 0.85rem !important;
+}
+
+.msa-component.maximized .palette-node i {
+  font-size: 1rem !important;
+}
+
+/* 최대화 시 병합 섹션 유지 */
+.msa-component.maximized .merge-palette-section {
+  flex-shrink: 0 !important;
+  min-height: 180px !important;
+  margin-top: auto !important;
 }
 
 .options-panel {
@@ -563,45 +631,250 @@ select.param-input {
   background: rgba(139, 92, 246, 0.05);
 }
 
-/* Node handle styles */
-:deep(.vue-flow__handle) {
-  width: 12px !important;
-  height: 12px !important;
+/* Node handle styles - 연결 포인트를 깔끔하고 직관적으로 표시 */
+/* 전역 스타일로 Vue Flow 핸들 적용 */
+.vue-flow__handle {
+  width: 20px !important;
+  height: 20px !important;
   border-radius: 50% !important;
   background: #8b5cf6 !important;
-  border: 2px solid white !important;
-  box-shadow: 0 0 0 2px #8b5cf6 !important;
-  transition: transform 0.2s ease !important;
+  border: 3px solid white !important;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3) !important;
+  transition: all 0.2s ease !important;
   cursor: crosshair !important;
   transform: none !important;
   position: absolute !important;
+  z-index: 100 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+  pointer-events: auto !important;
 }
 
-:deep(.vue-flow__handle:hover) {
+.vue-flow__handle:hover {
   background: #7c3aed !important;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.3) !important;
-  transform: scale(1.1) !important;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4) !important;
+  transform: none !important; /* 위치 변경 금지 */
+  border-color: white !important;
+  border-width: 3px !important;
 }
 
-:deep(.vue-flow__handle-left) {
-  left: -6px !important;
+/* 위치별 핸들 조정 */
+.vue-flow__handle-left {
+  left: -12px !important;
+  top: calc(50% - 12px) !important; /* 위로 2px 조정 */
 }
 
-:deep(.vue-flow__handle-right) {
-  right: -6px !important;
+.vue-flow__handle-right {
+  right: -12px !important;
+  top: calc(50% - 12px) !important; /* 위로 2px 조정 */
 }
 
-/* Merge node handle positions */
-.merge-node :deep(.vue-flow__handle-left) {
-  left: -6px !important;
+.vue-flow__handle-top {
+  top: -12px !important;
+  left: calc(50% - 12px) !important; /* 좌우 중앙 정렬 조정 */
 }
 
-.merge-node :deep(.vue-flow__handle-right) {
-  right: -6px !important;
+.vue-flow__handle-bottom {
+  bottom: -12px !important;
+  left: calc(50% - 12px) !important; /* 좌우 중앙 정렬 조정 */
 }
 
-.merge-node :deep(.vue-flow__handle-top) {
-  top: -6px !important;
+/* 타입별 색상 구분 - target(입력)은 초록색, source(출력)은 빨간색 */
+.vue-flow__handle[data-handletype="target"],
+.vue-flow__handle.target,
+.vue-flow__handle[data-type="target"] {
+  background: #10b981 !important; /* 초록색 - 입력 */
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+}
+
+.vue-flow__handle[data-handletype="target"]:hover,
+.vue-flow__handle.target:hover,
+.vue-flow__handle[data-type="target"]:hover {
+  background: #059669 !important;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4) !important;
+  transform: none !important;
+}
+
+.vue-flow__handle[data-handletype="source"],
+.vue-flow__handle.source,
+.vue-flow__handle[data-type="source"] {
+  background: #ef4444 !important; /* 빨간색 - 출력 */
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3) !important;
+}
+
+.vue-flow__handle[data-handletype="source"]:hover,
+.vue-flow__handle.source:hover,
+.vue-flow__handle[data-type="source"]:hover {
+  background: #dc2626 !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4) !important;
+  transform: none !important;
+}
+
+/* 위치별로도 강제 적용 - 왼쪽과 위쪽은 입력(초록), 오른쪽과 아래쪽은 출력(빨강) */
+.vue-flow__handle-left,
+.vue-flow__handle-top {
+  background: #10b981 !important; /* 초록색 - 입력 */
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
+}
+
+.vue-flow__handle-left:hover,
+.vue-flow__handle-top:hover {
+  background: #059669 !important;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.4) !important;
+  transform: none !important;
+}
+
+.vue-flow__handle-right,
+.vue-flow__handle-bottom {
+  background: #ef4444 !important; /* 빨간색 - 출력 */
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3) !important;
+}
+
+.vue-flow__handle-right:hover,
+.vue-flow__handle-bottom:hover {
+  background: #dc2626 !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4) !important;
+  transform: none !important;
+}
+
+/* 모든 노드에서 핸들 강제 표시 */
+.vue-flow__node .vue-flow__handle {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+  pointer-events: auto !important;
+}
+
+/* Merge node handle positions - 병합 노드용 핸들 위치 조정 */
+.merge-node .vue-flow__handle-left {
+  left: -12px !important;
+}
+
+.merge-node .vue-flow__handle-right {
+  right: -12px !important;
+}
+
+.merge-node .vue-flow__handle-top {
+  top: -12px !important;
+}
+
+/* 핸들이 연결 가능할 때 타입별 애니메이션 */
+.vue-flow__handle.connectable[data-handletype="target"] {
+  background: #10b981 !important; /* 입력 핸들 - 초록색 */
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4), 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+  animation: pulse-connectable-target 2s infinite !important;
+}
+
+.vue-flow__handle.connectable[data-handletype="source"] {
+  background: #ef4444 !important; /* 출력 핸들 - 빨간색 */
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4), 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+  animation: pulse-connectable-source 2s infinite !important;
+}
+
+@keyframes pulse-connectable-target {
+  0%, 100% { 
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4), 0 0 0 2px rgba(16, 185, 129, 0.2) !important;
+  }
+  50% { 
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.6), 0 0 0 4px rgba(16, 185, 129, 0.3) !important;
+  }
+}
+
+@keyframes pulse-connectable-source {
+  0%, 100% { 
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4), 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+  }
+  50% { 
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.6), 0 0 0 4px rgba(239, 68, 68, 0.3) !important;
+  }
+}
+
+.vue-flow__handle.connectable:hover[data-handletype="target"] {
+  background: #059669 !important;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.5), 0 0 0 3px rgba(5, 150, 105, 0.3) !important;
+  transform: none !important; /* 위치 변경 금지 */
+}
+
+.vue-flow__handle.connectable:hover[data-handletype="source"] {
+  background: #dc2626 !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.5), 0 0 0 3px rgba(220, 38, 38, 0.3) !important;
+  transform: none !important; /* 위치 변경 금지 */
+}
+
+/* 모든 핸들을 항상 보이게 강제 */
+.vue-flow__node:hover .vue-flow__handle {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.vue-flow__handle-connecting {
+  background: #ef4444 !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4), 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+  animation: pulse-connecting 1s infinite !important;
+}
+
+@keyframes pulse-connecting {
+  0%, 100% { 
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4), 0 0 0 2px rgba(239, 68, 68, 0.2) !important;
+  }
+  50% { 
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.6), 0 0 0 4px rgba(239, 68, 68, 0.4) !important;
+  }
+}
+
+/* 핸들에 부드러운 글로우 효과 */
+.vue-flow__handle::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.1) 0%, transparent 70%);
+  border-radius: 50%;
+  z-index: -1;
+  transition: all 0.2s ease;
+}
+
+.vue-flow__handle:hover::before {
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.2) 0%, transparent 70%);
+}
+
+/* 추가 강제 스타일 - 데이터 속성으로도 적용 */
+[data-handlepos] {
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 50% !important;
+  background: #8b5cf6 !important;
+  border: 3px solid white !important;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3) !important;
+  z-index: 100 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+}
+
+/* 기존 :deep() 선택자들 제거하고 전역으로 교체 */
+:deep(.vue-flow__handle),
+:deep(.vue-flow__handle:hover),
+:deep(.vue-flow__handle-left),
+:deep(.vue-flow__handle-right),
+:deep(.vue-flow__handle-top),
+:deep(.vue-flow__handle-bottom),
+:deep(.vue-flow__node .vue-flow__handle),
+:deep(.start-node .vue-flow__handle),
+:deep(.end-node .vue-flow__handle),
+.merge-node :deep(.vue-flow__handle-left),
+.merge-node :deep(.vue-flow__handle-right),
+.merge-node :deep(.vue-flow__handle-top),
+:deep(.vue-flow__handle.connectable),
+:deep(.vue-flow__handle.connectable:hover),
+:deep(.vue-flow__node:hover .vue-flow__handle),
+:deep(.vue-flow__handle-connecting),
+:deep(.vue-flow__handle)::before,
+:deep(.vue-flow__handle:hover)::before {
+  /* 위의 전역 스타일이 우선 적용되도록 비워둠 */
 }
 
 /* Selected node style */

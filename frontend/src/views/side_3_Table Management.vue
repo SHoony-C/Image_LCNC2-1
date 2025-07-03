@@ -95,7 +95,7 @@
       <!-- 테이블 데이터 표시 영역 -->
       <div class="data-section" v-if="tableData && tableData.length > 0">
         <div class="data-header">
-          <h3>{{ loadedTableName }} 테이블 데이터 ({{ filteredTableData.length }}건 / 전체 {{ tableData.length }}건)</h3>
+          <h3>{{ loadedTableName }} 테이블 데이터 ( 총 {{ tableData.length }}건 )</h3>
           <div class="data-actions">
             <!-- Lot Wafer 검색 -->
             <div class="search-group">
@@ -187,8 +187,8 @@
                 <th>Major Axis</th>
                 <th>Minor Axis</th>
                 <th>Area</th>
-                <th>줄무늬 비율</th>
-                <th>왜곡 비율</th>
+                <th>Striation Ratio</th>
+                <th>Distortion Ratio</th>
                 <th>생성일시</th>
                 <th>임시 삭제</th>
               </tr>
@@ -829,6 +829,7 @@ export default {
   border-bottom: 1px solid var(--gray-200);
   background: var(--gray-50);
   flex-shrink: 0; /* 헤더는 축소되지 않도록 */
+  color: var(--primary-700);
 }
 
 .data-header h3 {
@@ -942,7 +943,7 @@ export default {
 .data-table th {
   background: var(--gray-50);
   font-weight: 600;
-  color: var(--gray-700);
+  color: var(--primary-700);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -1120,6 +1121,7 @@ export default {
   padding: 1rem 2rem;
   background: var(--gray-50);
   border-bottom: 1px solid var(--gray-200);
+  color: var(--primary-700);
 }
 
 .desc-header h4 {

@@ -131,6 +131,15 @@ async def get_nodes():
             "category": "scale"
         },
         
+        # AI 기반 세그멘테이션
+        {
+            "id": "sam2",
+            "label": "SAM2 세그멘테이션",
+            "icon": "fas fa-magic",
+            "type": "image",
+            "category": "segmentation"
+        },
+        
         # 기타 (병합 노드는 유지)
         {
             "id": "merge",
@@ -191,6 +200,15 @@ async def get_nodes():
         "normalize": {
             "min_value": 0,
             "max_value": 255
+        },
+        
+        # SAM2 세그멘테이션
+        "sam2": {
+            "model_size": "small",  # tiny, small, base_plus, large
+            "automatic_mask": True,  # 전체 이미지 자동 세그멘테이션
+            "options": {
+                "automatic_mask": [True, False]
+            }
         },
         
         # 병합 노드
@@ -425,6 +443,14 @@ async def get_workflow_by_hash(image_hash: str):
                 "label": "정규화",
                 "icon": "fas fa-compress-arrows-alt",
                 "category": "scale"
+            },
+            
+            # AI 기반 세그멘테이션
+            {
+                "id": "sam2",
+                "label": "SAM2 세그멘테이션",
+                "icon": "fas fa-magic",
+                "category": "segmentation"
             },
             
             # 기타 (병합 노드는 유지)

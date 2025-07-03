@@ -280,7 +280,7 @@ async def transform_vectors(data: Dict[str, Any]):
                     
                     # 태그 설정: _before 포함 여부에 따라 태그 부여
                     if '_before' in original_filename:
-                        tags.append('I-app')
+                        tags.append('I-TAP')
                     else:
                         tags.append('Analysis')
                         
@@ -336,7 +336,7 @@ async def transform_vectors(data: Dict[str, Any]):
                         
                         # 태그 설정: _before 포함 여부에 따라 태그 부여
                         if has_before:
-                            tags.append('I-app')
+                            tags.append('I-TAP')
                         else:
                             tags.append('Analysis')
                             
@@ -480,7 +480,7 @@ async def transform_vectors(data: Dict[str, Any]):
                 "success": True
             },
             "tags": {
-                "i_app_count": tags.count('I-app'),
+                "i_app_count": tags.count('I-TAP'),
                 "analysis_count": tags.count('Analysis')
             },
             "debug_info": {

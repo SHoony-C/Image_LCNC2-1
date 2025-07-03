@@ -5,11 +5,6 @@
         <i class="fas fa-flag-checkered"></i>
         <span>I-TAP Result</span>
       </div>
-      <div class="header-right">
-        <button @click="toggleMaximize" class="maximize-btn">
-          <i :class="isMaximized ? 'fas fa-compress' : 'fas fa-expand'"></i>
-        </button>
-      </div>
     </div>
 
     <div class="result-container">

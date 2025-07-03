@@ -358,7 +358,7 @@ async def find_similar_images(filename: str):
                     dist = calculate_distance(current_vector, vector)
                     # 파일명으로 태그 구분 - _before가 포함된 파일은 I-app 태그로, 그 외는 Analysis 태그로 간주
                     is_iapp = "_before" in metadata[i] if isinstance(metadata[i], str) else False
-                    tag_type = "I-app" if is_iapp else "Analysis"
+                    tag_type = "I-TAP" if is_iapp else "Analysis"
                     
                     distances.append({
                         "index": i,
@@ -377,10 +377,10 @@ async def find_similar_images(filename: str):
         print(f"[DEBUG] 계산된 거리 수: {len(distances)}")
         
         # 태그별로 분류
-        iapp_images = [item for item in distances if item["tag_type"] == "I-app"]
+        iapp_images = [item for item in distances if item["tag_type"] == "I-TAP"]
         analysis_images = [item for item in distances if item["tag_type"] == "Analysis"]
         
-        print(f"[DEBUG] I-app 태그 이미지 수: {len(iapp_images)}")
+        print(f"[DEBUG] I-TAP 태그 이미지 수: {len(iapp_images)}")
         print(f"[DEBUG] Analysis 태그 이미지 수: {len(analysis_images)}")
         
         # 각 태그별로 상위 3개씩 선택
@@ -398,9 +398,9 @@ async def find_similar_images(filename: str):
                 "similarity": similarity,
                 "distance": item["distance"],
                 "index": item["index"],
-                "tag_type": "I-app"
+                "tag_type": "I-TAP"
             })
-            print(f"[DEBUG] I-app 유사 이미지 ({i}): {item['filename']}, 유사도: {similarity:.2f}%")
+            print(f"[DEBUG] I-TAP 유사 이미지 ({i}): {item['filename']}, 유사도: {similarity:.2f}%")
         
         # Analysis 태그 이미지 추가
         for i, item in enumerate(analysis_selected):
@@ -414,7 +414,7 @@ async def find_similar_images(filename: str):
             })
             print(f"[DEBUG] Analysis 유사 이미지 ({i}): {item['filename']}, 유사도: {similarity:.2f}%")
         
-        print(f"[DEBUG] 유사 이미지 계산 완료: {len(similar_images)}개 찾음 (I-app: {len(iapp_selected)}, Analysis: {len(analysis_selected)})")
+        print(f"[DEBUG] 유사 이미지 계산 완료: {len(similar_images)}개 찾음 (I-TAP: {len(iapp_selected)}, Analysis: {len(analysis_selected)})")
         return {
             "status": "success",
             "filename": decoded_filename,
@@ -444,7 +444,7 @@ def get_random_similar_images(filename):
         iapp_images = [f for f in all_image_files if "_before" in f]
         analysis_images = [f for f in all_image_files if "_before" not in f]
         
-        print(f"[DEBUG] 발견된 이미지 파일: {len(all_image_files)} (I-app: {len(iapp_images)}, Analysis: {len(analysis_images)})")
+        print(f"[DEBUG] 발견된 이미지 파일: {len(all_image_files)} (I-TAP: {len(iapp_images)}, Analysis: {len(analysis_images)})")
         
         similar_images = []
         
@@ -462,7 +462,7 @@ def get_random_similar_images(filename):
                     "filename": img,
                     "similarity": similarity,
                     "random_selected": True,
-                    "tag_type": "I-app"
+                    "tag_type": "I-TAP"
                 })
         
         # Analysis 태그 이미지 선택 (최대 3개)

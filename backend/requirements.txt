@@ -30,3 +30,7 @@ uuid  # 고유 식별자 생성
 pandas  # 데이터 분석 및 처리 
 scikit-image  # 이미지 처리를 위한 추가 라이브러리
 matplotlib  # 그래프 및 시각화 
+# SAM2 관련 의존성
+torch>=2.3.1  # SAM2 requires PyTorch 2.3.1+
+torchvision>=0.18.1  # SAM2 requires torchvision 0.18.1+
+sam2>=1.0.0  # SAM2 package

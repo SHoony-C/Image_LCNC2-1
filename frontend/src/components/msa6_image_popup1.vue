@@ -87,10 +87,10 @@
             <p class="warning-message">모든 측정 결과를 초기화하시겠습니까?</p>
             <p class="warning-detail">이 작업은 되돌릴 수 없습니다.</p>
             <ul class="reset-items">
-              <li>• 모든 선 측정 결과</li>
-              <li>• 불량 감지 결과</li>
-              <li>• 기준선</li>
-              <li>• Item ID 및 Sub ID 카운터</li>
+              <li> 모든 선 측정 결과</li>
+              <li> 불량 감지 결과</li>
+              <li> 기준선</li>
+              <li> Item ID 및 Sub ID 카운터</li>
             </ul>
           </div>
           <div class="popup-actions">
@@ -1667,9 +1667,10 @@ export default {
         try {
           const pos = this.getLocalPos(e);
           if (!pos) return;
-          this.deleteStart = pos;
+          this.deleteStart = {...pos};
           this.deleteEnd = null;
           this.isMeasuring = true;
+          console.log('[startMeasurement] 삭제 모드 시작:', this.deleteStart);
           this.render();
         } catch (error) {
           console.error('[startMeasurement] Error in delete mode:', error);
@@ -3295,6 +3296,14 @@ export default {
     // 누락된 메서드들 추가
     setMode(mode) {
       // console.log('[setMode] 측정 모드 변경:', mode);
+      
+      // 불량감지 모드에서 다른 모드로 전환할 때 불량감지 결과 초기화
+      if (this.measurementMode === 'defect' && mode !== 'defect') {
+        this.defectMeasurements = [];
+        this.selectedDefects = [];
+        this.defectDetectionResult = null;
+        // console.log('[setMode] 불량감지 결과 초기화됨');
+      }
       
       // 다른 측정 모드로 전환할 때 삭제 모드 해제
       if (this.isDeleteMode) {
@@ -5094,6 +5103,22 @@ export default {
       const dx = point.x - xx;
       const dy = point.y - yy;
       return Math.sqrt(dx * dx + dy * dy);
+    },
+
+    // 두 점 사이의 거리 비율 계산 (전체 선 길이에 대한 비율)
+    getDistanceRatio(start, end, lineStart, lineEnd) {
+      // 두 점 사이의 거리 계산
+      const dx1 = end.x - start.x;
+      const dy1 = end.y - start.y;
+      const segmentLength = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+      
+      // 전체 선 길이 계산
+      const dx2 = lineEnd.x - lineStart.x;
+      const dy2 = lineEnd.y - lineStart.y;
+      const totalLength = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+      
+      // 비율 계산 (0으로 나누는 것을 방지)
+      return totalLength > 0 ? segmentLength / totalLength : 0;
     },
   },
   created() {

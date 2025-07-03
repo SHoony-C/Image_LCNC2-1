@@ -571,7 +571,7 @@ export default {
             this.isDataLoaded = true;
             this.loadingComplete = true;
             this.loadingMessage = '';
-            this.showMessage('벡터 데이터를 직접 파일에서 로드했습니다', 'info');
+            this.showMessage('이미지의 고차원 특징 기반 유사도 매핑 완료', 'info');
             return;
           }
         }
@@ -864,26 +864,6 @@ export default {
         const pointNumber = point.pointNumber;
         const curveNumber = point.curveNumber;
         
-        // console.log(`Plotly 이벤트 상세 정보:`, {
-        //   pointIndex,
-        //   pointNumber,
-        //   curveNumber,
-        //   traceType: point.data ? point.data.type : 'unknown',
-        //   numTraces: data.points.length
-        // });
-        
-        // if (pointIndex === undefined || pointIndex < 0 || pointIndex >= this.labels.length) {
-        //   console.log(`유효하지 않은 점 인덱스: ${pointIndex}, 배열 크기: ${this.labels.length}`);
-        //   return;
-        // }
-        
-        // 클릭한 점의 정보를 로그로 출력
-        // console.log(`=== 클릭한 점 정보 ===`);
-        // console.log(`인덱스: ${pointIndex}`);
-        // console.log(`파일명: ${this.labels[pointIndex]}`);
-        // console.log(`태그: ${this.labels[pointIndex].includes('_before') ? 'I-app' : 'Analysis'}`);
-        // console.log(`좌표: [${this.projectedVectors[pointIndex].join(', ')}]`);
-        
         // 직접 이미지 선택 처리 (window 전역 객체에도 저장)
         this.selectImageByIndex(pointIndex);
         
@@ -930,7 +910,7 @@ export default {
                 index: idx,
                 filename: this.labels[idx],
                 distance: distance,
-                tag_type: 'I-app'
+                tag_type: 'I-TAP'
               });
             } else {
               analysisDistances.push({
@@ -1230,7 +1210,7 @@ export default {
           // 기본 데이터 트레이스 수 확인 (I-app, Analysis 태그 그룹 등)
           let baseTraceCount = 0;
           for (const trace of existingTraces) {
-            if (trace.name === 'I-app' || trace.name === 'Analysis' || trace.name === '모든 포인트' || trace.name === 'All Points') {
+            if (trace.name === 'I-TAP' || trace.name === 'Analysis' || trace.name === '모든 포인트' || trace.name === 'All Points') {
               baseTraceCount++;
             }
           }
@@ -1343,7 +1323,7 @@ export default {
         
         // 선택된 점의 태그 확인
         const isIApp = this.labels[selectedIndex] && this.labels[selectedIndex].includes('_before');
-        const selectedTag = isIApp ? 'I-app' : 'Analysis';
+        const selectedTag = isIApp ? 'I-TAP' : 'Analysis';
         
         // 선택된 점 강조 트레이스
         const selectedPointTrace = {
@@ -1560,7 +1540,7 @@ export default {
               document.dispatchEvent(similarEvent);
               
               // 이미지 개수 확인
-              const iAppCount = similarImages.filter(img => img.tag_type === 'I-app').length;
+              const iAppCount = similarImages.filter(img => img.tag_type === 'I-TAP').length;
               const analysisCount = similarImages.filter(img => img.tag_type === 'Analysis').length;
               
               // 로그 메시지 수정
@@ -2114,7 +2094,7 @@ export default {
       try {
         // 기본 태그 그룹 구조 초기화
       const tagGroups = {
-        'I-app': [],
+        'I-TAP': [],
         'Analysis': []
       };
         
@@ -2133,7 +2113,7 @@ export default {
           }
           
           if (typeof label === 'string' && label.includes('_before')) {
-          tagGroups['I-app'].push(i);
+          tagGroups['I-TAP'].push(i);
         } else {
           tagGroups['Analysis'].push(i);
         }
@@ -2142,7 +2122,7 @@ export default {
       return tagGroups;
       } catch (error) {
         // console.error('태그 그룹 생성 오류:', error);
-        return { 'I-app': [], 'Analysis': [] };
+        return { 'I-TAP': [], 'Analysis': [] };
       }
     },
     

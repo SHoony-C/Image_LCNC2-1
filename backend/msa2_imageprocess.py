@@ -299,7 +299,7 @@ async def find_similar_images_base64(request_data: dict):
                 dist = calculate_distance(uploaded_vector, vector)
                 filename_meta = metadata[i] if isinstance(metadata[i], str) else str(metadata[i])
                 is_iapp = "_before" in filename_meta.lower() or "before" in filename_meta.lower()
-                tag_type = "I-app" if is_iapp else "Analysis"
+                tag_type = "I-TAP" if is_iapp else "Analysis"
                 
                 distances.append({
                     "index": i,
@@ -324,7 +324,7 @@ async def find_similar_images_base64(request_data: dict):
             print(f"  {i+1}. {item['filename']}: 거리={item['distance']:.6f}, 유사도={similarity:.2f}%, 태그={item['tag_type']}")
         
         # 태그별로 분류
-        iapp_images = [item for item in distances if item["tag_type"] == "I-app"]
+        iapp_images = [item for item in distances if item["tag_type"] == "I-TAP"]
         analysis_images = [item for item in distances if item["tag_type"] == "Analysis"]
         
         # 각 태그별로 상위 3개씩 선택
@@ -343,7 +343,7 @@ async def find_similar_images_base64(request_data: dict):
                 "similarity": round(similarity, 2),
                 "distance": round(item["distance"], 6),
                 "index": item["index"],
-                "tag_type": "I-app"
+                "tag_type": "I-TAP"
             })
         
         # Analysis 태그 이미지 추가

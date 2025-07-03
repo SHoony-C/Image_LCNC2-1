@@ -422,7 +422,7 @@
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, reactive, computed, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed, nextTick, watch } from 'vue'
 import { VueFlow, Handle } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
@@ -836,6 +836,22 @@ export default {
     const toggleMaximize = () => {
       isMaximized.value = !isMaximized.value
     }
+
+    // 최대화 상태 변경 시 부모 컨테이너의 position 조정
+    watch(isMaximized, (newVal) => {
+      const component = document.querySelector('.msa5');
+      if (component && component.parentElement) {
+        if (newVal) {
+          // 최대화 시: 부모에 relative position 적용
+          component.parentElement.style.position = 'relative';
+          component.parentElement.style.zIndex = '9999';
+        } else {
+          // 최대화 해제 시: 원래 스타일로 복원
+          component.parentElement.style.position = '';
+          component.parentElement.style.zIndex = '';
+        }
+      }
+    }, { immediate: false })
 
     // VueFlow 초기화
     const onInit = (instance) => {

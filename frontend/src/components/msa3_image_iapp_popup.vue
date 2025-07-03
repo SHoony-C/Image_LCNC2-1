@@ -2,7 +2,7 @@
   <div v-if="show" class="popup-overlay" @click="close">
     <div class="popup-container" @click.stop>
       <div class="popup-header">
-        <h3>I-app Image Details</h3>
+        <h3>I-TAP Image Details</h3>
         <div class="header-actions">
           <button v-if="image && image.workflow" class="load-workflow-btn" @click="loadWorkflowToMSA5">
             <i class="fas fa-file-import"></i> 워크플로우 불러오기

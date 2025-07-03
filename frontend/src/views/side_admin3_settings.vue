@@ -13,7 +13,7 @@
             <p>지정된 경로에서 이미지를 로드하고 벡터로 변환합니다. 각 이미지당 하나의 벡터만 저장합니다.</p>
             <div class="directory-inputs">
               <div class="directory-input">
-                <label>I-app 이미지 경로 (_before 필터링):</label>
+                <label>I-TAP 이미지 경로 (_before 필터링):</label>
                 <input 
                   type="text" 
                   v-model="imageDirectory" 
@@ -139,7 +139,7 @@ export default {
           body: JSON.stringify({ 
             directory_path: this.imageDirectory,
             includeBeforeImagesOnly: true, // '_before' 접미사 파일만 포함
-            tag: 'I-app' // 이미지 태그 추가
+            tag: 'I-TAP' // 이미지 태그 추가
           })
         });
         
@@ -153,7 +153,7 @@ export default {
         
         this.processingStatus = {
           type: 'info',
-          message: 'I-app 이미지 로드 완료, Analysis 이미지 로드 중...'
+          message: 'I-TAP 이미지 로드 완료, Analysis 이미지 로드 중...'
         };
         
         // 그 다음 Analysis 이미지 로드 (필터링 없음)

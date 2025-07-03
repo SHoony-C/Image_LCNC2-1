@@ -71,7 +71,7 @@
             <div class="chart-header">
               <h3>분석 결과</h3>
               <!-- Legend selector 그래프 영역으로 이동 -->
-              <div v-if="dataLoadCompleted && loadedChartType === 'measurement' && chartData && chartData.points && chartData.points.length > 0" class="legend-control">
+              <div v-if="dataLoadCompleted && ((loadedChartType === 'measurement' && chartData && chartData.points && chartData.points.length > 0) || (loadedChartType === 'defect' && defectChartData && defectChartData.points && defectChartData.points.length > 0))" class="legend-control">
                 <label for="legend-select">Legend:</label>
                 <select 
                   id="legend-select"
@@ -95,16 +95,16 @@
                     <!-- Grid Lines -->
                     <g class="grid-lines">
                       <line v-for="y in yGridLines" :key="'y-' + y"
-                        :x1="margin.left" :x2="width - margin.right" :y1="y" :y2="y"
+                        :x1="dynamicMargin.left" :x2="width - dynamicMargin.right" :y1="y" :y2="y"
                         stroke="#eee" stroke-dasharray="2,2" />
                       <line v-for="x in xGridLines" :key="'x-' + x"
-                        :x1="x" :x2="x" :y1="margin.top" :y2="height - margin.bottom"
+                        :x1="x" :x2="x" :y1="dynamicMargin.top" :y2="height - dynamicMargin.bottom"
                         stroke="#eee" stroke-dasharray="2,2" />
                     </g>
                     <!-- Y-axis labels -->
                     <g class="y-axis-labels">
                       <text v-for="(label, i) in yAxisLabels" :key="'y-label-' + i"
-                        :x="margin.left - 10" :y="label.y + 5"
+                        :x="dynamicMargin.left - 10" :y="label.y + 5"
                         fill="#666" text-anchor="end"
                         font-size="12">{{ label.value.toFixed(3) }}</text>
                     </g>
@@ -143,17 +143,17 @@
                     </g>
                     <!-- Axes -->
                     <g class="axes">
-                      <line :x1="margin.left" :x2="width - margin.right" 
-                            :y1="height - margin.bottom" :y2="height - margin.bottom" 
+                      <line :x1="dynamicMargin.left" :x2="width - dynamicMargin.right" 
+                            :y1="height - dynamicMargin.bottom" :y2="height - dynamicMargin.bottom" 
                             stroke="#666" />
-                      <line :x1="margin.left" :y1="margin.top" 
-                            :x2="margin.left" :y2="height - margin.bottom" 
+                      <line :x1="dynamicMargin.left" :y1="dynamicMargin.top" 
+                            :x2="dynamicMargin.left" :y2="height - dynamicMargin.bottom" 
                             stroke="#666" />
                     </g>
                     <!-- X-axis Labels -->
                     <g class="x-axis-labels">
                       <text v-for="(label, i) in limitedLabels" :key="'label-' + i"
-                        :x="getLabelX(i)" :y="height - margin.bottom/2"
+                        :x="getLabelX(i)" :y="height - dynamicMargin.bottom/2"
                         fill="#666" text-anchor="middle"
                         font-size="12">{{ label }}</text>
                     </g>
@@ -163,7 +163,7 @@
                           font-size="12" font-weight="600"
                           transform="rotate(-90, 15, ${height/2})">Value</text>
                     <!-- Legend -->
-                    <g v-if="legendItems.length > 0" class="legend" :transform="'translate(' + (width - 200) + ', 20)'">
+                    <g v-if="legendItems.length > 0" class="legend" :transform="'translate(' + (width - dynamicMargin.right + 10) + ', 20)'">
                       <rect x="0" y="0" :width="180" :height="legendItems.length * 25 + 10" 
                             fill="rgba(255,255,255,0.9)" stroke="#ddd" rx="4"/>
                       <g v-for="(item, i) in legendItems" :key="'legend-' + i">
@@ -178,11 +178,18 @@
                     <!-- Grid Lines -->
                     <g class="grid-lines">
                       <line v-for="y in yGridLines" :key="'y-' + y"
-                        :x1="margin.left" :x2="width - margin.right" :y1="y" :y2="y"
+                        :x1="dynamicMargin.left" :x2="width - dynamicMargin.right" :y1="y" :y2="y"
                         stroke="#eee" stroke-dasharray="2,2" />
                       <line v-for="x in xGridLines" :key="'x-' + x"
-                        :x1="x" :x2="x" :y1="margin.top" :y2="height - margin.bottom"
+                        :x1="x" :x2="x" :y1="dynamicMargin.top" :y2="height - dynamicMargin.bottom"
                         stroke="#eee" stroke-dasharray="2,2" />
+                    </g>
+                    <!-- Y-axis labels -->
+                    <g class="y-axis-labels">
+                      <text v-for="(label, i) in yAxisLabels" :key="'y-label-' + i"
+                        :x="dynamicMargin.left - 10" :y="label.y + 5"
+                        fill="#666" text-anchor="end"
+                        font-size="12">{{ label.value.toFixed(3) }}</text>
                     </g>
                     <!-- Data points -->
                     <g class="data-points">
@@ -200,35 +207,55 @@
                         @click="selectedPoint = point" />
                     </g>
                     <!-- Tooltip -->
-                    <g v-if="selectedPoint" class="tooltip"
-                      :transform="'translate(' + (selectedPoint.x + 10) + ',' + (selectedPoint.y - 10) + ')'">
-                      <rect x="0" y="0" width="160" height="80" rx="4"
-                        fill="rgba(255,255,255,0.95)" />
-                      <text x="10" y="20" fill="#333" font-size="12">
-                        {{ selectedPoint.item_id }}
+                    <g v-if="displayPoint && hoveredPoint" class="tooltip"
+                      :transform="'translate(' + (hoveredPoint.x + 10) + ',' + (hoveredPoint.y - 10) + ')'">
+                      <rect x="0" y="0" width="180" height="120" rx="4"
+                        fill="rgba(255,255,255,0.95)" stroke="#ddd" stroke-width="1" />
+                      <text x="10" y="20" fill="#333" font-size="12" font-weight="600">
+                        {{ hoveredPoint.item_id }} : {{ hoveredPoint.subitem_id }}
                       </text>
                       <text x="10" y="40" fill="#333" font-size="12">
-                        {{ selectedPoint.date }}
+                        {{ hoveredPoint.date }}
                       </text>
                       <text x="10" y="60" fill="#333" font-size="12">
-                        Lot Wafer: {{ selectedPoint.lot_wafer || 'N/A' }}
+                        Area: {{ hoveredPoint.area?.toFixed(3) || 'N/A' }}
+                      </text>
+                      <text x="10" y="80" fill="#333" font-size="12">
+                        Lot Wafer: {{ hoveredPoint.lot_wafer || 'N/A' }}
+                      </text>
+                      <text x="10" y="100" fill="#333" font-size="12">
+                        Created: {{ hoveredPoint.created_at || 'N/A' }}
                       </text>
                     </g>
                     <!-- Axes -->
                     <g class="axes">
-                      <line :x1="margin.left" :x2="width - margin.right" 
-                            :y1="height - margin.bottom" :y2="height - margin.bottom" 
+                      <line :x1="dynamicMargin.left" :x2="width - dynamicMargin.right" 
+                            :y1="height - dynamicMargin.bottom" :y2="height - dynamicMargin.bottom" 
                             stroke="#666" />
-                      <line :x1="margin.left" :y1="margin.top" 
-                            :x2="margin.left" :y2="height - margin.bottom" 
+                      <line :x1="dynamicMargin.left" :y1="dynamicMargin.top" 
+                            :x2="dynamicMargin.left" :y2="height - dynamicMargin.bottom" 
                             stroke="#666" />
                     </g>
-                    <!-- Labels -->
-                    <g class="labels">
+                    <!-- X-axis Labels -->
+                    <g class="x-axis-labels">
                       <text v-for="(label, i) in limitedLabels" :key="'label-' + i"
-                        :x="getLabelX(i)" :y="height - margin.bottom/2"
+                        :x="getLabelX(i)" :y="height - dynamicMargin.bottom/2"
                         fill="#666" text-anchor="middle"
                         font-size="12">{{ label }}</text>
+                    </g>
+                    <!-- Y-axis title -->
+                    <text :x="15" :y="height/2" 
+                          fill="#666" text-anchor="middle"
+                          font-size="12" font-weight="600"
+                          transform="rotate(-90, 15, ${height/2})">Area</text>
+                    <!-- Legend -->
+                    <g v-if="legendItems.length > 0" class="legend" :transform="'translate(' + (width - dynamicMargin.right + 10) + ', 20)'">
+                      <rect x="0" y="0" :width="180" :height="legendItems.length * 25 + 10" 
+                            fill="rgba(255,255,255,0.9)" stroke="#ddd" rx="4"/>
+                      <g v-for="(item, i) in legendItems" :key="'legend-' + i">
+                        <circle :cx="15" :cy="20 + i * 25" r="6" :fill="item.color" stroke="white" stroke-width="2"/>
+                        <text :x="30" :y="25 + i * 25" fill="#333" font-size="12">{{ item.label }}</text>
+                      </g>
                     </g>
                   </svg>
                   <div v-else class="loading-chart">
@@ -451,8 +478,8 @@
                   <th>면적</th>
                   <th>장축</th>
                   <th>단축</th>
-                  <th>줄무늬 비율</th>
-                  <th>왜곡 비율</th>
+                  <th>Striation Ratio</th>
+                  <th>Distortion Ratio</th>
                   <th>Value</th>
                   <th class="image-header">전 이미지</th>
                   <th class="image-header">후 이미지</th>
@@ -678,6 +705,26 @@ export default {
     MSA4LLMAnalysis
   },
   setup() {
+    // 레전드 유무에 따른 동적 margin 계산
+    const dynamicMargin = computed(() => {
+      const baseMargin = {
+        top: 40,
+        right: 40,
+        bottom: 40,
+        left: 60
+      };
+      
+      // 레전드가 있을 때는 오른쪽 margin을 220px로 확장 (레전드 폭 180px + 여백 40px)
+      if (legendItems.value && legendItems.value.length > 0) {
+        return {
+          ...baseMargin,
+          right: 220
+        };
+      }
+      
+      return baseMargin;
+    });
+
     const chartContainer = ref(null)
     const width = ref(800)
     const height = ref(400)
@@ -725,8 +772,8 @@ export default {
         return []
       }
       const count = 5
-      const step = (height.value - margin.top - margin.bottom) / count
-      return Array(count + 1).fill().map((_, i) => margin.top + i * step)
+      const step = (height.value - dynamicMargin.value.top - dynamicMargin.value.bottom) / count
+      return Array(count + 1).fill().map((_, i) => dynamicMargin.value.top + i * step)
     })
 
     const xGridLines = computed(() => {
@@ -738,8 +785,8 @@ export default {
         // 고유한 날짜 목록 생성
         const uniqueDates = [...new Set(chartData.value.points.map(point => point.date))].sort()
         const dateCount = uniqueDates.length
-        const step = (width.value - margin.left - margin.right) / Math.max(dateCount - 1, 1)
-        return Array(dateCount).fill().map((_, i) => margin.left + i * step)
+        const step = (width.value - dynamicMargin.value.left - dynamicMargin.value.right) / Math.max(dateCount - 1, 1)
+        return Array(dateCount).fill().map((_, i) => dynamicMargin.value.left + i * step)
         
       } else if (loadedChartType.value === 'defect') {
         if (!defectChartData.value || !defectChartData.value.points || !defectChartData.value.points.length) return []
@@ -747,8 +794,8 @@ export default {
         // 고유한 날짜 목록 생성
         const uniqueDates = [...new Set(defectChartData.value.points.map(point => point.created_at || point.date))].sort()
         const dateCount = uniqueDates.length
-        const step = (width.value - margin.left - margin.right) / Math.max(dateCount - 1, 1)
-        return Array(dateCount).fill().map((_, i) => margin.left + i * step)
+        const step = (width.value - dynamicMargin.value.left - dynamicMargin.value.right) / Math.max(dateCount - 1, 1)
+        return Array(dateCount).fill().map((_, i) => dynamicMargin.value.left + i * step)
         
       } else {
         return []
@@ -757,60 +804,120 @@ export default {
 
     // Y축 라벨 계산
     const yAxisLabels = computed(() => {
-      if (!chartData.value || !chartData.value.points || !chartData.value.points.length) return []
-      
-      const values = chartData.value.points.map(p => p.value).filter(v => v !== null && v !== undefined)
-      if (values.length === 0) return []
-      
-      const minValue = Math.min(...values)
-      const maxValue = Math.max(...values)
-      const range = maxValue - minValue || 1
-      const count = 5
-      
-      const labels = []
-      for (let i = 0; i <= count; i++) {
-        const value = minValue + (range * i / count)
-        const y = height.value - margin.bottom - ((value - minValue) / range) * (height.value - margin.top - margin.bottom)
-        labels.push({ value, y })
+      if (loadedChartType.value === 'measurement') {
+        if (!chartData.value || !chartData.value.points || !chartData.value.points.length) return []
+        
+        const values = chartData.value.points.map(p => p.value).filter(v => v !== null && v !== undefined)
+        if (values.length === 0) return []
+        
+        const minValue = Math.min(...values)
+        const maxValue = Math.max(...values)
+        const range = maxValue - minValue || 1
+        const count = 5
+        
+        const labels = []
+        for (let i = 0; i <= count; i++) {
+          const value = minValue + (range * i / count)
+          const y = height.value - dynamicMargin.value.bottom - ((value - minValue) / range) * (height.value - dynamicMargin.value.top - dynamicMargin.value.bottom)
+          labels.push({ value, y })
+        }
+        
+        return labels
+      } else if (loadedChartType.value === 'defect') {
+        if (!defectChartData.value || !defectChartData.value.points || !defectChartData.value.points.length) return []
+        
+        const values = defectChartData.value.points.map(p => p.value).filter(v => v !== null && v !== undefined)
+        if (values.length === 0) return []
+        
+        const minValue = Math.min(...values)
+        const maxValue = Math.max(...values)
+        const range = maxValue - minValue || 1
+        const count = 5
+        
+        const labels = []
+        for (let i = 0; i <= count; i++) {
+          const value = minValue + (range * i / count)
+          const y = height.value - dynamicMargin.value.bottom - ((value - minValue) / range) * (height.value - dynamicMargin.value.top - dynamicMargin.value.bottom)
+          labels.push({ value, y })
+        }
+        
+        return labels
       }
       
-      return labels
+      return []
     })
 
     // 범례 아이템 계산
     const legendItems = computed(() => {
-      if (!chartData.value || !chartData.value.points || !chartData.value.points.length) return []
-      
-      const items = new Map()
-      
-      chartData.value.points.forEach(point => {
-        let key = ''
-        let label = ''
+      if (loadedChartType.value === 'measurement') {
+        if (!chartData.value || !chartData.value.points || !chartData.value.points.length) return []
         
-        switch (legendType.value) {
-          case 'item_id':
-            key = point.item_id || 'Unknown'
-            label = key
-            break
-          case 'subitem_id':
-            key = point.subitem_id || 'Unknown'
-            label = key
-            break
-          case 'combined':
-            key = `${point.item_id || 'Unknown'}_${point.subitem_id || 'Unknown'}`
-            label = `${point.item_id || 'Unknown'} + ${point.subitem_id || 'Unknown'}`
-            break
-        }
+        const items = new Map()
         
-        if (!items.has(key)) {
-          items.set(key, {
-            label,
-            color: point.color
-          })
-        }
-      })
+        chartData.value.points.forEach(point => {
+          let key = ''
+          let label = ''
+          
+          switch (legendType.value) {
+            case 'item_id':
+              key = point.item_id || 'Unknown'
+              label = key
+              break
+            case 'subitem_id':
+              key = point.subitem_id || 'Unknown'
+              label = key
+              break
+            case 'combined':
+              key = `${point.item_id || 'Unknown'}_${point.subitem_id || 'Unknown'}`
+              label = `${point.item_id || 'Unknown'} + ${point.subitem_id || 'Unknown'}`
+              break
+          }
+          
+          if (!items.has(key)) {
+            items.set(key, {
+              label,
+              color: point.color
+            })
+          }
+        })
+        
+        return Array.from(items.values()).slice(0, 10) // 최대 10개 항목만 표시
+      } else if (loadedChartType.value === 'defect') {
+        if (!defectChartData.value || !defectChartData.value.points || !defectChartData.value.points.length) return []
+        
+        const items = new Map()
+        
+        defectChartData.value.points.forEach(point => {
+          let key = ''
+          let label = ''
+          
+          switch (legendType.value) {
+            case 'item_id':
+              key = point.item_id || 'Unknown'
+              label = key
+              break
+            case 'subitem_id':
+              key = point.subitem_id || 'Unknown'
+              label = key
+              break
+            case 'combined':
+              key = `${point.item_id || 'Unknown'}_${point.subitem_id || 'Unknown'}`
+              label = `${point.item_id || 'Unknown'} + ${point.subitem_id || 'Unknown'}`
+              break
+          }
+          
+          if (!items.has(key)) {
+            items.set(key, {
+              label,
+              color: point.color
+            })
+          }
+        })
+        
+        return Array.from(items.values()).slice(0, 10) // 최대 10개 항목만 표시
+      }
       
-      return Array.from(items.values()).slice(0, 10) // 최대 10개 항목만 표시
+      return []
     })
 
     const getLinePath = (dataset) => {
@@ -916,9 +1023,9 @@ export default {
         // 고유한 날짜 목록 생성
         const uniqueDates = [...new Set(chartData.value.points.map(point => point.date))].sort()
         const totalDates = uniqueDates.length
-        const step = (width.value - margin.left - margin.right) / Math.max(totalDates - 1, 1)
+        const step = (width.value - dynamicMargin.value.left - dynamicMargin.value.right) / Math.max(totalDates - 1, 1)
         const labelStep = Math.ceil(totalDates / limitedLabels.value.length)
-        return margin.left + (index * labelStep) * step
+        return dynamicMargin.value.left + (index * labelStep) * step
         
       } else if (loadedChartType.value === 'defect') {
         if (!defectChartData.value || !defectChartData.value.points || !defectChartData.value.points.length) return 0
@@ -926,9 +1033,9 @@ export default {
         // 고유한 날짜 목록 생성
         const uniqueDates = [...new Set(defectChartData.value.points.map(point => point.created_at || point.date))].sort()
         const totalDates = uniqueDates.length
-        const step = (width.value - margin.left - margin.right) / Math.max(totalDates - 1, 1)
+        const step = (width.value - dynamicMargin.value.left - dynamicMargin.value.right) / Math.max(totalDates - 1, 1)
         const labelStep = Math.ceil(totalDates / limitedLabels.value.length)
-        return margin.left + (index * labelStep) * step
+        return dynamicMargin.value.left + (index * labelStep) * step
         
       } else {
         return 0
@@ -1015,12 +1122,42 @@ export default {
         return;
       }
       
+      // 색상 팔레트 정의 (CD 분석과 동일)
+      const colorPalette = [
+        '#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#F44336',
+        '#607D8B', '#795548', '#3F51B5', '#009688', '#CDDC39',
+        '#E91E63', '#FF5722', '#8BC34A', '#00BCD4', '#FFC107'
+      ]
+      
+      // 색상 할당을 위한 맵
+      const colorMap = new Map()
+      
       const points = defectData.value.map(item => {
         const majorAxis = parseFloat(item.major_axis) || 0;
         const minorAxis = parseFloat(item.minor_axis) || 0;
         const area = parseFloat(item.area) || 0;
         const striatedRatio = parseFloat(item.striated_ratio) || 0;
         const distortedRatio = parseFloat(item.distorted_ratio) || 0;
+        
+        // 범례 타입에 따라 색상 키 결정
+        let colorKey = ''
+        switch (legendType.value) {
+          case 'item_id':
+            colorKey = item.item_id || 'Unknown'
+            break
+          case 'subitem_id':
+            colorKey = item.subitem_id || 'Unknown'
+            break
+          case 'combined':
+            colorKey = `${item.item_id || 'Unknown'}_${item.subitem_id || 'Unknown'}`
+            break
+        }
+        
+        // 색상 할당
+        if (!colorMap.has(colorKey)) {
+          const colorIndex = colorMap.size % colorPalette.length
+          colorMap.set(colorKey, colorPalette[colorIndex])
+        }
         
         return {
           pk_id: item.pk_id,
@@ -1040,7 +1177,7 @@ export default {
           is_bright: item.is_bright || false,
           is_striated: item.is_striated || false,
           is_distorted: item.is_distorted || false,
-          color: '#2196F3', // 단일 색상 사용
+          color: colorMap.get(colorKey), // 동적 색상 할당
           imageUrl: getImageUrl(item.lot_wafer, loadedTable.value, 'before')
         };
       }).filter(point => point !== null);
@@ -1342,8 +1479,8 @@ export default {
       }
       
       // 실제 그래프 영역 계산
-      const plotWidth = width.value - margin.left - margin.right;
-      const plotHeight = height.value - margin.top - margin.bottom;
+      const plotWidth = width.value - dynamicMargin.value.left - dynamicMargin.value.right;
+      const plotHeight = height.value - dynamicMargin.value.top - dynamicMargin.value.bottom;
       
       // 데이터 값 범위 계산
       const values = chartData.value.points.map(p => p.value).filter(v => v !== null && v !== undefined);
@@ -1361,12 +1498,12 @@ export default {
       // 각 날짜에 대한 x축 위치 매핑
       const dateToXMap = {};
       uniqueDates.forEach((date, index) => {
-        dateToXMap[date] = margin.left + (index * xStep);
+        dateToXMap[date] = dynamicMargin.value.left + (index * xStep);
       });
       
       return chartData.value.points.map((point) => {
         const x = dateToXMap[point.date];
-        const y = height.value - margin.bottom - ((point.value - minValue) / valueRange) * plotHeight;
+        const y = height.value - dynamicMargin.value.bottom - ((point.value - minValue) / valueRange) * plotHeight;
         
         return {
           ...point,
@@ -1473,8 +1610,8 @@ export default {
         return [];
       }
       
-      const plotWidth = width.value - margin.left - margin.right;
-      const plotHeight = height.value - margin.top - margin.bottom;
+      const plotWidth = width.value - dynamicMargin.value.left - dynamicMargin.value.right;
+      const plotHeight = height.value - dynamicMargin.value.top - dynamicMargin.value.bottom;
       
       // 고유한 날짜 목록 생성 (시간순 정렬) - created_at 기준
       const uniqueDates = [...new Set(defectChartData.value.points.map(p => p.created_at || p.date))].sort();
@@ -1484,7 +1621,7 @@ export default {
       // 각 날짜에 대한 x축 위치 매핑
       const dateToXMap = {};
       uniqueDates.forEach((date, index) => {
-        dateToXMap[date] = margin.left + (index * xStep);
+        dateToXMap[date] = dynamicMargin.value.left + (index * xStep);
       });
       
       // 선택된 Y축 값의 범위 계산 (기본값: area)
@@ -1503,8 +1640,8 @@ export default {
         const x = dateToXMap[point.created_at || point.date];
         const yValue = point[selectedYField];
         const y = typeof yValue === 'number' 
-          ? height.value - margin.bottom - ((yValue - minValue) / valueRange) * plotHeight
-          : height.value - margin.bottom;
+          ? height.value - dynamicMargin.value.bottom - ((yValue - minValue) / valueRange) * plotHeight
+          : height.value - dynamicMargin.value.bottom;
         
         return {
           ...point,
@@ -1548,6 +1685,9 @@ export default {
     watch(legendType, () => {
       if (measurementData.value && measurementData.value.length > 0 && dataLoadCompleted.value && loadedChartType.value === 'measurement') {
         processChartData();
+      }
+      if (defectData.value && defectData.value.length > 0 && dataLoadCompleted.value && loadedChartType.value === 'defect') {
+        processDefectData();
       }
     });
 
@@ -1922,6 +2062,7 @@ export default {
       width,
       height,
       margin,
+      dynamicMargin,
       yGridLines,
       xGridLines,
       getLinePath,

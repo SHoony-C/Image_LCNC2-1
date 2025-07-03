@@ -39,7 +39,7 @@
           </div>
           
           <div class="dual-column-grid">
-            <!-- I-app 태그 유사 이미지 -->
+            <!-- I-TAP 태그 유사 이미지 -->
             <div class="column iapp-column">
               <div 
                 v-for="image in iAppSimilarImages" 
@@ -173,7 +173,7 @@ export default {
         window.MSAEventBus.on('msa2-similar-images', this.handleSimilarImagesFound);
         //console.log('MSA3: 전역 이벤트 버스 리스너 등록 완료');
       } else {
-        console.warn('MSA3: 전역 이벤트 버스가 존재하지 않습니다');
+        // console.warn('MSA3: 전역 이벤트 버스가 존재하지 않습니다');
       }
 
       // MSA3가 준비되었음을 MSA2에 알림
@@ -190,7 +190,7 @@ export default {
           
           //console.log('MSA3: 준비 완료 신호를 MSA2에 전송했습니다');
         } catch (error) {
-          console.error('MSA3: 준비 완료 신호 전송 중 오류:', error);
+          // console.error('MSA3: 준비 완료 신호 전송 중 오류:', error);
         }
       }, 500);
       
@@ -201,7 +201,7 @@ export default {
       
       window.addEventListener('resize', this.resizeHandler);
     } catch (error) {
-      console.error('MSA3: created 라이프사이클 오류:', error);
+      // console.error('MSA3: created 라이프사이클 오류:', error);
     }
   },
   beforeDestroy() {
@@ -226,7 +226,7 @@ export default {
         clearInterval(this.dataPollingInterval);
       }
     } catch (error) {
-      console.error('MSA3: beforeDestroy 라이프사이클 오류:', error);
+      // console.error('MSA3: beforeDestroy 라이프사이클 오류:', error);
     }
   },
   mounted() {
@@ -322,7 +322,7 @@ export default {
           // console.log('[MSA3] MSA1 유사 이미지 데이터 처리 완료');
         }
       } catch (error) {
-        console.error('[MSA3] MSA1 유사 이미지 데이터 처리 오류:', error);
+        // console.error('[MSA3] MSA1 유사 이미지 데이터 처리 오류:', error);
       }
     },
     
@@ -338,7 +338,7 @@ export default {
           (image.filename && (image.filename.includes('localhost') || 
                            image.filename.includes('undefined') || 
                            image.filename.includes('null')))) {
-        console.warn(`MSA3: 유효하지 않은 이미지 파일명 무시: ${image.filename}`);
+        // console.warn(`MSA3: 유효하지 않은 이미지 파일명 무시: ${image.filename}`);
         return;
       }
       
@@ -348,7 +348,7 @@ export default {
       } else if (image.url && (image.url.includes('localhost:8080/main') || 
                               image.url.includes('undefined') || 
                               image.url.includes('null'))) {
-        console.warn(`MSA3: 유효하지 않은 이미지 URL 수정: ${image.url}`);
+        // console.warn(`MSA3: 유효하지 않은 이미지 URL 수정: ${image.url}`);
         image.url = this.getImageUrl(image.filename || 'default');
       }
       
@@ -446,7 +446,7 @@ export default {
           try {
             // MSA1에서 온 이미지는 새로운 이미지이므로 txt 파일이 존재하지 않음 - 스킵
             if (image.fromMSA1) {
-              console.log(`MSA3: MSA1에서 온 새로운 이미지이므로 txt 파일 요청을 건너뜁니다: ${image.filename}`);
+              // console.log(`MSA3: MSA1에서 온 새로운 이미지이므로 txt 파일 요청을 건너뜁니다: ${image.filename}`);
               continue;
             }
             
@@ -457,7 +457,7 @@ export default {
                 image.filename.includes('localhost') || 
                 image.filename.includes('undefined') || 
                 image.filename.includes('null')) {
-              console.warn(`MSA3: Skipping invalid image filename: ${image.filename}`);
+              // console.warn(`MSA3: Skipping invalid image filename: ${image.filename}`);
               continue;
             }
 
@@ -804,27 +804,27 @@ export default {
           //console.log('MSA3: Response OK, parsing JSON');
           return response.json()
             .then(data => {
-              console.log('MSA3: 실제 워크플로우 데이터 수신:', data);
-              console.log('MSA3: 데이터 타입:', typeof data);
-              console.log('MSA3: 데이터 구조 키:', data ? Object.keys(data) : 'null');
+              // console.log('MSA3: 실제 워크플로우 데이터 수신:', data);
+              // console.log('MSA3: 데이터 타입:', typeof data);
+              // console.log('MSA3: 데이터 구조 키:', data ? Object.keys(data) : 'null');
               
               if (data && typeof data === 'object') {
-                console.log('MSA3: 상세 데이터 구조:');
+                // console.log('MSA3: 상세 데이터 구조:');
                 Object.keys(data).forEach(key => {
                   const value = data[key];
-                  console.log(`  - ${key}: ${typeof value}`, Array.isArray(value) ? `(배열, 길이: ${value.length})` : '');
+                  // console.log(`  - ${key}: ${typeof value}`, Array.isArray(value) ? `(배열, 길이: ${value.length})` : '');
                   if (key === 'workflow' && value) {
-                    console.log('    workflow 내부 구조:', Object.keys(value));
+                    // console.log('    workflow 내부 구조:', Object.keys(value));
                   }
                   if (key === 'elements' && Array.isArray(value)) {
-                    console.log('    elements 배열 내용:', value);
+                    // console.log('    elements 배열 내용:', value);
                   }
                 });
               }
               
               // 응답이 HTTP 오류 객체인 경우
               if (data && data.status && data.status >= 400) {
-                console.error(`MSA3: API returned error response: ${data.status}`);
+                // console.error(`MSA3: API returned error response: ${data.status}`);
                 if (this.selectedImage) {
                   this.selectedImage = {
                     ...this.selectedImage,
@@ -838,10 +838,10 @@ export default {
               
               // 워크플로우 정보 업데이트
               if (this.selectedImage && data && (data.workflow || data)) {
-                console.log('MSA3: selectedImage 업데이트 시작');
+                // console.log('MSA3: selectedImage 업데이트 시작');
                 const workflowData = data.workflow || data;
-                console.log('MSA3: 사용할 워크플로우 데이터:', workflowData);
-                console.log('MSA3: 워크플로우 데이터 구조:', Object.keys(workflowData));
+                // console.log('MSA3: 사용할 워크플로우 데이터:', workflowData);
+                // console.log('MSA3: 워크플로우 데이터 구조:', Object.keys(workflowData));
                 
                 this.selectedImage = {
                   ...this.selectedImage,
@@ -849,13 +849,13 @@ export default {
                   isLoading: false,
                   workflowStatus: 'found'
                 };
-                console.log('MSA3: selectedImage 업데이트 완료:', this.selectedImage.workflow);
+                // console.log('MSA3: selectedImage 업데이트 완료:', this.selectedImage.workflow);
               } else {
-                console.error('MSA3: Invalid workflow data received or selectedImage is null');
-                console.error('MSA3: selectedImage 상태:', this.selectedImage ? '존재함' : 'null');
+                // console.error('MSA3: Invalid workflow data received or selectedImage is null');
+                // console.error('MSA3: selectedImage 상태:', this.selectedImage ? '존재함' : 'null');
                 if (data) {
-                  console.error('MSA3: 받은 데이터 구조:', Object.keys(data));
-                  console.error('MSA3: 전체 데이터:', data);
+                  // console.error('MSA3: 받은 데이터 구조:', Object.keys(data));
+                  // console.error('MSA3: 전체 데이터:', data);
                 }
                 if (this.selectedImage) {
                   this.selectedImage = {
@@ -868,11 +868,11 @@ export default {
             })
             .catch(error => {
               // 두 번째 시도까지 실패한 경우
-              console.error('MSA3: Error fetching workflow info:', error);
+              // console.error('MSA3: Error fetching workflow info:', error);
               
               // 이미 404 처리가 되지 않은 경우만 상태 업데이트
               if (this.selectedImage && this.selectedImage.workflowStatus !== 'not_found') {
-                console.error('MSA3: Setting error state for workflow fetch');
+                // console.error('MSA3: Setting error state for workflow fetch');
                 this.selectedImage = {
                   ...this.selectedImage,
                   isLoading: false,
@@ -887,11 +887,11 @@ export default {
         })
         .catch(error => {
           // 두 번째 시도까지 실패한 경우
-          console.error('MSA3: Error fetching workflow info:', error);
+          // console.error('MSA3: Error fetching workflow info:', error);
           
           // 이미 404 처리가 되지 않은 경우만 상태 업데이트
           if (this.selectedImage && this.selectedImage.workflowStatus !== 'not_found') {
-            console.error('MSA3: Setting error state for workflow fetch');
+            // console.error('MSA3: Setting error state for workflow fetch');
             this.selectedImage = {
               ...this.selectedImage,
               isLoading: false,
@@ -911,14 +911,14 @@ export default {
         // 컨테이너 엘리먼트 확인
         const container = this.$el;
         if (!container) {
-          console.warn('MSA3: 컨테이너 엘리먼트를 찾을 수 없습니다');
+          // console.warn('MSA3: 컨테이너 엘리먼트를 찾을 수 없습니다');
           this.layoutInitialized = true; // 오류가 발생해도 초기화된 것으로 처리
           return false;
         }
         
         // 타입 확인 및 안전하게 처리
         if (typeof container.querySelector !== 'function') {
-          console.warn('MSA3: 컨테이너의 querySelector가 함수가 아닙니다:', typeof container.querySelector);
+          // console.warn('MSA3: 컨테이너의 querySelector가 함수가 아닙니다:', typeof container.querySelector);
           this.layoutInitialized = true; // 오류가 발생해도 초기화된 것으로 처리
           return false;
         }
@@ -932,7 +932,7 @@ export default {
             container.className = (container.className + ' initialized').trim();
           }
         } catch (classError) {
-          console.error('MSA3: 클래스 추가 중 오류:', classError);
+          // console.error('MSA3: 클래스 추가 중 오류:', classError);
         }
         
         // content-area 엘리먼트 확인 - try/catch로 안전하게 처리
@@ -946,14 +946,14 @@ export default {
             }
           }
         } catch (contentError) {
-          console.error('MSA3: content-area 처리 중 오류:', contentError);
+          // console.error('MSA3: content-area 처리 중 오류:', contentError);
         }
         
         this.layoutInitialized = true;
         //console.log('MSA3: 레이아웃 초기화 완료');
         return true;
       } catch (error) {
-        console.error('MSA3: 레이아웃 초기화 중 오류 발생', error);
+        // console.error('MSA3: 레이아웃 초기화 중 오류 발생', error);
         this.layoutInitialized = true; // 오류가 발생해도 초기화된 것으로 처리
         return false;
       }
@@ -971,12 +971,12 @@ export default {
               similarity: 100 // 직접 선택한 이미지이므로 100%
             }]
           });
-          console.log(`MSA3: Analysis popup에서 단일 이미지 분석 데이터를 MSA4로 전송: ${data.imageName}`);
+          // console.log(`MSA3: Analysis popup에서 단일 이미지 분석 데이터를 MSA4로 전송: ${data.imageName}`);
         } else {
-          console.warn('MSA3: Analysis popup에서 받은 데이터가 불완전합니다:', data);
+          // console.warn('MSA3: Analysis popup에서 받은 데이터가 불완전합니다:', data);
         }
       } catch (error) {
-        console.error('MSA3: Analysis popup 데이터 처리 중 오류:', error);
+        // console.error('MSA3: Analysis popup 데이터 처리 중 오류:', error);
       }
     }
   }
