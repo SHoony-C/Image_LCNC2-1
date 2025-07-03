@@ -192,16 +192,7 @@
           </div>
           <div class="preview-content">
             <img :src="previewImageUrl" alt="Preview" class="preview-image">
-            <div class="preview-actions" v-if="previewImageUrl === processedImages['end']">
-              <button class="action-btn similar-btn" @click="findSimilarForEndImage">
-                <i class="fas fa-search"></i>
-                유사 이미지 검색
-              </button>
-              <button class="action-btn msa6-btn" @click="handleMSA6Transfer">
-                <i class="fas fa-file-export"></i>
-                MSA6로 전송
-              </button>
-            </div>
+            
           </div>
         </div>
       </div>
@@ -1318,11 +1309,18 @@ export default {
           node.data.params = getDefaultParams(node.data?.nodeId || node.data?.id || node.type, defaultOptions.value);
         }
         
-        // 노드 타입 및 파라미터 추출 - 여러 가능한 필드 검사 (강화된 버전)
-        let originalNodeType = node.data?.nodeId || node.data?.id || node.type || 'custom';
-        let nodeType = originalNodeType;
+        // 노드 타입 추출 (우선순위: nodeId > id > type > label)
+        let nodeType = node.data?.nodeId || node.data?.id || node.data?.type || 'custom';
+        let originalNodeType = nodeType; // 디버깅을 위해 원본 타입 저장
         
-        console.log(`[processNode] 노드 타입 추출 시도 - nodeId: ${node.data?.nodeId}, id: ${node.data?.id}, type: ${node.type}, 노드ID: ${node.id}`);
+        // SAM2 노드 특별 처리 - 조기 감지
+        if (node.data?.label && (node.data.label.includes('SAM2') || node.data.label.includes('세그멘테이션'))) {
+          console.log(`[processNode] SAM2 노드 조기 감지 - 라벨: ${node.data.label}`);
+          nodeType = 'sam2';
+          originalNodeType = node.data.label;
+        }
+        
+        console.log(`[processNode] 노드 처리 시작 - ID: ${node.id}, 라벨: ${node.data?.label}, 초기 타입: ${nodeType}`);
         
         // // 노드 데이터 전체 디버깅
         // console.log(`[processNode] 노드 상세 정보:`, {
@@ -1431,7 +1429,10 @@ export default {
             '회색조': 'grayscale',
             '정규화': 'normalize',
             '이미지 병합': 'merge',
-            '병합': 'merge'
+            '병합': 'merge',
+            'SAM2 세그멘테이션': 'sam2',
+            'SAM2': 'sam2',
+            '세그멘테이션': 'sam2'
           };
           
           if (koreanLabelMap[node.data.label]) {
@@ -1464,7 +1465,11 @@ export default {
           'sharpen': 'sharpen',
           'grayscale': 'grayscale',
           'normalize': 'normalize',
-          'merge': 'merge'
+          'merge': 'merge',
+          'sam2': 'sam2',
+          'segmentation': 'sam2',
+          'segment': 'sam2',
+          'SAM2': 'sam2'
         };
         
         // 필요한 경우에만 타입 변환 (호환성 이슈가 있는 타입만)
@@ -1479,7 +1484,7 @@ export default {
         const supportedNodeTypes = [
           'median_filter', 'gaussian_blur', 'gamma', 'anisotropic_diffusion',
           'histogram_equalization', 'threshold', 'brightness', 'contrast',
-          'clahe', 'object_detection', 'blur', 'sharpen', 'grayscale', 'normalize', 'merge'
+          'clahe', 'object_detection', 'blur', 'sharpen', 'grayscale', 'normalize', 'merge', 'sam2'
         ];
         
         if (!supportedNodeTypes.includes(nodeType)) {
@@ -1569,6 +1574,32 @@ export default {
         //console.log(`[processNode] 요청 URL: ${apiUrl}, 파일명: ${fileName}`);
         //console.log(`[processNode] 노드 타입 확인 - 최종: ${nodeType}, 원본: ${originalNodeType}`);
         
+        // SAM2 노드의 경우 추가 로깅
+        if (nodeType === 'sam2') {
+          console.log(`[processNode] SAM2 API 요청:`, {
+            url: apiUrl,
+            params: params,
+            fileName: fileName,
+            imageFormat: imageFormat
+          });
+          
+          // SAM2 파라미터 검증
+          if (!params.hasOwnProperty('model_size')) {
+            console.warn(`[processNode] SAM2 model_size 파라미터가 없습니다. 기본값 사용`);
+          }
+          if (!params.hasOwnProperty('automatic_mask')) {
+            console.warn(`[processNode] SAM2 automatic_mask 파라미터가 없습니다. 기본값 사용`);
+          }
+          
+          console.log(`[processNode] SAM2 파라미터 상세:`, {
+            model_size: params.model_size || 'large',
+            automatic_mask: params.automatic_mask !== undefined ? params.automatic_mask : true,
+            points: params.points || [],
+            point_labels: params.point_labels || [],
+            boxes: params.boxes || []
+          });
+        }
+        
         try {
           const apiResponse = await fetch(apiUrl, {
             method: 'POST',
@@ -1577,8 +1608,25 @@ export default {
     
         if (!apiResponse.ok) {
           const errorText = await apiResponse.text();
-            console.error(`[processNode] API 응답 오류 (${apiResponse.status}): ${errorText}`);
-            console.error(`[processNode] 응답 헤더:`, Object.fromEntries([...apiResponse.headers]));
+          console.error(`[processNode] API 응답 오류 (${apiResponse.status}): ${errorText}`);
+          console.error(`[processNode] 응답 헤더:`, Object.fromEntries([...apiResponse.headers]));
+          
+          // SAM2 노드의 경우 더 구체적인 오류 메시지
+          if (nodeType === 'sam2') {
+            console.error(`[processNode] SAM2 API 호출 실패:`, {
+              status: apiResponse.status,
+              statusText: apiResponse.statusText,
+              url: apiUrl,
+              errorText: errorText
+            });
+            
+            if (apiResponse.status === 500) {
+              throw new Error(`SAM2 모델 로딩 오류: ${errorText}. SAM2 모델이 설치되어 있는지 확인하세요.`);
+            } else if (apiResponse.status === 422) {
+              throw new Error(`SAM2 파라미터 오류: ${errorText}. 노드 설정을 확인하세요.`);
+            }
+          }
+          
           throw new Error(`API 응답 오류 (${apiResponse.status}): ${errorText}`);
         }
         
@@ -1633,10 +1681,41 @@ export default {
         // 이미지 형식 정보를 세션 스토리지에 저장 (임시, 노드별로)
         sessionStorage.setItem(`msa5_node_${node.id}_format`, outputFormat);
         
+        // SAM2 노드 처리 완료 로깅
+        if (nodeType === 'sam2') {
+          console.log(`[processNode] SAM2 노드 ${node.id} 처리 완료:`, {
+            outputFormat: outputFormat,
+            outputFilename: outputFilename,
+            imageUrl: processedImageUrl.substring(0, 50) + '...'
+          });
+        }
+        
         //console.log(`[processNode] 노드 ${node.id} 처리 완료, 출력 형식: ${outputFormat}, 파일명: ${outputFilename}`);
         return processedImageUrl;
         } catch (apiError) {
           console.error(`[processNode] API 호출 중 오류 발생:`, apiError);
+          
+          // 네트워크 오류 처리
+          if (apiError.name === 'TypeError' && apiError.message.includes('fetch')) {
+            if (nodeType === 'sam2') {
+              throw new Error(`SAM2 API 서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요. (${apiUrl})`);
+            } else {
+              throw new Error(`API 서버에 연결할 수 없습니다. 백엔드 서버가 실행 중인지 확인하세요. (${apiUrl})`);
+            }
+          }
+          
+          // CORS 오류 처리
+          if (apiError.message.includes('CORS')) {
+            throw new Error(`CORS 오류: 백엔드 서버의 CORS 설정을 확인하세요.`);
+          }
+          
+          // SAM2 특화 오류 처리
+          if (nodeType === 'sam2') {
+            if (apiError.message.includes('sam2') || apiError.message.includes('SAM2')) {
+              throw new Error(`SAM2 처리 오류: ${apiError.message}`);
+            }
+          }
+          
           throw apiError;
         }
       } catch (error) {
@@ -1910,6 +1989,10 @@ export default {
               // 병합 노드 처리
               //console.log(`[processWorkflow] 병합 노드 처리 시작: ${nodeId}`);
               processingPromise = processMergeNode(node);
+            } else if (node.data?.nodeId === 'sam2' || node.data?.id === 'sam2' || node.data?.label?.includes('SAM2')) {
+              // SAM2 세그멘테이션 노드 처리
+              console.log(`[processWorkflow] SAM2 노드 처리 시작: ${nodeId}, 라벨: ${node.data?.label}`);
+              processingPromise = processNode(node, inputImage);
             } else {
               // 일반 노드 처리
               //console.log(`[processWorkflow] 일반 노드 처리 시작: ${nodeId}, 타입: ${node.data?.nodeId || node.data?.id}`);

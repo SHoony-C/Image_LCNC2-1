@@ -293,6 +293,17 @@
                 <span>{{ isShowingInputImage ? '처리 후' : '처리 전' }}</span>
               </button>
               
+              <!-- URL 복사 버튼 -->
+              <button 
+                v-if="(internalInputImageUrl || inputImageUrl) && (outputImageUrl || imageUrl)"
+                class="copy-url-btn" 
+                @click="copyImageUrl" 
+                title="이미지 URL 클립보드에 복사"
+              >
+                <i class="fas fa-copy"></i>
+                <span>URL 복사</span>
+              </button>
+              
               <!-- 이미지 다운로드 버튼 추가 -->
               <button 
                 class="download-image-btn" 
@@ -1719,7 +1730,7 @@ export default {
           start: {...pos},
           end: {...pos}
         };
-      } else if (this.measurementMode === 'circle' || this.measurementMode.startsWith('area')) {
+      } else if (this.measurementMode === 'circle' || (this.measurementMode && this.measurementMode.startsWith('area'))) {
         this.areaStart = {...pos};
         this.areaEnd = {...pos};
       } else if (this.measurementMode === 'defect') {
@@ -1730,6 +1741,86 @@ export default {
       
       this.render();
     },
+
+    // 마우스 이동 시 currentMousePos 업데이트 (밝기값 표시 및 돋보기용)
+    handleMouseMove(e) {
+      if (!this.$refs.canvas) return;
+      
+      const rect = this.$refs.canvas.getBoundingClientRect();
+      this.currentMousePos = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      };
+      
+      // F키가 눌린 상태에서만 밝기값 계산
+      if (this.isFKeyPressed) {
+        this.updateBrightnessAtPosition(e);
+        this.updateMagnifier(e);
+      }
+    },
+
+    // F키가 눌린 상태에서 밝기값 업데이트
+    updateBrightnessAtPosition(e) {
+      if (!this.$refs.canvas) return;
+      
+      const pos = this.getLocalPos(e);
+      this.currentBrightness = this.calculateBrightness(pos.x, pos.y);
+    },
+    
+    // 돋보기 기능 업데이트
+    updateMagnifier(e) {
+      if (!this.$refs.canvas || !this.$refs.magnifierCanvas) return;
+      
+      const pos = this.getLocalPos(e);
+      const magnifierCanvas = this.$refs.magnifierCanvas;
+      const magnifierCtx = magnifierCanvas.getContext('2d');
+      
+      // 돋보기 캔버스 크기 설정
+      magnifierCanvas.width = this.magnifierSize;
+      magnifierCanvas.height = this.magnifierSize;
+      
+      // 원본 캔버스에서 해당 영역 추출
+      const sourceSize = 50; // 원본에서 가져올 영역 크기
+      const sourceX = pos.x - sourceSize / 2;
+      const sourceY = pos.y - sourceSize / 2;
+      
+      try {
+        magnifierCtx.clearRect(0, 0, this.magnifierSize, this.magnifierSize);
+        
+        // 원본 캔버스에서 이미지 데이터 복사하고 확대
+        magnifierCtx.drawImage(
+          this.$refs.canvas,
+          sourceX, sourceY, sourceSize, sourceSize,
+          0, 0, this.magnifierSize, this.magnifierSize
+        );
+      } catch (error) {
+        console.error('돋보기 업데이트 오류:', error);
+      }
+    },
+
+    // 캔버스 클릭 시 해당 위치의 밝기값을 임계값으로 설정
+    handleCanvasClick(e) {
+      if (!this.$refs.canvas) return;
+      
+      // 측정 중일 때는 클릭 처리하지 않음
+      if (this.isMeasuring) return;
+      
+      // F키가 눌린 상태일 때만 임계값 변경
+      if (!this.isFKeyPressed) return;
+      
+      const pos = this.getLocalPos(e);
+      const brightness = this.calculateBrightness(pos.x, pos.y);
+      
+      // 클릭한 위치의 밝기값을 임계값으로 설정
+      this.brightnessThreshold = brightness;
+      
+      // 알림 표시
+      this.showNotification(`밝기 임계값이 ${brightness}로 설정되었습니다.`, 'info');
+      
+      // 현재 밝기값도 업데이트
+      this.currentBrightness = brightness;
+    },
+
     updateMeasurement(e) {
       if (!this.$refs.canvas) {
         console.warn('[updateMeasurement] Canvas element not found');
@@ -2673,7 +2764,7 @@ export default {
         
         // 새로운 불량 감지 시작 전 기존 결과 초기화 - 제거하여 이전 결과 유지
         // this.clearDefectMeasurements();
-        console.log('새로운 불량 감지 시작 - 기존 결과 초기화 완료');
+        // console.log('새로운 불량 감지 시작 - 기존 결과 초기화 완료');
         // console.log('새로운 불량 감지 시작 - 이전 결과 유지');
         
         // 감지 중 UI 비활성화 - 모든 측정 모드 비활성화
@@ -2874,25 +2965,25 @@ export default {
               const finalArea = isNaN(areaScaled) ? safeArea : areaScaled;
               
               // 각 불량별 개별 계산 결과 디버깅 로그
-              console.log(`불량 ${index + 1} 개별 계산 결과:`, {
-                defectId: defectId,
-                originalRadiusX: result.radiusX,
-                originalRadiusY: result.radiusY,
-                safeRadiusX,
-                safeRadiusY,
-                majorAxisPixels,
-                minorAxisPixels,
-                safeArea,
-                majorAxisScaled,
-                minorAxisScaled,
-                areaScaled,
-                finalMajorAxis,
-                finalMinorAxis,
-                finalArea,
-                scaleMethod: this.scaleMethod,
-                hasScaleBar: !!(this.manualScaleBar && this.scaleBarValue),
-                magnification: this.magnification
-              });
+              // console.log(`불량 ${index + 1} 개별 계산 결과:`, {
+              //   defectId: defectId,
+              //   originalRadiusX: result.radiusX,
+              //   originalRadiusY: result.radiusY,
+              //   safeRadiusX,
+              //   safeRadiusY,
+              //   majorAxisPixels,
+              //   minorAxisPixels,
+              //   safeArea,
+              //   majorAxisScaled,
+              //   minorAxisScaled,
+              //   areaScaled,
+              //   finalMajorAxis,
+              //   finalMinorAxis,
+              //   finalArea,
+              //   scaleMethod: this.scaleMethod,
+              //   hasScaleBar: !!(this.manualScaleBar && this.scaleBarValue),
+              //   magnification: this.magnification
+              // });
               
               // 측정 과정에서 나온 좌표를 그대로 사용하도록 좌표 변환 없이 저장
               // DefectDetector에서 반환하는 좌표는 이미 캔버스 좌표계이므로 변환하지 않음
@@ -3469,6 +3560,157 @@ export default {
       } catch (error) {
         console.error('[downloadResultImage] 다운로드 중 오류:', error);
         this.showNotification('다운로드 중 오류가 발생했습니다.', 'error');
+      }
+    },
+    copyImageUrl() {
+       try {
+         // 캔버스를 찾아서 검증
+         const canvas = this.$refs.canvas;
+         if (!canvas) {
+           console.error('[copyImageUrl] 캔버스를 찾을 수 없음');
+           this.showNotification('캔버스를 찾을 수 없습니다.', 'error');
+           return;
+         }
+         
+         // 로딩 상태 표시
+         this.showNotification('이미지 URL 생성 중...', 'info');
+         
+         // 캔버스를 Blob으로 변환하여 백엔드에 업로드
+         this.uploadCanvasAndGetUrl(canvas);
+         
+       } catch (error) {
+         console.error('[copyImageUrl] URL 복사 중 오류:', error);
+         this.showNotification('URL 복사 중 오류가 발생했습니다.', 'error');
+       }
+     },
+     
+     async uploadCanvasAndGetUrl(canvas) {
+       try {
+         // 캔버스를 Blob으로 변환
+         return new Promise((resolve, reject) => {
+           canvas.toBlob(async (blob) => {
+             if (!blob) {
+               console.error('[uploadCanvasAndGetUrl] 이미지 변환 실패');
+               this.showNotification('이미지 변환에 실패했습니다.', 'error');
+               reject(new Error('이미지 변환 실패'));
+               return;
+             }
+             
+             try {
+               // FormData 생성
+               const formData = new FormData();
+               const filename = `measurement_result_${Date.now()}.png`;
+               formData.append('file', blob, filename);
+               
+               // 백엔드 API 호출
+               const uploadResponse = await fetch('http://localhost:8000/api/msa6/generate_image_url', {
+                 method: 'POST',
+                 body: formData
+               });
+               
+               if (!uploadResponse.ok) {
+                 throw new Error(`HTTP error! status: ${uploadResponse.status}`);
+               }
+               
+               const result = await uploadResponse.json();
+               
+               if (result.status === 'success') {
+                 // 생성된 URL을 클립보드에 복사
+                 const fullUrl = `http://localhost:8000${result.url}`;
+                 
+                 navigator.clipboard.writeText(fullUrl).then(() => {
+                   this.showNotification('측정 결과 포함 이미지 URL이 클립보드에 복사되었습니다.', 'success');
+                   resolve(fullUrl);
+                 }).catch((error) => {
+                   console.error('[uploadCanvasAndGetUrl] 클립보드 복사 실패:', error);
+                   // 대체 방법 시도
+                   this.fallbackCopyToClipboard(fullUrl);
+                   resolve(fullUrl);
+                 });
+               } else {
+                 throw new Error(result.message || '이미지 URL 생성에 실패했습니다.');
+               }
+               
+             } catch (error) {
+               console.error('[uploadCanvasAndGetUrl] 이미지 업로드 실패:', error);
+               this.showNotification(`이미지 URL 생성 실패: ${error.message}`, 'error');
+               reject(error);
+             }
+           }, 'image/png');
+         });
+         
+       } catch (error) {
+         console.error('[uploadCanvasAndGetUrl] 캔버스 업로드 실패:', error);
+         this.showNotification(`이미지 URL 생성 실패: ${error.message}`, 'error');
+       }
+     },
+     
+     async uploadImageAndGetUrl(imageUrl) {
+       try {
+         // 이미지를 Blob으로 변환
+         const response = await fetch(imageUrl);
+         const blob = await response.blob();
+         
+         // FormData 생성
+         const formData = new FormData();
+         const filename = `image_${Date.now()}.png`;
+         formData.append('file', blob, filename);
+         
+         // 백엔드 API 호출
+         const uploadResponse = await fetch('http://localhost:8000/api/msa6/generate_image_url', {
+           method: 'POST',
+           body: formData
+         });
+         
+         if (!uploadResponse.ok) {
+           throw new Error(`HTTP error! status: ${uploadResponse.status}`);
+         }
+         
+         const result = await uploadResponse.json();
+         
+         if (result.status === 'success') {
+           // 생성된 URL을 클립보드에 복사
+           const fullUrl = `${window.location.origin}${result.url}`;
+           
+           navigator.clipboard.writeText(fullUrl).then(() => {
+             this.showNotification('이미지 URL이 클립보드에 복사되었습니다.', 'success');
+           }).catch((error) => {
+             console.error('[uploadImageAndGetUrl] 클립보드 복사 실패:', error);
+             // 대체 방법 시도
+             this.fallbackCopyToClipboard(fullUrl);
+           });
+         } else {
+           throw new Error(result.message || '이미지 URL 생성에 실패했습니다.');
+         }
+         
+       } catch (error) {
+         console.error('[uploadImageAndGetUrl] 이미지 업로드 실패:', error);
+         this.showNotification(`이미지 URL 생성 실패: ${error.message}`, 'error');
+       }
+     },
+    
+    fallbackCopyToClipboard(text) {
+      try {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        if (successful) {
+          this.showNotification('이미지 URL이 클립보드에 복사되었습니다.', 'success');
+        } else {
+          this.showNotification('클립보드 복사를 지원하지 않는 브라우저입니다.', 'warning');
+        }
+      } catch (error) {
+        console.error('[fallbackCopyToClipboard] 대체 복사 방법 실패:', error);
+        this.showNotification('클립보드 복사에 실패했습니다.', 'error');
       }
     },
     
@@ -4161,8 +4403,8 @@ export default {
         // F키: 밝기값 보기 및 돋보기 비활성화
         if (key === 'f') {
           e.preventDefault();
-          this.showBrightnessValue = false;
-          this.isMagnifierActive = false;
+          this.showBrightnessTooltip = false;
+          this.isFKeyPressed = false;
           return;
         }
 
@@ -4873,11 +5115,11 @@ export default {
 
         const key = e.key.toLowerCase();
 
-        // F키: 밝기값 보기 및 돋보기 활성화
+        // F키: 밝기값 보기 및 돋보기 비활성화
         if (key === 'f') {
           e.preventDefault();
-          this.showBrightnessValue = true;
-          this.isMagnifierActive = true;
+          this.showBrightnessTooltip = true;
+          this.isFKeyPressed = true;
           return;
         }
 

@@ -21,16 +21,14 @@ cryptography>=40.0.0
 pyOpenSSL>=23.0.0
 x509==0.1.0
 email-validator==2.0.0
-# 추가 의존성
-pymysql  # MySQL 연결을 위한 라이브러리
-requests  # HTTP 요청을 위한 라이브러리
-aiofiles  # 비동기 파일 처리
-python-slugify  # URL 친화적인 문자열 생성
-uuid  # 고유 식별자 생성
-pandas  # 데이터 분석 및 처리 
-scikit-image  # 이미지 처리를 위한 추가 라이브러리
-matplotlib  # 그래프 및 시각화 
-# SAM2 관련 의존성
-torch>=2.3.1  # SAM2 requires PyTorch 2.3.1+
-torchvision>=0.18.1  # SAM2 requires torchvision 0.18.1+
-sam2>=1.0.0  # SAM2 package
+pymysql  
+requests  
+aiofiles  
+python-slugify  
+uuid  
+pandas 
+scikit-image
+matplotlib  
+torch==2.1.0+cu121
+torchvision==0.16.1+cu121
+numpy<2

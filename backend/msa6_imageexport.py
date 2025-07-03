@@ -5,7 +5,8 @@ import io
 import traceback
 import base64
 import shutil
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
 from fastapi.responses import FileResponse, JSONResponse
 from db_config import lcnc_sql
 import json
@@ -13,8 +14,78 @@ from sqlalchemy.sql import text
 
 router = APIRouter()
 
-EXPORT_DIR = "./exports"
+# 임시 이미지 디렉토리 및 URL 유효 기간 설정
+TEMP_IMAGE_DIR = "./static/temp_image_url"
+EXPORT_DIR = "./static/export"
+URL_VALIDITY_DAYS = 30
+
+# 파일 만료 시간 기록용 딕셔너리
+file_expirations = {}
+
+# 임시 이미지 디렉토리 생성
+os.makedirs(TEMP_IMAGE_DIR, exist_ok=True)
 os.makedirs(EXPORT_DIR, exist_ok=True)
+
+@router.post("/generate_image_url")
+async def generate_image_url(file: UploadFile = File(...)):
+    """
+    이미지 파일을 업로드하고 임시 URL을 생성합니다.
+    인터넷 창을 닫아도 유지되도록 파일을 저장하고 만료 시간을 설정합니다.
+    """
+    try:
+        # 파일 확장자 추출
+        ext = file.filename.split(".")[-1] if file.filename and "." in file.filename else "png"
+        
+        # 고유 ID로 파일명 생성
+        unique_id = str(uuid.uuid4())
+        filename = f"{unique_id}.{ext}"
+        filepath = os.path.join(TEMP_IMAGE_DIR, filename)
+
+        # 파일 저장
+        with open(filepath, "wb") as f:
+            f.write(await file.read())
+
+        # 만료시간 저장
+        file_expirations[filename] = datetime.utcnow() + timedelta(days=URL_VALIDITY_DAYS)
+
+        # URL 반환
+        return {
+            "status": "success",
+            "url": f"/static/temp_image_url/{filename}",
+            "filename": filename,
+            "expires_at": file_expirations[filename].isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"이미지 URL 생성 실패: {str(e)}")
+
+@router.get("/temp_image_url/{filename}")
+async def get_temp_image(filename: str):
+    """
+    임시 저장된 이미지를 반환합니다.
+    만료된 파일은 자동으로 삭제됩니다.
+    """
+    try:
+        file_path = os.path.join(TEMP_IMAGE_DIR, filename)
+        
+        # 파일 존재 확인
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다")
+        
+        # 만료 시간 확인
+        if filename in file_expirations:
+            if datetime.utcnow() > file_expirations[filename]:
+                # 만료된 파일 삭제
+                os.remove(file_path)
+                del file_expirations[filename]
+                raise HTTPException(status_code=410, detail="파일이 만료되었습니다")
+        
+        return FileResponse(file_path)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"이미지 조회 실패: {str(e)}")
 
 @router.post("/upload")
 async def upload_image(file: UploadFile = File(...)):

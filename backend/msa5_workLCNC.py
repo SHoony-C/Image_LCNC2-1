@@ -14,10 +14,6 @@ import math
 
 router = APIRouter()
 
-# 결과 저장 디렉토리 설정
-PROCESSED_DIR = "./processed"
-os.makedirs(PROCESSED_DIR, exist_ok=True)
-
 # 유틸리티 함수
 def decode_image(image_data):
     """바이너리 이미지 데이터를 PIL 이미지로 변환"""
@@ -897,172 +893,238 @@ async def process_merge(images: List[UploadFile] = File(...), params: str = Form
             content={"status": "error", "message": str(e)}
         )
 
+# SAM2 모델을 전역 변수로 미리 로드
+sam2_models = {}
+
+def load_sam2_model(model_size="large"):
+    """SAM2 모델을 미리 로드하는 함수"""
+    if model_size in sam2_models:
+        return sam2_models[model_size]
+    
+    try:
+        import torch
+        from sam2.build_sam import build_sam2
+        from sam2.sam2_image_predictor import SAM2ImagePredictor
+        from sam2.automatic_mask_generator import SAM2AutomaticMaskGenerator
+
+        import os
+        
+        model_configs = {
+            "tiny": {
+                "checkpoint": "./checkpoints/sam2.1_hiera_tiny.pt",
+                "model_cfg": "configs/sam2.1/sam2.1_hiera_t.yaml",
+                "hf_name": "facebook/sam2-hiera-tiny"
+            },
+            "small": {
+                "checkpoint": "./checkpoints/sam2.1_hiera_small.pt", 
+                "model_cfg": "configs/sam2.1/sam2.1_hiera_s.yaml",
+                "hf_name": "facebook/sam2-hiera-small"
+            },
+            "base_plus": {
+                "checkpoint": "./checkpoints/sam2.1_hiera_base_plus.pt",
+                "model_cfg": "configs/sam2.1/sam2.1_hiera_b+.yaml",
+                "hf_name": "facebook/sam2-hiera-base-plus"
+            },
+            "large": {
+                "checkpoint": "./checkpoints/sam2.1_hiera_large.pt",
+                "model_cfg": "configs/sam2.1/sam2.1_hiera_l.yaml",
+                "hf_name": "facebook/sam2-hiera-large"
+            }
+        }
+        
+        config = model_configs.get(model_size, model_configs["large"])
+        
+        # GPU 사용 가능 여부 확인
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"SAM2 모델 로딩 중 - 크기: {model_size}, 디바이스: {device}")
+        
+        # 로컬 체크포인트 파일 확인
+        checkpoint_path = config["checkpoint"]
+        model_cfg_path = config["model_cfg"]
+        
+        # SAM2 모델 로드 시도
+        model = None
+        predictor = None
+        mask_generator = None
+        
+        # 1. 로컬 체크포인트 파일로 로드 시도
+        if os.path.exists(checkpoint_path) and os.path.exists(model_cfg_path):
+            try:
+                print(f"로컬 체크포인트에서 모델 로딩: {checkpoint_path}")
+                model = build_sam2(model_cfg_path, checkpoint_path, device=device, apply_postprocessing=False)
+                predictor = SAM2ImagePredictor(model)
+                mask_generator = SAM2AutomaticMaskGenerator(model)
+                print(f"로컬 체크포인트에서 모델 로딩 성공")
+            except Exception as e:
+                print(f"로컬 체크포인트 로딩 실패: {str(e)}")
+        
+        # 2. Hugging Face에서 로드 시도
+        if not predictor:
+            try:
+                print(f"Hugging Face에서 모델 로딩: {config['hf_name']}")
+                predictor = SAM2ImagePredictor.from_pretrained(config['hf_name'])
+                if device == "cuda":
+                    predictor.model = predictor.model.cuda()
+                model = predictor.model
+                mask_generator = SAM2AutomaticMaskGenerator(model)
+                print(f"Hugging Face에서 모델 로딩 성공")
+            except Exception as e:
+                print(f"Hugging Face 로딩 실패: {str(e)}")
+        
+        if not predictor:
+            raise Exception(f"SAM2 {model_size} 모델을 로드할 수 없습니다")
+        
+        sam2_models[model_size] = {
+            "model": model,
+            "predictor": predictor,
+            "mask_generator": mask_generator,
+            "device": device
+        }
+        
+        print(f"SAM2 모델 로딩 완료 - {model_size}")
+        return sam2_models[model_size]
+        
+    except Exception as e:
+        print(f"SAM2 모델 로딩 실패: {str(e)}")
+        return None
+
+# 서버 시작 시 기본 모델 로드
+try:
+    load_sam2_model("large")  # 기본으로 large 모델 로드
+except Exception as e:
+    print(f"서버 시작 시 SAM2 모델 로딩 실패: {str(e)}")
+
 # SAM2 세그멘테이션 처리
 @router.post("/sam2")
 async def process_sam2(image: UploadFile = File(...), params: str = Form(...)):
     """SAM2를 사용한 이미지 세그멘테이션 처리"""
-    params = json.loads(params)
+    try:
+        params = json.loads(params)
+        print(f"[SAM2] 요청 파라미터: {params}")
+    except json.JSONDecodeError as e:
+        print(f"[SAM2] 파라미터 파싱 오류: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": f"파라미터 파싱 오류: {str(e)}"}
+        )
     
     try:
         # 이미지 데이터 읽기
         image_data = await image.read()
+        print(f"[SAM2] 이미지 데이터 크기: {len(image_data)} bytes")
+        
         img = decode_image(image_data)
         original_format = img.format or "PNG"
+        print(f"[SAM2] 이미지 형식: {original_format}, 크기: {img.size}")
         
         # 파라미터 추출
-        model_size = params.get("model_size", "small")
-        automatic_mask = params.get("automatic_mask", True)
+        alpha = float(params.get("alpha", 0.6))  # 알파 블렌딩 값 추가
         points = params.get("points", [])
         point_labels = params.get("point_labels", [])
         boxes = params.get("boxes", [])
         
-        print(f"SAM2 처리 시작 - 모델 크기: {model_size}, 자동 마스크: {automatic_mask}")
+        print(f"[SAM2] 처리 시작 - 알파: {alpha}, 포인트: {len(points)}, 포인트 라벨: {len(point_labels)}, 박스: {len(boxes)}")
         
         # SAM2 관련 라이브러리 임포트
         try:
             import torch
-            from sam2.build_sam import build_sam2
-            from sam2.sam2_image_predictor import SAM2ImagePredictor
-            from sam2.sam2_automatic_mask_generator import SAM2AutomaticMaskGenerator
+            import numpy as np
+            print(f"[SAM2] PyTorch 버전: {torch.__version__}")
+            print(f"[SAM2] CUDA 사용 가능: {torch.cuda.is_available()}")
+            if torch.cuda.is_available():
+                print(f"[SAM2] CUDA 디바이스 수: {torch.cuda.device_count()}")
         except ImportError as e:
-            print(f"SAM2 라이브러리 임포트 오류: {str(e)}")
+            print(f"[SAM2] 필수 라이브러리 임포트 오류: {str(e)}")
             return JSONResponse(
                 status_code=400,
-                content={"status": "error", "message": f"SAM2 라이브러리가 설치되지 않았습니다: {str(e)}"}
+                content={"status": "error", "message": f"필수 라이브러리가 설치되지 않았습니다: {str(e)}"}
             )
         
-        # 모델 크기에 따른 체크포인트 경로 및 설정 매핑
-        model_configs = {
-            "tiny": {
-                "checkpoint": "sam2.1_hiera_tiny.pt",
-                "model_cfg": "configs/sam2.1/sam2.1_hiera_t.yaml"
-            },
-            "small": {
-                "checkpoint": "sam2.1_hiera_small.pt", 
-                "model_cfg": "configs/sam2.1/sam2.1_hiera_s.yaml"
-            },
-            "base_plus": {
-                "checkpoint": "sam2.1_hiera_base_plus.pt",
-                "model_cfg": "configs/sam2.1/sam2.1_hiera_b+.yaml"
-            },
-            "large": {
-                "checkpoint": "sam2.1_hiera_large.pt",
-                "model_cfg": "configs/sam2.1/sam2.1_hiera_l.yaml"
-            }
-        }
+        # 모델 로드 (캐시된 모델 사용 또는 새로 로드)
+        model_data = sam2_models.get("large")  # 고정된 large 모델 사용
+        if not model_data:
+            model_data = load_sam2_model("large")
+            
+        if not model_data:
+            return JSONResponse(
+                status_code=400,
+                content={"status": "error", "message": "SAM2 large 모델을 로드할 수 없습니다"}
+            )
         
-        if model_size not in model_configs:
-            model_size = "small"
-        
-        config = model_configs[model_size]
-        
-        # GPU 사용 가능 여부 확인
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"사용 중인 디바이스: {device}")
-        
-        # SAM2 모델 로드
-        try:
-            sam2_model = build_sam2(config["model_cfg"], config["checkpoint"], device=device)
-        except Exception as e:
-            print(f"SAM2 모델 로드 오류: {str(e)}")
-            # 체크포인트 파일이 없으면 Hugging Face에서 로드 시도
-            try:
-                from sam2.sam2_image_predictor import SAM2ImagePredictor
-                predictor = SAM2ImagePredictor.from_pretrained(f"facebook/sam2-hiera-{model_size}")
-                sam2_model = predictor.model
-            except Exception as e2:
-                return JSONResponse(
-                    status_code=400,
-                    content={"status": "error", "message": f"SAM2 모델을 로드할 수 없습니다: {str(e2)}"}
-                )
+        predictor = model_data["predictor"]
+        mask_generator = model_data["mask_generator"]
+        device = model_data["device"]
         
         # 이미지를 numpy 배열로 변환
         img_rgb = img.convert('RGB')
         image_array = np.array(img_rgb)
         
-        # 결과 마스크들을 저장할 리스트
-        all_masks = []
-        
-        if automatic_mask and (not points and not boxes):
-            # 자동 마스크 생성 모드
-            print("자동 마스크 생성 모드 실행")
-            mask_generator = SAM2AutomaticMaskGenerator(sam2_model)
-            masks = mask_generator.generate(image_array)
-            
-            # 모든 마스크를 하나의 이미지로 결합
-            if masks:
-                # 마스크들을 면적에 따라 정렬 (큰 것부터)
-                masks = sorted(masks, key=lambda x: x['area'], reverse=True)
+        # 추론 모드에서 실행
+        with torch.inference_mode():
+            if device == "cuda":
+                with torch.autocast("cuda", dtype=torch.bfloat16):
+                    # 자동 마스크 생성 모드 - SAM2AutomaticMaskGenerator 사용
+                    print("자동 마스크 생성 모드 실행 (SAM2AutomaticMaskGenerator)")
+                    
+                    # SAM2AutomaticMaskGenerator로 마스크 생성
+                    masks = mask_generator.generate(image_array)
+                    
+                    height, width = image_array.shape[:2]
+                    colored_mask = np.zeros((height, width, 3), dtype=np.uint8)
+                    
+                    # 색상 팔레트
+                    colors = [
+                        [255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [255, 0, 255],
+                        [0, 255, 255], [255, 128, 0], [255, 0, 128], [128, 255, 0], [0, 255, 128],
+                        [128, 0, 255], [0, 128, 255], [255, 128, 128], [128, 255, 128], [128, 128, 255]
+                    ]
+                    
+                    # 생성된 마스크들을 색상으로 표시
+                    for i, mask_data in enumerate(masks):
+                        if i >= len(colors):
+                            break
+                        mask = mask_data['segmentation']
+                        color = colors[i % len(colors)]
+                        colored_mask[mask] = color
+                    
+                    # 원본 이미지와 마스크 오버레이 (사용자 지정 알파 값 사용)
+                    result_array = (image_array * (1 - alpha) + colored_mask * alpha).astype(np.uint8)
+                    
+            else:
+                # CPU 모드
+                # CPU에서 자동 마스크 생성
+                print("자동 마스크 생성 모드 실행 (CPU)")
                 
-                # 색상 맵 생성 (각 마스크마다 다른 색상)
+                # SAM2AutomaticMaskGenerator로 마스크 생성
+                masks = mask_generator.generate(image_array)
+                
                 height, width = image_array.shape[:2]
                 colored_mask = np.zeros((height, width, 3), dtype=np.uint8)
                 
-                # 색상 팔레트 (HSV에서 RGB로 변환된 밝은 색상들)
+                # 색상 팔레트
                 colors = [
                     [255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [255, 0, 255],
                     [0, 255, 255], [255, 128, 0], [255, 0, 128], [128, 255, 0], [0, 255, 128],
                     [128, 0, 255], [0, 128, 255], [255, 128, 128], [128, 255, 128], [128, 128, 255]
                 ]
                 
-                for i, mask_data in enumerate(masks[:15]):  # 최대 15개 마스크만 표시
+                # 생성된 마스크들을 색상으로 표시
+                for i, mask_data in enumerate(masks):
+                    if i >= len(colors):
+                        break
                     mask = mask_data['segmentation']
                     color = colors[i % len(colors)]
                     colored_mask[mask] = color
                 
-                # 원본 이미지와 마스크 오버레이 (투명도 적용)
-                alpha = 0.6
+                # 원본 이미지와 마스크 오버레이 (사용자 지정 알파 값 사용)
                 result_array = (image_array * (1 - alpha) + colored_mask * alpha).astype(np.uint8)
-                
-        else:
-            # 프롬프트 기반 세그멘테이션 모드
-            print("프롬프트 기반 세그멘테이션 모드 실행")
-            predictor = SAM2ImagePredictor(sam2_model)
-            predictor.set_image(image_array)
-            
-            # 포인트 프롬프트 처리
-            input_points = None
-            input_labels = None
-            if points and len(points) > 0:
-                input_points = np.array(points)
-                input_labels = np.array(point_labels if point_labels else [1] * len(points))
-            
-            # 박스 프롬프트 처리
-            input_boxes = None
-            if boxes and len(boxes) > 0:
-                input_boxes = np.array(boxes)
-            
-            # 예측 실행
-            masks, scores, logits = predictor.predict(
-                point_coords=input_points,
-                point_labels=input_labels,
-                box=input_boxes,
-                multimask_output=True
-            )
-            
-            if len(masks) > 0:
-                # 가장 좋은 마스크 선택 (가장 높은 점수)
-                best_mask_idx = np.argmax(scores)
-                best_mask = masks[best_mask_idx]
-                
-                # 마스크를 컬러로 변환
-                height, width = image_array.shape[:2]
-                colored_mask = np.zeros((height, width, 3), dtype=np.uint8)
-                colored_mask[best_mask] = [0, 255, 0]  # 녹색으로 표시
-                
-                # 원본 이미지와 마스크 오버레이
-                alpha = 0.4
-                result_array = (image_array * (1 - alpha) + colored_mask * alpha).astype(np.uint8)
-            else:
-                # 마스크가 없으면 원본 이미지 반환
-                result_array = image_array
         
         # 결과 이미지 생성
         result_img = Image.fromarray(result_array, 'RGB')
         result_img.format = original_format
         
         # 처리 정보 로깅
-        print(f"SAM2 세그멘테이션 완료 - 모델: {model_size}, 디바이스: {device}")
+        print(f"SAM2 세그멘테이션 완료 - 모델: large, 디바이스: {device}, 알파: {alpha}")
         
         # 이미지를 바이너리로 변환하여 반환
         img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
@@ -1073,8 +1135,9 @@ async def process_sam2(image: UploadFile = File(...), params: str = Form(...)):
         # 응답 헤더에 처리 정보 추가
         headers = {
             "X-Process-Status": "success",
-            "X-SAM2-Model": model_size,
+            "X-SAM2-Model": "large",
             "X-SAM2-Device": device,
+            "X-SAM2-Alpha": str(alpha),
             "X-Image-Format": format_used
         }
         
@@ -1082,7 +1145,9 @@ async def process_sam2(image: UploadFile = File(...), params: str = Form(...)):
         
     except Exception as e:
         print(f"SAM2 세그멘테이션 오류: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
-            status_code=400,
+            status_code=500,
             content={"status": "error", "message": f"SAM2 처리 중 오류가 발생했습니다: {str(e)}"}
         ) 

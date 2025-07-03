@@ -56,6 +56,8 @@ app.add_middleware(
 
 # 정적 파일 서빙 설정
 app.mount("/storage", StaticFiles(directory="./storage"), name="storage")
+# 임시 이미지 URL을 위한 static 파일 서빙 추가
+app.mount("/static", StaticFiles(directory="./static"), name="static")
 # images 디렉토리는 사용하지 않음
 # app.mount("/images", StaticFiles(directory="./images"), name="images")
 # 벡터 디렉토리 경로 변경 (더 이상 필요없음, storage 마운트로 접근 가능)
@@ -68,13 +70,7 @@ app.mount("/images", StaticFiles(directory=r"D:\image_set_url\workflow_images"),
 @app.on_event("startup")
 async def startup_event():
     # 필요한 디렉토리 생성
-    os.makedirs("./uploads", exist_ok=True)
-    os.makedirs("./processed", exist_ok=True)
-    os.makedirs("./results", exist_ok=True)
     os.makedirs("./storage", exist_ok=True)
-    os.makedirs("./exports", exist_ok=True)
-    os.makedirs("./certs", exist_ok=True)
-    os.makedirs("./certificates", exist_ok=True)  # 인증서 디렉토리 추가
     
     print("=== 이미지 처리 MSA API 서버가 시작되었습니다 ===")
 

@@ -41,9 +41,6 @@ class ImageProcessResponse(BaseModel):
     status: str
     message: Optional[str] = None
 
-LCNC_DIR = "./lcnc"
-os.makedirs(LCNC_DIR, exist_ok=True)
-
 # 유틸리티 함수
 def decode_image(image_data):
     """바이너리 이미지 데이터를 PIL 이미지로 변환"""
@@ -204,10 +201,9 @@ async def get_nodes():
         
         # SAM2 세그멘테이션
         "sam2": {
-            "model_size": "small",  # tiny, small, base_plus, large
-            "automatic_mask": True,  # 전체 이미지 자동 세그멘테이션
+            "alpha": 1.0,  # 마스크 오버레이 투명도 (0.0 = 투명, 1.0 = 불투명)
             "options": {
-                "automatic_mask": [True, False]
+                "alpha": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
             }
         },
         

@@ -9,7 +9,7 @@ export class DefectDetectionStopper {
     this.vueInstance = null;
     this.isEmergencyStop = false;
     
-    console.log('DefectDetectionStopper 초기화 완료');
+    // console.log('DefectDetectionStopper 초기화 완료');
   }
 
   /**
@@ -20,28 +20,28 @@ export class DefectDetectionStopper {
     this.vueInstance = vueInstance;
     this.isEmergencyStop = false;
     
-    console.log('불량 감지기 등록 완료');
+    // console.log('불량 감지기 등록 완료');
   }
 
   /**
    * 즉시 중단 실행
    */
   emergencyStop() {
-    console.log('🚨 불량 감지 즉시 중단 실행');
+    // console.log('🚨 불량 감지 즉시 중단 실행');
     
     this.isEmergencyStop = true;
     
     try {
       // 1. 감지기 중단
       if (this.currentDetector) {
-        console.log('감지기 중단 중...');
+        // console.log('감지기 중단 중...');
         this.currentDetector.stopDetection();
         this.currentDetector = null;
       }
       
       // 2. Vue 컴포넌트 상태 초기화
       if (this.vueInstance) {
-        console.log('Vue 컴포넌트 상태 초기화 중...');
+        // console.log('Vue 컴포넌트 상태 초기화 중...');
         this.resetVueComponentState();
       }
       
@@ -51,7 +51,7 @@ export class DefectDetectionStopper {
       // 4. 메모리 정리
       this.performMemoryCleanup();
       
-      console.log('✅ 불량 감지 즉시 중단 완료');
+      // console.log('✅ 불량 감지 즉시 중단 완료');
       
       return {
         success: true,
@@ -78,7 +78,7 @@ export class DefectDetectionStopper {
     if (!this.vueInstance) return;
     
     try {
-      console.log('Vue 컴포넌트 상태 초기화 시작');
+      // console.log('Vue 컴포넌트 상태 초기화 시작');
       
       // 감지 상태 완전 초기화
       this.vueInstance.isDefectDetecting = false;
@@ -90,7 +90,7 @@ export class DefectDetectionStopper {
       
       // 불량감지 모드를 명시적으로 설정하고 유지
       this.vueInstance.measurementMode = 'defect';
-      console.log('불량감지 모드 명시적 설정:', this.vueInstance.measurementMode);
+      // console.log('불량감지 모드 명시적 설정:', this.vueInstance.measurementMode);
       
       // 선택 영역 초기화
       this.vueInstance.selectedAreaRect = null;
@@ -104,7 +104,7 @@ export class DefectDetectionStopper {
       this.vueInstance.$nextTick(() => {
         // Vue의 반응성을 이용하여 자동으로 버튼 상태 업데이트
         // measurementMode가 'defect'로 설정되어 있으므로 템플릿에서 자동으로 활성화됨
-        console.log('불량감지 모드 유지 완료:', this.vueInstance.measurementMode);
+        // console.log('불량감지 모드 유지 완료:', this.vueInstance.measurementMode);
         
         // 모든 버튼 활성화
         const allBtns = document.querySelectorAll('.option-btn, .start-btn, .reset-btn, .close-btn');
@@ -130,7 +130,7 @@ export class DefectDetectionStopper {
       // 강제 업데이트
       this.vueInstance.$forceUpdate();
       
-      console.log('Vue 컴포넌트 상태 초기화 완료 - 불량감지 모드 유지');
+      // console.log('Vue 컴포넌트 상태 초기화 완료 - 불량감지 모드 유지');
       
     } catch (error) {
       console.error('Vue 컴포넌트 상태 초기화 중 오류:', error);
@@ -144,7 +144,7 @@ export class DefectDetectionStopper {
     if (!this.vueInstance) return;
     
     try {
-      console.log('캔버스 초기화 시작');
+      // console.log('캔버스 초기화 시작');
       
       this.vueInstance.$nextTick(() => {
         const canvas = this.vueInstance.$refs.canvas;
@@ -159,7 +159,7 @@ export class DefectDetectionStopper {
         }
       });
       
-      console.log('캔버스 초기화 완료');
+      // console.log('캔버스 초기화 완료');
       
     } catch (error) {
       console.error('캔버스 초기화 중 오류:', error);
@@ -171,7 +171,7 @@ export class DefectDetectionStopper {
    */
   performMemoryCleanup() {
     try {
-      console.log('메모리 정리 시작');
+      // console.log('메모리 정리 시작');
       
       // 타이머 정리
       this.clearAllTimers();
@@ -181,7 +181,7 @@ export class DefectDetectionStopper {
         window.gc();
       }
       
-      console.log('메모리 정리 완료');
+      // console.log('메모리 정리 완료');
       
     } catch (error) {
       console.error('메모리 정리 중 오류:', error);
@@ -201,7 +201,7 @@ export class DefectDetectionStopper {
       }
       clearTimeout(maxTimerId);
       
-      console.log('타이머 정리 완료');
+      // console.log('타이머 정리 완료');
       
     } catch (error) {
       console.error('타이머 정리 중 오류:', error);
@@ -212,7 +212,7 @@ export class DefectDetectionStopper {
    * 강제 초기화 (오류 발생 시)
    */
   forceReset() {
-    console.log('🔄 강제 초기화 실행');
+    // console.log('🔄 강제 초기화 실행');
     
     try {
       this.isEmergencyStop = true;
@@ -226,7 +226,7 @@ export class DefectDetectionStopper {
       
       this.clearAllTimers();
       
-      console.log('강제 초기화 완료');
+      // console.log('강제 초기화 완료');
       
     } catch (error) {
       console.error('강제 초기화 중 오류:', error);
@@ -245,7 +245,7 @@ export class DefectDetectionStopper {
    */
   resetStopState() {
     this.isEmergencyStop = false;
-    console.log('중단 상태 리셋됨');
+    // console.log('중단 상태 리셋됨');
   }
 }
 

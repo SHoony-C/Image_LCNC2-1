@@ -85,7 +85,7 @@ export function trimMeasurementByReferenceLine(measurement, referenceLine) {
   const intersection = calculateLineIntersection(measurement, referenceLine);
   
   if (intersection) {
-    console.log(`[trimMeasurementByReferenceLine] 기준선 교차점 발견: (${intersection.x.toFixed(0)}, ${intersection.y.toFixed(0)})`);
+    // console.log(`[trimMeasurementByReferenceLine] 기준선 교차점 발견: (${intersection.x.toFixed(0)}, ${intersection.y.toFixed(0)})`);
     
     // 시작점과 끝점 중 교차점에 더 가까운 쪽을 교차점으로 설정
     const distToStart = calculateDistance(intersection, measurement.start);
@@ -97,17 +97,17 @@ export function trimMeasurementByReferenceLine(measurement, referenceLine) {
         x: intersection.x,
         y: intersection.y
       };
-      console.log(`[trimMeasurementByReferenceLine] 시작점을 교차점으로 조정: (${result.start.x.toFixed(0)}, ${result.start.y.toFixed(0)})`);
+      // console.log(`[trimMeasurementByReferenceLine] 시작점을 교차점으로 조정: (${result.start.x.toFixed(0)}, ${result.start.y.toFixed(0)})`);
     } else {
       // 교차점이 끝점에 더 가까우면 끝점을 교차점으로 설정
       result.end = {
         x: intersection.x,
         y: intersection.y
       };
-      console.log(`[trimMeasurementByReferenceLine] 끝점을 교차점으로 조정: (${result.end.x.toFixed(0)}, ${result.end.y.toFixed(0)})`);
+      // console.log(`[trimMeasurementByReferenceLine] 끝점을 교차점으로 조정: (${result.end.x.toFixed(0)}, ${result.end.y.toFixed(0)})`);
     }
   } else {
-    console.log(`[trimMeasurementByReferenceLine] 기준선과 교차점 없음`);
+    // console.log(`[trimMeasurementByReferenceLine] 기준선과 교차점 없음`);
   }
   
   // 수평/수직 방향 속성 유지
@@ -129,11 +129,11 @@ export function trimMultipleMeasurementsByReferenceLine(measurements, referenceL
     return measurements;
   }
   
-  console.log(`[trimMultipleMeasurementsByReferenceLine] ${measurements.length}개의 측정선을 기준선으로 자르기 시작`);
+  // console.log(`[trimMultipleMeasurementsByReferenceLine] ${measurements.length}개의 측정선을 기준선으로 자르기 시작`);
   
   return measurements.map((measurement, index) => {
     const trimmed = trimMeasurementByReferenceLine(measurement, referenceLine);
-    console.log(`[trimMultipleMeasurementsByReferenceLine] 측정선 ${index + 1}/${measurements.length} 처리 완료`);
+    // console.log(`[trimMultipleMeasurementsByReferenceLine] 측정선 ${index + 1}/${measurements.length} 처리 완료`);
     return trimmed;
   });
 }
@@ -151,7 +151,7 @@ export function createAndTrimAreaMeasurements(areaRect, direction, lineCount, re
   const { startX, endX, startY, endY } = areaRect;
   const measurements = [];
   
-  console.log(`[createAndTrimAreaMeasurements] 영역 측정 생성 시작 - 방향: ${direction}, 선 개수: ${lineCount}, 기준선: ${!!referenceLine}`);
+  // console.log(`[createAndTrimAreaMeasurements] 영역 측정 생성 시작 - 방향: ${direction}, 선 개수: ${lineCount}, 기준선: ${!!referenceLine}`);
   
   if (direction === 'vertical') {
     // 수직 방향 측정선 생성
@@ -197,7 +197,7 @@ export function createAndTrimAreaMeasurements(areaRect, direction, lineCount, re
     }
   }
   
-  console.log(`[createAndTrimAreaMeasurements] ${measurements.length}개의 측정선 생성 및 자르기 완료`);
+  // console.log(`[createAndTrimAreaMeasurements] ${measurements.length}개의 측정선 생성 및 자르기 완료`);
   return measurements;
 }
 
@@ -208,7 +208,7 @@ export function createAndTrimAreaMeasurements(areaRect, direction, lineCount, re
  * @returns {Object} 조정된 측정 데이터
  */
 export function trimSingleMeasurementByReferenceLine(measurement, referenceLine) {
-  console.log(`[trimSingleMeasurementByReferenceLine] 단일 선 측정 자르기 - 기준선: ${!!referenceLine}`);
+  // console.log(`[trimSingleMeasurementByReferenceLine] 단일 선 측정 자르기 - 기준선: ${!!referenceLine}`);
   
   const trimmed = trimMeasurementByReferenceLine(measurement, referenceLine);
   
@@ -271,7 +271,7 @@ export function setReferenceTrimmingEnabled(enabled) {
     timestamp: new Date().toISOString()
   };
   
-  console.log(`[setReferenceTrimmingEnabled] 기준선 기반 자르기 기능 ${enabled ? '활성화' : '비활성화'}`);
+  // console.log(`[setReferenceTrimmingEnabled] 기준선 기반 자르기 기능 ${enabled ? '활성화' : '비활성화'}`);
   
   return config;
 } 

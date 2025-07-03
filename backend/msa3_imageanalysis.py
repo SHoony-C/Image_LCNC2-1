@@ -24,12 +24,10 @@ mongodb_client = motor.motor_asyncio.AsyncIOMotorClient(MONGODB_URL)
 db = mongodb_client["image_app"]  # 데이터베이스 이름
 workflow_collection = db["image_workflow"]  # 컬렉션 이름
 
-ANALYSIS_DIR = "./analysis"
 IMAGES_DIR = "./storage/images"  # 이미지 저장 디렉토리 추가
 VECTORS_DIR = "./storage/vector"
 
 # 디렉토리 생성
-os.makedirs(ANALYSIS_DIR, exist_ok=True)
 os.makedirs(IMAGES_DIR, exist_ok=True)
 os.makedirs(VECTORS_DIR, exist_ok=True)
 

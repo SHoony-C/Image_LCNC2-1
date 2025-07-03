@@ -90,7 +90,10 @@ export default {
       if (file && file.type.startsWith('image/')) {
         const reader = new FileReader()
         reader.onload = async (e) => {
-          this.previewImage = e.target.result
+          // 이미지 용량 체크 및 해상도 조정
+          const processedImageData = await this.checkAndResizeImage(e.target.result, file.name)
+          
+          this.previewImage = processedImageData
           this.status = 'processing'
           this.statusText = '유사 이미지 검색 중...'
           this.isActive = true
@@ -104,7 +107,7 @@ export default {
           
           try {
             // 백엔드에 유사 이미지 검색 요청 (올바른 경로로 수정)
-            await this.searchSimilarImages(file.name, e.target.result)
+            await this.searchSimilarImages(file.name, processedImageData)
             
             this.status = 'success'
             this.statusText = '이미지 준비됨'
@@ -117,7 +120,7 @@ export default {
           // MSA4로 이미지 전송
           const msa4Event = new CustomEvent('msa1-to-msa4-image', { 
             detail: { 
-              imageUrl: e.target.result,
+              imageUrl: processedImageData,
               imageName: file.name
             }
           })
@@ -132,7 +135,7 @@ export default {
           // MSA5로 이미지 전송
           const msa5Event = new CustomEvent('msa1-to-msa5-image', { 
             detail: { 
-              imageUrl: e.target.result,
+              imageUrl: processedImageData,
               imageName: file.name
             }
           })
@@ -248,7 +251,137 @@ export default {
       this.statusText = '대기중'
       this.isActive = false
       this.$refs.fileInput.value = ''
-    }
+    },
+    // 이미지 용량 체크 및 해상도 조정 함수 추가
+    async checkAndResizeImage(imageDataUrl, filename) {
+      try {
+        // Base64 데이터 크기 계산 (대략적인 파일 크기)
+        const base64Data = imageDataUrl.split(',')[1]
+        const sizeInBytes = (base64Data.length * 3) / 4
+        const sizeInMB = sizeInBytes / (1024 * 1024)
+        
+        console.log(`[MSA1] 이미지 용량: ${sizeInMB.toFixed(2)}MB`)
+        
+        // 단계별 용량 제한 및 처리
+        let maxSizeMB, compressionLevel
+        
+        if (sizeInMB >= 10) {
+          // 10MB 이상: 강력한 압축
+          maxSizeMB = 1.5
+          compressionLevel = 'aggressive'
+          console.log(`[MSA1] 10MB 이상 대용량 이미지 감지, 강력한 압축 적용`)
+        } else if (sizeInMB >= 5) {
+          // 5MB 이상: 중간 압축
+          maxSizeMB = 2
+          compressionLevel = 'medium'
+          console.log(`[MSA1] 5MB 이상 중간 용량 이미지 감지, 중간 압축 적용`)
+        } else if (sizeInMB >= 2) {
+          // 2MB 이상: 가벼운 압축
+          maxSizeMB = 2
+          compressionLevel = 'light'
+          console.log(`[MSA1] 2MB 이상 이미지 감지, 가벼운 압축 적용`)
+        } else {
+          // 2MB 미만: 압축 없음
+          console.log(`[MSA1] 이미지 용량이 적정 수준, 압축 생략`)
+          return imageDataUrl
+        }
+        
+        // 상태 메시지 업데이트
+        this.statusText = '이미지 용량 최적화 중...'
+        
+        const resizedImageData = await this.resizeImage(imageDataUrl, maxSizeMB, compressionLevel)
+        
+        // 최적화 완료 로그
+        const resizedBase64 = resizedImageData.split(',')[1]
+        const resizedSizeInBytes = (resizedBase64.length * 3) / 4
+        const resizedSizeInMB = resizedSizeInBytes / (1024 * 1024)
+        
+        console.log(`[MSA1] 이미지 최적화 완료: ${sizeInMB.toFixed(2)}MB → ${resizedSizeInMB.toFixed(2)}MB (${compressionLevel} 압축)`)
+        
+        return resizedImageData
+      } catch (error) {
+        console.error('[MSA1] 이미지 용량 체크 중 오류:', error)
+        return imageDataUrl // 오류 시 원본 반환
+      }
+    },
+    
+    // 이미지 해상도 조정 함수
+    async resizeImage(imageDataUrl, targetSizeMB, compressionLevel) {
+      return new Promise((resolve) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d')
+          
+          // 압축 레벨에 따른 설정
+          let scaleFactor, initialQuality, minQuality, minDimension
+          
+          switch (compressionLevel) {
+            case 'aggressive':
+              // 10MB 이상: 매우 강한 압축
+              scaleFactor = Math.sqrt(targetSizeMB / (this.getImageSizeFromDataUrl(imageDataUrl) / (1024 * 1024))) * 0.7
+              initialQuality = 0.6
+              minQuality = 0.2
+              minDimension = 200
+              break
+            case 'medium':
+              // 5MB 이상: 중간 압축
+              scaleFactor = Math.sqrt(targetSizeMB / (this.getImageSizeFromDataUrl(imageDataUrl) / (1024 * 1024))) * 0.8
+              initialQuality = 0.7
+              minQuality = 0.3
+              minDimension = 250
+              break
+            case 'light':
+            default:
+              // 2MB 이상: 가벼운 압축
+              scaleFactor = Math.sqrt(targetSizeMB / (this.getImageSizeFromDataUrl(imageDataUrl) / (1024 * 1024))) * 0.9
+              initialQuality = 0.8
+              minQuality = 0.4
+              minDimension = 300
+              break
+          }
+          
+          scaleFactor = Math.min(scaleFactor, 1) // 확대는 하지 않음
+          
+          let newWidth = Math.floor(img.width * scaleFactor)
+          let newHeight = Math.floor(img.height * scaleFactor)
+          
+          // 최소 크기 보장 (너무 작아지지 않도록)
+          if (newWidth < minDimension && newHeight < minDimension) {
+            const ratio = Math.max(minDimension / newWidth, minDimension / newHeight)
+            newWidth = Math.floor(newWidth * ratio)
+            newHeight = Math.floor(newHeight * ratio)
+          }
+          
+          canvas.width = newWidth
+          canvas.height = newHeight
+          
+          // 이미지 그리기
+          ctx.drawImage(img, 0, 0, newWidth, newHeight)
+          
+          // JPEG로 압축 (품질 조정)
+          let quality = initialQuality
+          let result = canvas.toDataURL('image/jpeg', quality)
+          
+          // 여전히 크다면 품질을 더 낮춤
+          while (this.getImageSizeFromDataUrl(result) > targetSizeMB * 1024 * 1024 && quality > minQuality) {
+            quality -= 0.05
+            result = canvas.toDataURL('image/jpeg', quality)
+          }
+          
+          console.log(`[MSA1] 리사이즈 완료: ${img.width}x${img.height} → ${newWidth}x${newHeight}, 품질: ${(quality * 100).toFixed(0)}%`)
+          
+          resolve(result)
+        }
+        img.src = imageDataUrl
+      })
+    },
+    
+    // 이미지 데이터 URL에서 파일 크기 계산
+    getImageSizeFromDataUrl(dataUrl) {
+      const base64Data = dataUrl.split(',')[1]
+      return (base64Data.length * 3) / 4
+    },
   }
 }
 </script>

@@ -2,6 +2,7 @@
 /dist
 /frontend/node_modules
 /backend/venv
+/backend/statics
 
 # local env files
 .env.local
@@ -21,5 +22,3 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
-backend/venv/
-

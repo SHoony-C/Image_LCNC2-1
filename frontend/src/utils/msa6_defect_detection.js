@@ -27,19 +27,19 @@ export class DefectDetector {
     this.defectRegions = []; // 최종 불량 영역들
     this.isCompleting = false; // 완료 중 상태
     
-    console.log('DefectDetector 간단 박스 수축 방식 초기화:', {
-      canvasSize: { width: canvas.width, height: canvas.height },
-      adjustedThreshold: this.brightnessThreshold,
-      originalThreshold: brightnessThreshold,
-      scaleBarExclusionArea: this.scaleBarExclusionArea
-    });
+    // console.log('DefectDetector 간단 박스 수축 방식 초기화:', {
+    //   canvasSize: { width: canvas.width, height: canvas.height },
+    //   adjustedThreshold: this.brightnessThreshold,
+    //   originalThreshold: brightnessThreshold,
+    //   scaleBarExclusionArea: this.scaleBarExclusionArea
+    // });
   }
 
   /**
    * 불량 감지 시작
    */
   async startDetection(boundingBox, onProgress = null, onComplete = null) {
-    console.log('=== 간단 박스 수축 불량 감지 시작 ===', boundingBox);
+    // console.log('=== 간단 박스 수축 불량 감지 시작 ===', boundingBox);
     
     if (this.isDetecting) {
       console.warn('이미 감지가 진행 중입니다.');
@@ -64,7 +64,7 @@ export class DefectDetector {
       this.currentBox = { ...validBox };
       this.originalBox = { ...validBox }; // 원본 박스 저장
       
-      console.log('초기 박스:', this.currentBox);
+      // console.log('초기 박스:', this.currentBox);
       
       // 박스 수축 감지 수행
       await this.performBoxShrinkingDetection(onProgress, onComplete);
@@ -86,7 +86,7 @@ export class DefectDetector {
       const maxSteps = Math.min(this.currentBox.width, this.currentBox.height) / 2 - 3;
       let currentStep = 0;
       
-      console.log(`박스 수축 감지 시작: 최대 ${maxSteps} 단계`);
+      // console.log(`박스 수축 감지 시작: 최대 ${maxSteps} 단계`);
       
       const executeStep = () => {
         if (!this.isDetecting || currentStep >= maxSteps || 
@@ -94,18 +94,18 @@ export class DefectDetector {
           // 감지 완료 - 불량 영역 분석
           this.finalizeDetection();
           
-          console.log('박스 수축 감지 완료:', {
-            totalSteps: currentStep,
-            stoppedPixels: this.stoppedPixels.length,
-            defectRegions: this.defectRegions.length
-          });
+          // console.log('박스 수축 감지 완료:', {
+          //   totalSteps: currentStep,
+          //   stoppedPixels: this.stoppedPixels.length,
+          //   defectRegions: this.defectRegions.length
+          // });
           
           // 완료 후 즉시 최종 결과 표시 (파란 박스 완전 제거)
           this.drawFinalResults();
           
           // 결과 반환
           const results = this.getResults();
-          console.log('최종 결과 반환:', results);
+          // console.log('최종 결과 반환:', results);
           if (onComplete) onComplete(results);
           
           resolve();
@@ -326,14 +326,14 @@ export class DefectDetector {
    * 감지 완료 후 불량 영역 분석 (더 타이트하게)
    */
   finalizeDetection() {
-    console.log('박스 수축 감지 완료 - 불량 영역 분석 시작...');
+    // console.log('박스 수축 감지 완료 - 불량 영역 분석 시작...');
     
     if (this.stoppedPixels.length === 0) {
-      console.log('멈춘 픽셀이 없어 불량 영역을 찾을 수 없습니다.');
+      // console.log('멈춘 픽셀이 없어 불량 영역을 찾을 수 없습니다.');
       return;
     }
     
-    console.log(`분석할 멈춘 픽셀 수: ${this.stoppedPixels.length}`);
+    // console.log(`분석할 멈춘 픽셀 수: ${this.stoppedPixels.length}`);
     
     // 멈춘 픽셀들을 클러스터링하여 불량 영역 찾기 (더 타이트한 기준)
     const clusters = this.clusterStoppedPixels(this.stoppedPixels);
@@ -381,22 +381,22 @@ export class DefectDetector {
       };
       
       // 각 불량 영역 생성 디버깅 로그
-      console.log(`불량 영역 ${index + 1} 생성:`, {
-        id: defectRegion.id,
-        pixelCount: cluster.length,
-        centerX: bounds.centerX,
-        centerY: bounds.centerY,
-        radiusX: bounds.radiusX,
-        radiusY: bounds.radiusY,
-        width: bounds.width,
-        height: bounds.height,
-        area: defectData.area
-      });
+      // console.log(`불량 영역 ${index + 1} 생성:`, {
+      //   id: defectRegion.id,
+      //   pixelCount: cluster.length,
+      //   centerX: bounds.centerX,
+      //   centerY: bounds.centerY,
+      //   radiusX: bounds.radiusX,
+      //   radiusY: bounds.radiusY,
+      //   width: bounds.width,
+      //   height: bounds.height,
+      //   area: defectData.area
+      // });
       
       return defectRegion;
     });
     
-    console.log(`최종 불량 영역 ${this.defectRegions.length}개 발견`);
+    // console.log(`최종 불량 영역 ${this.defectRegions.length}개 발견`);
     
     // 과도한 불량 감지에 대한 추가 경고
     if (this.defectRegions.length >= 50) {
@@ -439,13 +439,13 @@ export class DefectDetector {
     const boundingHeight = radiusY * 2;
     
     // 각 불량별 경계 계산 디버깅 로그
-    console.log(`클러스터 경계 계산 - 픽셀 수: ${cluster.length}`, {
-      pixelBounds: { minX, maxX, minY, maxY },
-      actualSize: { actualWidth, actualHeight },
-      center: { centerX, centerY },
-      radius: { radiusX, radiusY },
-      boundingBox: { boundingWidth, boundingHeight }
-    });
+    // console.log(`클러스터 경계 계산 - 픽셀 수: ${cluster.length}`, {
+    //   pixelBounds: { minX, maxX, minY, maxY },
+    //   actualSize: { actualWidth, actualHeight },
+    //   center: { centerX, centerY },
+    //   radius: { radiusX, radiusY },
+    //   boundingBox: { boundingWidth, boundingHeight }
+    // });
     
     return {
       x: centerX - radiusX,
@@ -532,13 +532,13 @@ export class DefectDetector {
     // Striation 계산: 선형 패턴 강도를 0-100 스케일로 반환
     const striationValue = this.calculateStriationValue(analysisPixels, centerX, centerY, radiusX, radiusY);
     
-    console.log('불량 특성 분석 결과 (숫자 값):', {
-      pixelCount: analysisPixels.length,
-      averageBrightness: Math.round(averageBrightness),
-      brightnessVariance: Math.round(brightnessVariance),
-      distortionValue,
-      striationValue
-    });
+    // console.log('불량 특성 분석 결과 (숫자 값):', {
+    //   pixelCount: analysisPixels.length,
+    //   averageBrightness: Math.round(averageBrightness),
+    //   brightnessVariance: Math.round(brightnessVariance),
+    //   distortionValue,
+    //   striationValue
+    // });
     
     return {
       distortion: distortionValue,      // 0-100 숫자 값
@@ -626,7 +626,7 @@ export class DefectDetector {
     const striationValue = Math.round(maxStriationScore);
     
     if (striationValue > 10) {
-      console.log(`Striation 측정: ${detectedDirection} 방향, 값: ${striationValue}/100`);
+      // console.log(`Striation 측정: ${detectedDirection} 방향, 값: ${striationValue}/100`);
     }
     
     return striationValue;
@@ -640,7 +640,7 @@ export class DefectDetector {
     const visited = new Set();
     const clusterRadius = 12; // 클러스터링 반경 더 줄임 (15→12)
     
-    console.log(`클러스터링 시작 - 총 픽셀 수: ${pixels.length}, 클러스터링 반경: ${clusterRadius}`);
+    // console.log(`클러스터링 시작 - 총 픽셀 수: ${pixels.length}, 클러스터링 반경: ${clusterRadius}`);
     
     for (let i = 0; i < pixels.length; i++) {
       if (visited.has(i)) continue;
@@ -687,20 +687,20 @@ export class DefectDetector {
         const clusterWidth = maxX - minX + 1;
         const clusterHeight = maxY - minY + 1;
         
-        console.log(`클러스터 ${clusters.length + 1} 생성:`, {
-          pixelCount: cluster.length,
-          bounds: { minX, maxX, minY, maxY },
-          size: { width: clusterWidth, height: clusterHeight },
-          center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
-        });
+        // console.log(`클러스터 ${clusters.length + 1} 생성:`, {
+        //   pixelCount: cluster.length,
+        //   bounds: { minX, maxX, minY, maxY },
+        //   size: { width: clusterWidth, height: clusterHeight },
+        //   center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 }
+        // });
         
         clusters.push(cluster);
       } else {
-        console.log(`클러스터 제외 - 픽셀 수 부족: ${cluster.length}개 (최소 6개 필요)`);
+        // console.log(`클러스터 제외 - 픽셀 수 부족: ${cluster.length}개 (최소 6개 필요)`);
       }
     }
     
-    console.log(`클러스터링 완료 - 유효한 클러스터 수: ${clusters.length}`);
+    // console.log(`클러스터링 완료 - 유효한 클러스터 수: ${clusters.length}`);
     return clusters;
   }
 
@@ -754,7 +754,7 @@ export class DefectDetector {
    * 최종 결과 표시 (파란 박스 완전 제거, 빨간 감지 영역 + 녹색 결과 표시)
    */
   drawFinalResults() {
-    console.log('최종 결과 표시 중 - 파란 박스 완전 제거, 빨간 감지 영역 유지...');
+    // console.log('최종 결과 표시 중 - 파란 박스 완전 제거, 빨간 감지 영역 유지...');
     
     // 원본 이미지 완전 복원
     this.ctx.putImageData(this.originalImageData, 0, 0);
@@ -765,8 +765,8 @@ export class DefectDetector {
     // 2. 불량 영역 녹색 타원 테두리 표시 (최종 결과)
     this.drawExistingDefects();
     
-    console.log('최종 불량 영역 결과:', this.defectRegions);
-    console.log('총 불량 개수:', this.defectRegions.length);
+    // console.log('최종 불량 영역 결과:', this.defectRegions);
+    // console.log('총 불량 개수:', this.defectRegions.length);
   }
 
   /**
@@ -796,7 +796,7 @@ export class DefectDetector {
     
     this.ctx.restore();
     
-    console.log(`직접 감지한 픽셀 영역 표시 완료 - 총 ${this.stoppedPixels.length}개 픽셀`);
+    // console.log(`직접 감지한 픽셀 영역 표시 완료 - 총 ${this.stoppedPixels.length}개 픽셀`);
   }
 
   /**
@@ -862,7 +862,7 @@ export class DefectDetector {
    * 감지 중단
    */
   stopDetection() {
-    console.log('불량 감지 중단 요청');
+    // console.log('불량 감지 중단 요청');
     this.isDetecting = false;
     this.isCompleting = false;
     
@@ -905,22 +905,22 @@ export class DefectDetector {
       };
       
       // 각 불량별 개별 타원 정보 디버깅 로그
-      console.log(`DefectDetector - 불량 ${defect.id} 개별 타원 정보:`, {
-        id: defect.id,
-        centerX: defect.centerX,
-        centerY: defect.centerY,
-        radiusX: defect.radiusX,
-        radiusY: defect.radiusY,
-        width: defect.radiusX * 2,
-        height: defect.radiusY * 2,
-        area: defect.area,
-        pixelCount: defect.pixelCount
-      });
+      // console.log(`DefectDetector - 불량 ${defect.id} 개별 타원 정보:`, {
+      //   id: defect.id,
+      //   centerX: defect.centerX,
+      //   centerY: defect.centerY,
+      //   radiusX: defect.radiusX,
+      //   radiusY: defect.radiusY,
+      //   width: defect.radiusX * 2,
+      //   height: defect.radiusY * 2,
+      //   area: defect.area,
+      //   pixelCount: defect.pixelCount
+      // });
       
       return result;
     });
     
-    console.log('DefectDetector.getResults() 전체 결과:', results);
+    // console.log('DefectDetector.getResults() 전체 결과:', results);
     return results;
   }
 
