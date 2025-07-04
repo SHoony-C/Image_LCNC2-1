@@ -319,6 +319,10 @@
           <div class="right-panel">
             <div class="panel-section">
               <div class="id-input-panel">
+                <div class="usage-hint-shortcut">
+                  <i class="fas fa-keyboard"></i>
+                  <span>단축키 정보: H</span>
+                </div>
                 <h5>ID 설정</h5>
                 <div class="usage-hint">
                   <i class="fas fa-info-circle"></i>
@@ -369,7 +373,6 @@
                         <th>Item ID</th>
                         <th>Sub ID</th>
                         <th>값</th>
-                        <th>삭제</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -400,7 +403,6 @@
                         <th>Area ({{ scaleMethod === 'scaleBar' ? scaleBarUnit + '²' : 'px²' }})</th>
                         <th v-if="circleOptions.striation">Striation (%)</th>
                         <th v-if="circleOptions.distortion">Distortion (%)</th>
-                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -417,11 +419,7 @@
                         <td>{{ (defect.areaScaled && !isNaN(defect.areaScaled)) ? defect.areaScaled.toFixed(2) : '0.00' }}</td>
                         <td v-if="circleOptions.striation">{{ ((defect.striation || 0) / 100).toFixed(1) }}%</td>
                         <td v-if="circleOptions.distortion">{{ ((defect.distortion || 0) / 100).toFixed(1) }}%</td>
-                        <td class="action-buttons">
-                          <button class="option-btn" @click.stop="deleteDefect(defect)">
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </td>
+                        
                       </tr>
                     </tbody>
                   </table>
@@ -3509,6 +3507,10 @@ export default {
         this.defectMeasurements = [];
         this.selectedDefects = [];
         this.defectDetectionResult = null;
+        this.selectedAreaRect = null;
+        this.isAreaSelectionMode = false;
+        this.areaStart = null;
+        this.areaEnd = null;
         // console.log('[setMode] 불량감지 결과 초기화됨');
       }
       
