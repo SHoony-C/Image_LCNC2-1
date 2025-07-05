@@ -1402,6 +1402,10 @@ export default {
         if (response.data.status === 'success' && response.data.data && Array.isArray(response.data.data)) {
           authorizedTables.value = response.data.data.filter(name => name && name.trim() !== '')
           // console.log('권한 있는 테이블 목록:', authorizedTables.value)
+          // 권한이 있는 테이블이 없으면 test_result 추가
+          if (authorizedTables.value.length === 0) {
+            authorizedTables.value = ['test_result']
+          }
         } else {
           throw new Error('Invalid response format')
         }

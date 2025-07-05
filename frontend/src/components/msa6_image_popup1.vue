@@ -321,7 +321,7 @@
               <div class="id-input-panel">
                 <div class="usage-hint-shortcut">
                   <i class="fas fa-keyboard"></i>
-                  <span>단축키 정보: H</span>
+                  <span>  단축키 정보: H</span>
                 </div>
                 <h5>ID 설정</h5>
                 <div class="usage-hint">

@@ -96,6 +96,7 @@
       <div class="data-section" v-if="tableData && tableData.length > 0">
         <div class="data-header">
           <h3>{{ loadedTableName }} 테이블 데이터 ( 총 {{ tableData.length }}건 )</h3>
+          
           <div class="data-actions">
             <!-- Lot Wafer 검색 -->
             <div class="search-group">
@@ -121,7 +122,12 @@
               <i class="fas fa-download"></i> 다운로드
             </button>
           </div>
+          
         </div>
+        <div class="table-info-box">
+            <i class="fas fa-info-circle info-icon"></i>
+            <span>임시 삭제를 체크 후 저장하면, Analysis Tab에서 보이지 않습니다. 잘못된 계측값을 필터링하는 용도로 사용하세요.</span>
+          </div>
         
         <!-- CD 분석 테이블 -->
         <div v-if="loadedAnalysisType === 'measurement'" class="table-container">
@@ -233,6 +239,7 @@
           </table>
         </div>
       </div>
+      
 
       <!-- 데이터가 없을 때 -->
       <div v-else-if="!isLoading && loadAttempted && !dataLoaded" class="no-data">
@@ -322,6 +329,11 @@ export default {
         
         if (response.data.status === 'success') {
           authorizedTables.value = response.data.data;
+
+          // 권한이 있는 테이블이 없으면 test_result 추가
+          if (authorizedTables.value.length === 0) {
+            authorizedTables.value = [{ table_name: 'test_result' }];
+          }
         } else {
           console.error('권한 테이블 조회 실패:', response.data.message);
           authorizedTables.value = [];
@@ -512,7 +524,7 @@ export default {
         const queryString = params.toString();
         const apiUrl = `http://localhost:8000/api/side3/table-data?${queryString}`;
         
-        // console.log('Loading data with URL:', apiUrl);
+        console.log('Loading data with URL:', apiUrl);
         const response = await axios.get(apiUrl);
         
         // console.log('API Response:', response.data);
@@ -812,6 +824,8 @@ export default {
 }
 
 .data-section {
+  margin-top:0;
+  padding-top:0;
   background: white;
   border-radius: 1rem;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
@@ -830,6 +844,7 @@ export default {
   background: var(--gray-50);
   flex-shrink: 0; /* 헤더는 축소되지 않도록 */
   color: var(--primary-700);
+  margin-bottom:0;
 }
 
 .data-header h3 {
@@ -1277,5 +1292,26 @@ button.save-btn[disabled] {
   color: #ffffff !important;
   cursor: not-allowed !important;
   opacity: 0.6 !important;
+}
+.table-info-box {
+  display: flex;
+  align-items: center;
+  background: #f5f3ff;
+  color: #7c3aed;
+  border-radius: 0.4rem;
+  padding: 0.4rem 1rem 0.4rem 0.8rem;
+  font-size: 0.95rem;
+  box-shadow: 0 1px 4px rgba(124, 58, 237, 0.06);
+  width: fit-content;
+  min-width: 320px;
+  max-width: 100%;
+  margin: 7px;
+}
+
+.table-info-box .info-icon {
+  color: #7c3aed;
+  font-size: 1.05rem;
+  margin-right: 0.5rem;
+  flex-shrink: 0;
 }
 </style> 
