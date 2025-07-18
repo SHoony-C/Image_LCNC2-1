@@ -58,9 +58,29 @@ const actions = {
   async checkAuth({ commit, state }) {
     commit('SET_AUTH_CHECKED', true)
     
+    // 환경변수 기반 SSO 조건부 처리
+    const useSSO = process.env.VUE_APP_USE_SSO === 'true'
+    
     if (!state.token) {
-      console.log('토큰이 없음, 인증 실패')
-      return false
+      if (useSSO) {
+        console.log('운영 환경: 토큰이 없음, SSO 로그인 필요')
+        return false
+      } else {
+        console.log('개발 환경: 토큰이 없음, 개발용 토큰 설정')
+        // 개발 환경에서는 임의의 토큰과 사용자 정보 설정
+        const devToken = 'dev-token-' + Date.now()
+        const devUser = {
+          id: 'dev-user',
+          username: '개발자',
+          email: 'dev@example.com',
+          full_name: '개발자',
+          permission: 'admin',
+          is_active: true
+        }
+        commit('SET_TOKEN', devToken)
+        commit('SET_USER', devUser)
+        return true
+      }
     }
     
     try {
@@ -78,11 +98,51 @@ const actions = {
       } else {
         console.error('인증 실패: 유효하지 않은 토큰')
         commit('CLEAR_AUTH')
+        
+        if (useSSO) {
+          console.log('운영 환경: SSO 로그인으로 리다이렉트')
+          window.location.href = 'http://localhost:8000/api/auth/google/login'
+        } else {
+          console.log('개발 환경: 개발용 토큰 재설정')
+          // 개발 환경에서는 다시 개발용 토큰 설정
+          const devToken = 'dev-token-' + Date.now()
+          const devUser = {
+            id: 'dev-user',
+            username: '개발자',
+            email: 'dev@example.com',
+            full_name: '개발자',
+            permission: 'admin',
+            is_active: true
+          }
+          commit('SET_TOKEN', devToken)
+          commit('SET_USER', devUser)
+          return true
+        }
         return false
       }
     } catch (error) {
       console.error('인증 확인 오류:', error)
       commit('CLEAR_AUTH')
+      
+      if (useSSO) {
+        console.log('운영 환경: 네트워크 오류로 SSO 로그인으로 리다이렉트')
+        window.location.href = 'http://localhost:8000/api/auth/google/login'
+      } else {
+        console.log('개발 환경: 네트워크 오류로 개발용 토큰 설정')
+        // 개발 환경에서는 네트워크 오류 시에도 개발용 토큰 설정
+        const devToken = 'dev-token-' + Date.now()
+        const devUser = {
+          id: 'dev-user',
+          username: '개발자',
+          email: 'dev@example.com',
+          full_name: '개발자',
+          permission: 'admin',
+          is_active: true
+        }
+        commit('SET_TOKEN', devToken)
+        commit('SET_USER', devUser)
+        return true
+      }
       return false
     }
   },
@@ -90,6 +150,26 @@ const actions = {
   handleAuthRedirect({ commit }) {
     console.log('OAuth 리다이렉트 처리 시작');
     console.log('현재 URL:', window.location.href);
+    
+    // 환경변수 기반 SSO 조건부 처리
+    const useSSO = process.env.VUE_APP_USE_SSO === 'true'
+    
+    if (!useSSO) {
+      console.log('개발 환경: SSO 리다이렉트 처리 건너뜀')
+      // 개발 환경에서는 개발용 토큰 설정
+      const devToken = 'dev-token-' + Date.now()
+      const devUser = {
+        id: 'dev-user',
+        username: '개발자',
+        email: 'dev@example.com',
+        full_name: '개발자',
+        permission: 'admin',
+        is_active: true
+      }
+      commit('SET_TOKEN', devToken)
+      commit('SET_USER', devUser)
+      return Promise.resolve(true)
+    }
     
     // 전체 URL 정보 로깅
     console.log('URL 정보:', {

@@ -56,7 +56,7 @@
           </button>
           
           <!-- SSO 로그인 버튼 -->
-          <div class="sso-login-section">
+          <div v-if="process.env.VUE_APP_USE_SSO === 'true'" class="sso-login-section">
             <div class="divider">또는</div>
             <button type="button" class="sso-btn" @click="handleSSOLogin">
               <i class="fas fa-building"></i> 기업계정으로 로그인

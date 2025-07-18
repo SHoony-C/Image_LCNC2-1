@@ -1163,3 +1163,273 @@ async def process_sam2(image: UploadFile = File(...), params: str = Form(...)):
             status_code=500,
             content={"status": "error", "message": f"SAM2 처리 중 오류가 발생했습니다: {str(e)}"}
         ) 
+    
+
+# Opening 처리
+@router.post("/opening")
+async def process_opening(image: UploadFile = File(...), params: str = Form(...)):
+    """Opening 처리 (Erosion + Dilation)"""
+    params = json.loads(params)
+    
+    try:
+        # 이미지 데이터 읽기
+        image_data = await image.read()
+        img = decode_image(image_data)
+        original_format = img.format  # 원본 이미지 형식 저장
+        
+        # 파라미터 추출
+        kernel_size = int(params.get("kernel_size", 5))
+        kernel_type = params.get("kernel_type", "rect")  # rect, ellipse, cross
+        
+        # 커널 크기가 홀수인지 확인
+        if kernel_size % 2 == 0:
+            kernel_size += 1  # 짝수면 홀수로 만들기
+        
+        # PIL 이미지를 OpenCV로 변환
+        cv_image = pil_to_cv2(img)
+        
+        # 커널 타입에 따른 커널 생성
+        if kernel_type == "ellipse":
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        elif kernel_type == "cross":
+            kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (kernel_size, kernel_size))
+        else:  # rect (기본값)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
+        
+        # Opening 적용 (Erosion + Dilation)
+        result = cv2.morphologyEx(cv_image, cv2.MORPH_OPEN, kernel)
+        
+        # 결과 이미지 반환
+        result_img = cv2_to_pil(result)
+        
+        # 원본 이미지 형식 유지
+        result_img.format = original_format
+        
+        # 처리 정보 로깅
+        print(f"Opening 처리: 커널크기={kernel_size}, 커널타입={kernel_type}, 형식: {original_format}")
+        
+        # 적절한 MIME 타입 설정
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
+        
+        # 이미지를 바이너리로 변환하여 반환
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
+        return Response(content=img_bytes, media_type=mime_type)
+    except Exception as e:
+        print(f"Opening 처리 오류: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(e)}
+        )
+
+# Closing 처리
+@router.post("/closing")
+async def process_closing(image: UploadFile = File(...), params: str = Form(...)):
+    """Closing 처리 (Dilation + Erosion)"""
+    params = json.loads(params)
+    
+    try:
+        # 이미지 데이터 읽기
+        image_data = await image.read()
+        img = decode_image(image_data)
+        original_format = img.format  # 원본 이미지 형식 저장
+        
+        # 파라미터 추출
+        kernel_size = int(params.get("kernel_size", 5))
+        kernel_type = params.get("kernel_type", "rect")  # rect, ellipse, cross
+        
+        # 커널 크기가 홀수인지 확인
+        if kernel_size % 2 == 0:
+            kernel_size += 1  # 짝수면 홀수로 만들기
+        
+        # PIL 이미지를 OpenCV로 변환
+        cv_image = pil_to_cv2(img)
+        
+        # 커널 타입에 따른 커널 생성
+        if kernel_type == "ellipse":
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        elif kernel_type == "cross":
+            kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (kernel_size, kernel_size))
+        else:  # rect (기본값)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
+        
+        # Closing 적용 (Dilation + Erosion)
+        result = cv2.morphologyEx(cv_image, cv2.MORPH_CLOSE, kernel)
+        
+        # 결과 이미지 반환
+        result_img = cv2_to_pil(result)
+        
+        # 원본 이미지 형식 유지
+        result_img.format = original_format
+        
+        # 처리 정보 로깅
+        print(f"Closing 처리: 커널크기={kernel_size}, 커널타입={kernel_type}, 형식: {original_format}")
+        
+        # 적절한 MIME 타입 설정
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
+        
+        # 이미지를 바이너리로 변환하여 반환
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
+        return Response(content=img_bytes, media_type=mime_type)
+    except Exception as e:
+        print(f"Closing 처리 오류: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(e)}
+        )
+    
+
+
+# HRNet 처리
+@router.post("/hrnet")
+async def process_hrnet(image: UploadFile = File(...), params: str = Form(...)):
+    """HRNet을 사용한 이미지 세그멘테이션 처리"""
+    params = json.loads(params)
+    
+    try:
+        # 이미지 데이터 읽기
+        image_data = await image.read()
+        img = decode_image(image_data)
+        original_format = img.format  # 원본 이미지 형식 저장
+        
+        # 파라미터 추출
+        model_size = params.get("model_size", "hrnet18")
+        confidence_threshold = float(params.get("confidence_threshold", 0.5))
+        output_mode = params.get("output_mode", "segmentation")  # segmentation, keypoints, pose
+        
+        # PIL 이미지를 OpenCV로 변환
+        cv_image = pil_to_cv2(img)
+        
+        # HRNet 모델 로드 (실제 구현에서는 모델 파일이 필요)
+        # 여기서는 시뮬레이션된 결과를 반환
+        print(f"HRNet 처리: 모델={model_size}, 신뢰도={confidence_threshold}, 출력모드={output_mode}")
+        
+        # HRNet 처리 시뮬레이션 (실제 구현 시에는 실제 모델 사용)
+        if output_mode == "segmentation":
+            # 세그멘테이션 결과 시뮬레이션
+            height, width = cv_image.shape[:2]
+            # 랜덤한 세그멘테이션 마스크 생성 (실제로는 모델 예측 결과)
+            mask = np.random.randint(0, 256, (height, width), dtype=np.uint8)
+            # 마스크를 컬러로 변환
+            colored_mask = cv2.applyColorMap(mask, cv2.COLORMAP_JET)
+            # 원본 이미지와 마스크 블렌딩
+            alpha = 0.7
+            result = cv2.addWeighted(cv_image, 1-alpha, colored_mask, alpha, 0)
+        elif output_mode == "keypoints":
+            # 키포인트 감지 시뮬레이션
+            result = cv_image.copy()
+            # 랜덤한 키포인트 생성
+            num_keypoints = 17
+            for i in range(num_keypoints):
+                x = np.random.randint(50, width-50)
+                y = np.random.randint(50, height-50)
+                cv2.circle(result, (x, y), 3, (0, 255, 0), -1)
+        else:  # pose
+            # 포즈 추정 시뮬레이션
+            result = cv_image.copy()
+            # 랜덤한 포즈 라인 생성
+            for i in range(5):
+                x1, y1 = np.random.randint(50, width-50), np.random.randint(50, height-50)
+                x2, y2 = np.random.randint(50, width-50), np.random.randint(50, height-50)
+                cv2.line(result, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        
+        # 결과 이미지 반환
+        result_img = cv2_to_pil(result)
+        
+        # 원본 이미지 형식 유지
+        result_img.format = original_format
+        
+        # 처리 정보 로깅
+        print(f"HRNet 처리 완료: 모델={model_size}, 출력모드={output_mode}, 형식: {original_format}")
+        
+        # 적절한 MIME 타입 설정
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
+        
+        # 이미지를 바이너리로 변환하여 반환
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
+        return Response(content=img_bytes, media_type=mime_type)
+    except Exception as e:
+        print(f"HRNet 처리 오류: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(e)}
+        )
+
+# UNet + Attention 처리
+@router.post("/unet_attention")
+async def process_unet_attention(image: UploadFile = File(...), params: str = Form(...)):
+    """UNet + Attention을 사용한 이미지 세그멘테이션 처리"""
+    params = json.loads(params)
+    
+    try:
+        # 이미지 데이터 읽기
+        image_data = await image.read()
+        img = decode_image(image_data)
+        original_format = img.format  # 원본 이미지 형식 저장
+        
+        # 파라미터 추출
+        attention_type = params.get("attention_type", "self")  # self, cross, spatial
+        attention_heads = int(params.get("attention_heads", 8))
+        dropout_rate = float(params.get("dropout_rate", 0.1))
+        output_channels = int(params.get("output_channels", 1))
+        
+        # PIL 이미지를 OpenCV로 변환
+        cv_image = pil_to_cv2(img)
+        
+        # UNet + Attention 처리 시뮬레이션
+        print(f"UNet + Attention 처리: 어텐션타입={attention_type}, 헤드수={attention_heads}, 드롭아웃={dropout_rate}")
+        
+        # 어텐션 맵 시뮬레이션 생성
+        height, width = cv_image.shape[:2]
+        
+        # 어텐션 타입에 따른 다른 처리
+        if attention_type == "self":
+            # Self-attention 시뮬레이션
+            attention_map = np.random.rand(height, width).astype(np.float32)
+            attention_map = cv2.GaussianBlur(attention_map, (15, 15), 0)
+            attention_map = (attention_map * 255).astype(np.uint8)
+            attention_colored = cv2.applyColorMap(attention_map, cv2.COLORMAP_HOT)
+        elif attention_type == "cross":
+            # Cross-attention 시뮬레이션
+            attention_map = np.random.rand(height, width).astype(np.float32)
+            attention_map = cv2.GaussianBlur(attention_map, (21, 21), 0)
+            attention_map = (attention_map * 255).astype(np.uint8)
+            attention_colored = cv2.applyColorMap(attention_map, cv2.COLORMAP_VIRIDIS)
+        else:  # spatial
+            # Spatial attention 시뮬레이션
+            attention_map = np.random.rand(height, width).astype(np.float32)
+            attention_map = cv2.GaussianBlur(attention_map, (25, 25), 0)
+            attention_map = (attention_map * 255).astype(np.uint8)
+            attention_colored = cv2.applyColorMap(attention_map, cv2.COLORMAP_PLASMA)
+        
+        # 원본 이미지와 어텐션 맵 블렌딩
+        alpha = 0.6
+        result = cv2.addWeighted(cv_image, 1-alpha, attention_colored, alpha, 0)
+        
+        # 세그멘테이션 결과 오버레이 (시뮬레이션)
+        if output_channels > 1:
+            # 다중 클래스 세그멘테이션
+            segmentation_mask = np.random.randint(0, output_channels, (height, width), dtype=np.uint8)
+            segmentation_colored = cv2.applyColorMap(segmentation_mask * (255 // output_channels), cv2.COLORMAP_TAB20)
+            result = cv2.addWeighted(result, 0.7, segmentation_colored, 0.3, 0)
+        
+        # 결과 이미지 반환
+        result_img = cv2_to_pil(result)
+        
+        # 원본 이미지 형식 유지
+        result_img.format = original_format
+        
+        # 처리 정보 로깅
+        print(f"UNet + Attention 처리 완료: 어텐션타입={attention_type}, 출력채널={output_channels}, 형식: {original_format}")
+        
+        # 적절한 MIME 타입 설정
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
+        
+        # 이미지를 바이너리로 변환하여 반환
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
+        return Response(content=img_bytes, media_type=mime_type)
+    except Exception as e:
+        print(f"UNet + Attention 처리 오류: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(e)}
+        )

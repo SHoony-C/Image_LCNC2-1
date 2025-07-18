@@ -31,6 +31,11 @@ const routes = [
     component: TableManagementView
   },
   {
+    path: '/admin',
+    name: 'Admin',
+    component: login_modal
+  },
+  {
     path: '/admin/login',
     name: 'self_login',
     component: login_modal,
@@ -80,6 +85,9 @@ router.beforeEach(async (to, from, next) => {
     }
   }, 0);
   
+  // 환경변수 기반 SSO 조건부 처리
+  const useSSO = process.env.VUE_APP_USE_SSO === 'true'
+  
   // 원래 인증 체크 로직
   // Ensure auth state is checked
   if (!store.getters['auth/isAuthChecked']) {
@@ -92,18 +100,19 @@ router.beforeEach(async (to, from, next) => {
   // Check if route requires authentication
   if (to.matched.some(record => record.meta.requiresAuth)) {
     if (!isAuthenticated) {
-      // Store intended destination for after login
-      sessionStorage.setItem('redirectAfterLogin', to.fullPath)
-      
-      // /admin 경로로의 접근인 경우에만 로그인 모달을 보여주고, 그 외에는 바로 SSO 로그인
-      if (to.path == '/admin') {
-        // Allow navigation to continue to root route where login modal will show
-        next({ path: '/' })
-      } else {
+      if (useSSO) {
+        // Store intended destination for after login
+        sessionStorage.setItem('redirectAfterLogin', to.fullPath)
+        
         // 바로 SSO 로그인으로 리다이렉트
         window.location.href = 'http://localhost:8000/api/auth/google/login'
+        return
+      } else {
+        // 개발 환경에서는 인증 없이 패스
+        console.log('개발 환경: 인증 없이 페이지 접근 허용')
+        next()
+        return
       }
-      return
     }
   }
   
@@ -113,9 +122,16 @@ router.beforeEach(async (to, from, next) => {
     const hasAdminRole = user && user.permission === 'admin'
     
     if (!hasAdminRole) {
-      console.log('Admin 권한이 필요한 페이지 접근 차단:', to.path)
-      next({ path: '/' })
-      return
+      if (useSSO) {
+        console.log('Admin 권한이 필요한 페이지 접근 차단:', to.path)
+        next({ path: '/' })
+        return
+      } else {
+        // 개발 환경에서는 관리자 권한 없이도 패스
+        console.log('개발 환경: 관리자 권한 없이 페이지 접근 허용')
+        next()
+        return
+      }
     }
   }
   

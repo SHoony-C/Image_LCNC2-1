@@ -529,6 +529,16 @@ export default {
 
     // 실행 취소 (Ctrl+Z)
     const undo = () => {
+      // MSA6 팝업이 열려있는지 확인
+      const msa6Popup = document.querySelector('.image-measurement-popup');
+      const isMSA6PopupVisible = msa6Popup && msa6Popup.style.display !== 'none' && msa6Popup.style.visibility !== 'hidden';
+      
+      // MSA6 팝업이 열려있으면 실행 취소 방지
+      if (isMSA6PopupVisible) {
+        console.log('MSA6 팝업이 열려있어 실행 취소가 차단되었습니다.');
+        return;
+      }
+      
       if (undoStack.value.length === 0) return
       
       // 현재 상태를 redo 스택에 저장
@@ -1477,7 +1487,13 @@ export default {
           'sam2': 'sam2',
           'segmentation': 'sam2',
           'segment': 'sam2',
-          'SAM2': 'sam2'
+          'SAM2': 'sam2',
+          'opening': 'opening',
+          'closing': 'closing',
+          'hrnet': 'hrnet',
+          'unet_attention': 'unet_attention',
+          'unet-attention': 'unet_attention',
+          'unet+attention': 'unet_attention',
         };
         
         // 필요한 경우에만 타입 변환 (호환성 이슈가 있는 타입만)
@@ -1492,7 +1508,8 @@ export default {
         const supportedNodeTypes = [
           'median_filter', 'gaussian_blur', 'gamma', 'anisotropic_diffusion',
           'histogram_equalization', 'threshold', 'brightness', 'contrast',
-          'clahe', 'object_detection', 'blur', 'sharpen', 'grayscale', 'normalize', 'merge', 'sam2'
+          'clahe', 'object_detection', 'blur', 'sharpen', 'grayscale', 'normalize', 'merge', 'sam2',
+          'opening', 'closing', 'hrnet', 'unet_attention'
         ];
         
         if (!supportedNodeTypes.includes(nodeType)) {

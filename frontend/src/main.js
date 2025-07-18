@@ -39,19 +39,27 @@ axios.interceptors.response.use(
   error => {
     // 401 에러를 처리 (인증 만료)
     if (error.response && error.response.status === 401) {
-      // 토큰 만료 또는 인증 오류
-      // console.warn('인증 오류 발생, 인증 상태 초기화')
-      store.commit('auth/CLEAR_AUTH')
+      // 환경변수 기반 SSO 조건부 처리
+      const useSSO = process.env.VUE_APP_USE_SSO === 'true'
       
-      // 401 오류 로깅
-      LogService.logAction('auth_error', {
-        status: 401,
-        path: window.location.pathname
-      }).catch(e => console.error('로깅 실패:', e))
-      
-      // 로그인 페이지로 리다이렉트
-      if (router.currentRoute.value.path !== '/') {
-        router.push('/')
+      if (useSSO) {
+        // 토큰 만료 또는 인증 오류
+        // console.warn('인증 오류 발생, 인증 상태 초기화')
+        store.commit('auth/CLEAR_AUTH')
+        
+        // 401 오류 로깅
+        LogService.logAction('auth_error', {
+          status: 401,
+          path: window.location.pathname
+        }).catch(e => console.error('로깅 실패:', e))
+        
+        // 로그인 페이지로 리다이렉트
+        if (router.currentRoute.value.path !== '/') {
+          router.push('/')
+        }
+      } else {
+        // 개발 환경에서는 401 오류 무시
+        console.log('개발 환경: 401 오류 무시')
       }
     }
     return Promise.reject(error)

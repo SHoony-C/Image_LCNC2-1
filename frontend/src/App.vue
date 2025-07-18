@@ -99,6 +99,14 @@ export default {
       console.log('현재 URL:', window.location.href)
       console.log('URL 해시 존재:', !!window.location.hash)
       
+      // 환경변수 기반 SSO 조건부 처리
+      const useSSO = process.env.VUE_APP_USE_SSO === 'true'
+      
+      if (!useSSO) {
+        console.log('개발 환경: SSO 리다이렉트 처리 건너뜀')
+        return true
+      }
+      
       // URL 해시나 쿼리 파라미터에서 토큰을 찾기 위해 
       // Vuex 스토어의 handleAuthRedirect 액션을 직접 호출
       try {
@@ -133,6 +141,14 @@ export default {
     
     // Check authentication status
     const checkAuth = async () => {
+      // 환경변수 기반 SSO 조건부 처리
+      const useSSO = process.env.VUE_APP_USE_SSO === 'true'
+      
+      if (!useSSO) {
+        console.log('개발 환경: 인증 체크 건너뜀')
+        return
+      }
+      
       // 먼저 로컬 스토리지에 저장된 토큰이 있는지 확인
       const token = localStorage.getItem('token');
       
@@ -152,17 +168,19 @@ export default {
         }
       } else {
         // 토큰이 없는 경우
+        // /admin 경로인 경우에는 checkForAuthRedirect를 실행하지 않고 바로 로그인 모달 표시
+        if (route.path.startsWith('/admin')) {
+          showLoginModal.value = true;
+          return;
+        }
+        
+        // /admin 경로가 아닌 경우에만 checkForAuthRedirect 실행
         const redirectSuccess = await checkForAuthRedirect();
         
         if (!redirectSuccess) {
           // 리다이렉트 파라미터도 없고 토큰도 없는 경우
-          // /admin 경로가 아니면 바로 SSO 로그인으로 리다이렉트
-          if (!route.path.startsWith('/admin')) {
-            window.location.href = 'http://localhost:8000/api/auth/google/login';
-            return;
-          }
-          // /admin 경로인 경우에만 로그인 모달 표시
-          showLoginModal.value = true;
+          // 바로 SSO 로그인으로 리다이렉트
+          window.location.href = 'http://localhost:8000/api/auth/google/login';
         }
       }
     }

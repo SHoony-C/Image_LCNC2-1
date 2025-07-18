@@ -287,7 +287,13 @@ export default {
         'histogram_equalization': 'histogram_equalization',
         'object_detection': 'object_detection',
         'object-detection': 'object_detection',
-        'object': 'object_detection'
+        'object': 'object_detection',
+        'opening': 'opening',
+        'closing': 'closing',
+        'hrnet': 'hrnet',
+        'unet_attention': 'unet_attention',
+        'unet-attention': 'unet_attention',
+        'unet+attention': 'unet_attention',
       };
       
       // 노드 매핑 헬퍼 함수

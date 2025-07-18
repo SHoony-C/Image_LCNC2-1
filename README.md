@@ -1,4 +1,442 @@
 
+opening/closing
+1. 기능
+# Opening 처리
+@router.post("/opening")
+async def process_opening(image: UploadFile = File(...), params: str = Form(...)):
+    """Opening 처리 (Erosion + Dilation)"""
+    params = json.loads(params)
+    
+    try:
+        # 이미지 데이터 읽기
+        image_data = await image.read()
+        img = decode_image(image_data)
+        original_format = img.format  # 원본 이미지 형식 저장
+        
+        # 파라미터 추출
+        kernel_size = int(params.get("kernel_size", 5))
+        kernel_type = params.get("kernel_type", "rect")  # rect, ellipse, cross
+        
+        # 커널 크기가 홀수인지 확인
+        if kernel_size % 2 == 0:
+            kernel_size += 1  # 짝수면 홀수로 만들기
+        
+        # PIL 이미지를 OpenCV로 변환
+        cv_image = pil_to_cv2(img)
+        
+        # 커널 타입에 따른 커널 생성
+        if kernel_type == "ellipse":
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        elif kernel_type == "cross":
+            kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (kernel_size, kernel_size))
+        else:  # rect (기본값)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
+        
+        # Opening 적용 (Erosion + Dilation)
+        result = cv2.morphologyEx(cv_image, cv2.MORPH_OPEN, kernel)
+        
+        # 결과 이미지 반환
+        result_img = cv2_to_pil(result)
+        
+        # 원본 이미지 형식 유지
+        result_img.format = original_format
+        
+        # 처리 정보 로깅
+        print(f"Opening 처리: 커널크기={kernel_size}, 커널타입={kernel_type}, 형식: {original_format}")
+        
+        # 적절한 MIME 타입 설정
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
+        
+        # 이미지를 바이너리로 변환하여 반환
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
+        return Response(content=img_bytes, media_type=mime_type)
+    except Exception as e:
+        print(f"Opening 처리 오류: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(e)}
+        )
+
+# Closing 처리
+@router.post("/closing")
+async def process_closing(image: UploadFile = File(...), params: str = Form(...)):
+    """Closing 처리 (Dilation + Erosion)"""
+    params = json.loads(params)
+    
+    try:
+        # 이미지 데이터 읽기
+        image_data = await image.read()
+        img = decode_image(image_data)
+        original_format = img.format  # 원본 이미지 형식 저장
+        
+        # 파라미터 추출
+        kernel_size = int(params.get("kernel_size", 5))
+        kernel_type = params.get("kernel_type", "rect")  # rect, ellipse, cross
+        
+        # 커널 크기가 홀수인지 확인
+        if kernel_size % 2 == 0:
+            kernel_size += 1  # 짝수면 홀수로 만들기
+        
+        # PIL 이미지를 OpenCV로 변환
+        cv_image = pil_to_cv2(img)
+        
+        # 커널 타입에 따른 커널 생성
+        if kernel_type == "ellipse":
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+        elif kernel_type == "cross":
+            kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (kernel_size, kernel_size))
+        else:  # rect (기본값)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
+        
+        # Closing 적용 (Dilation + Erosion)
+        result = cv2.morphologyEx(cv_image, cv2.MORPH_CLOSE, kernel)
+        
+        # 결과 이미지 반환
+        result_img = cv2_to_pil(result)
+        
+        # 원본 이미지 형식 유지
+        result_img.format = original_format
+        
+        # 처리 정보 로깅
+        print(f"Closing 처리: 커널크기={kernel_size}, 커널타입={kernel_type}, 형식: {original_format}")
+        
+        # 적절한 MIME 타입 설정
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
+        
+        # 이미지를 바이너리로 변환하여 반환
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
+        return Response(content=img_bytes, media_type=mime_type)
+    except Exception as e:
+        print(f"Closing 처리 오류: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(e)}
+        )
+# UNet + Attention 처리
+@router.post("/unet_attention")
+async def process_unet_attention(image: UploadFile = File(...), params: str = Form(...)):
+    """UNet + Attention을 사용한 이미지 세그멘테이션 처리"""
+    params = json.loads(params)
+    
+    try:
+        # 이미지 데이터 읽기
+        image_data = await image.read()
+        img = decode_image(image_data)
+        original_format = img.format  # 원본 이미지 형식 저장
+        
+        # 파라미터 추출
+        attention_type = params.get("attention_type", "self")  # self, cross, spatial
+        attention_heads = int(params.get("attention_heads", 8))
+        dropout_rate = float(params.get("dropout_rate", 0.1))
+        alpha = float(params.get("alpha", 0.6))  # 추가
+        
+        # PIL 이미지를 OpenCV로 변환
+        cv_image = pil_to_cv2(img)
+        
+        # UNet + Attention 처리 시뮬레이션
+        print(f"UNet + Attention 처리: 어텐션타입={attention_type}, 헤드수={attention_heads}, 드롭아웃={dropout_rate}, 알파={alpha}")
+        
+        # 어텐션 맵 시뮬레이션 생성
+        height, width = cv_image.shape[:2]
+        
+        # 어텐션 타입에 따른 다른 처리
+        if attention_type == "self":
+            # Self-attention 시뮬레이션
+            attention_map = np.random.rand(height, width).astype(np.float32)
+            attention_map = cv2.GaussianBlur(attention_map, (15, 15), 0)
+            attention_map = (attention_map * 255).astype(np.uint8)
+            attention_colored = cv2.applyColorMap(attention_map, cv2.COLORMAP_HOT)
+        elif attention_type == "cross":
+            # Cross-attention 시뮬레이션
+            attention_map = np.random.rand(height, width).astype(np.float32)
+            attention_map = cv2.GaussianBlur(attention_map, (21, 21), 0)
+            attention_map = (attention_map * 255).astype(np.uint8)
+            attention_colored = cv2.applyColorMap(attention_map, cv2.COLORMAP_VIRIDIS)
+        else:  # spatial
+            # Spatial attention 시뮬레이션
+            attention_map = np.random.rand(height, width).astype(np.float32)
+            attention_map = cv2.GaussianBlur(attention_map, (25, 25), 0)
+            attention_map = (attention_map * 255).astype(np.uint8)
+            attention_colored = cv2.applyColorMap(attention_map, cv2.COLORMAP_PLASMA)
+        
+        # 원본 이미지와 어텐션 맵 블렌딩 (alpha 파라미터 사용)
+        result = cv2.addWeighted(cv_image, 1-alpha, attention_colored, alpha, 0)
+        
+        # 결과 이미지 반환
+        result_img = cv2_to_pil(result)
+        
+        # 원본 이미지 형식 유지
+        result_img.format = original_format
+        
+        # 처리 정보 로깅
+        print(f"UNet + Attention 처리 완료: 어텐션타입={attention_type}, 알파={alpha}, 형식: {original_format}")
+        
+        # 적절한 MIME 타입 설정
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
+        
+        # 이미지를 바이너리로 변환하여 반환
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
+        return Response(content=img_bytes, media_type=mime_type)
+    except Exception as e:
+        print(f"UNet + Attention 처리 오류: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(e)}
+        )
+
+# HRNet 처리
+@router.post("/hrnet")
+async def process_hrnet(image: UploadFile = File(...), params: str = Form(...)):
+    """HRNet을 사용한 이미지 세그멘테이션 처리"""
+    params = json.loads(params)
+    
+    try:
+        # 이미지 데이터 읽기
+        image_data = await image.read()
+        img = decode_image(image_data)
+        original_format = img.format  # 원본 이미지 형식 저장
+        
+        # 파라미터 추출
+        confidence_threshold = float(params.get("confidence_threshold", 0.5))
+        output_mode = params.get("output_mode", "segmentation")  # segmentation, keypoints, pose
+        alpha = float(params.get("alpha", 0.7))  # 추가
+        
+        # PIL 이미지를 OpenCV로 변환
+        cv_image = pil_to_cv2(img)
+        
+        # HRNet 모델 로드 (실제 구현에서는 모델 파일이 필요)
+        # 여기서는 시뮬레이션된 결과를 반환
+        print(f"HRNet 처리: 신뢰도={confidence_threshold}, 출력모드={output_mode}, 알파={alpha}")
+        
+        # HRNet 처리 시뮬레이션 (실제 구현 시에는 실제 모델 사용)
+        if output_mode == "segmentation":
+            # 세그멘테이션 결과 시뮬레이션
+            height, width = cv_image.shape[:2]
+            # 랜덤한 세그멘테이션 마스크 생성 (실제로는 모델 예측 결과)
+            mask = np.random.randint(0, 256, (height, width), dtype=np.uint8)
+            # 마스크를 컬러로 변환
+            colored_mask = cv2.applyColorMap(mask, cv2.COLORMAP_JET)
+            # 원본 이미지와 마스크 블렌딩 (alpha 파라미터 사용)
+            result = cv2.addWeighted(cv_image, 1-alpha, colored_mask, alpha, 0)
+        elif output_mode == "keypoints":
+            # 키포인트 감지 시뮬레이션
+            result = cv_image.copy()
+            # 랜덤한 키포인트 생성
+            num_keypoints = 17
+            for i in range(num_keypoints):
+                x = np.random.randint(50, width-50)
+                y = np.random.randint(50, height-50)
+                cv2.circle(result, (x, y), 3, (0, 255, 0), -1)
+        else:  # pose
+            # 포즈 추정 시뮬레이션
+            result = cv_image.copy()
+            # 랜덤한 포즈 라인 생성
+            for i in range(5):
+                x1, y1 = np.random.randint(50, width-50), np.random.randint(50, height-50)
+                x2, y2 = np.random.randint(50, width-50), np.random.randint(50, height-50)
+                cv2.line(result, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        
+        # 결과 이미지 반환
+        result_img = cv2_to_pil(result)
+        
+        # 원본 이미지 형식 유지
+        result_img.format = original_format
+        
+        # 처리 정보 로깅
+        print(f"HRNet 처리 완료: 출력모드={output_mode}, 알파={alpha}, 형식: {original_format}")
+        
+        # 적절한 MIME 타입 설정
+        mime_type = f"image/{original_format.lower()}" if original_format != "JPEG" else "image/jpeg"
+        
+        # 이미지를 바이너리로 변환하여 반환
+        img_bytes, format_used = encode_image_to_bytes(result_img, format=original_format)
+        return Response(content=img_bytes, media_type=mime_type)
+    except Exception as e:
+        print(f"HRNet 처리 오류: {str(e)}")
+        return JSONResponse(
+            status_code=400,
+            content={"status": "error", "message": str(e)}
+        )
+
+2. 노드 추가
+{
+    "id": "opening",
+    "label": "Opening",
+    "icon": "fas fa-expand-arrows-alt",
+    "type": "image",
+    "category": "morphological"
+},
+{
+    "id": "closing",
+    "label": "Closing",
+    "icon": "fas fa-compress-arrows-alt",
+    "type": "image",
+    "category": "morphological"
+},
+# AI 기반 세그멘테이션 섹션에 추가
+{
+    "id": "hrnet",
+    "label": "HRNet 세그멘테이션",
+    "icon": "fas fa-network-wired",
+    "type": "image",
+    "category": "segmentation"
+},
+{
+    "id": "unet_attention",
+    "label": "UNet + Attention",
+    "icon": "fas fa-brain",
+    "type": "image",
+    "category": "segmentation"
+},
+
+
+3. 기본 옵션 추가
+# morphological operations 섹션에 추가
+"opening": {
+    "kernel_size": 5,
+    "kernel_type": "rect",
+    "options": {
+        "kernel_size": [3, 5, 7, 9, 11, 13, 15],
+        "kernel_type": ["rect", "ellipse", "cross"]
+    }
+},
+"closing": {
+    "kernel_size": 5,
+    "kernel_type": "rect",
+    "options": {
+        "kernel_size": [3, 5, 7, 9, 11, 13, 15],
+        "kernel_type": ["rect", "ellipse", "cross"]
+    }
+},
+"unet_attention": {
+    "attention_type": "self",
+    "attention_heads": 8,
+    "dropout_rate": 0.1,
+    "alpha": 0.6,  # 추가
+    "options": {
+        "attention_type": ["self", "cross", "spatial"],
+        "attention_heads": [1, 2, 4, 8, 16],
+        "dropout_rate": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
+        "alpha": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]  # 추가
+    }
+},
+"hrnet": {
+    "confidence_threshold": 0.5,
+    "output_mode": "segmentation",
+    "alpha": 0.7,  # 추가
+    "options": {
+        "output_mode": ["segmentation", "keypoints", "pose"],
+        "confidence_threshold": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+        "alpha": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]  # 추가
+    }
+},
+
+
+4. 매핑
+##4-1  msa5_image_lcnc.vue
+const basicTypeMap = {
+  // ... 기존 매핑들 ...
+  'opening': 'opening',
+  'closing': 'closing',
+  'hrnet': 'hrnet',
+  'unet_attention': 'unet_attention',
+  'unet-attention': 'unet_attention',
+  'unet+attention': 'unet_attention',
+};
+
+##4-2  msa5_image_lcnc.vue
+const supportedNodeTypes = [
+  'median_filter', 'gaussian_blur', 'gamma', 'anisotropic_diffusion',
+  'histogram_equalization', 'threshold', 'brightness', 'contrast',
+  'clahe', 'object_detection', 'blur', 'sharpen', 'grayscale', 'normalize', 'merge', 'sam2',
+  'opening', 'closing', 'hrnet', 'unet_attention'
+];
+
+##4-3 msa3_image_iapp_popup.vue
+const apiCompatibilityMap = {
+  // ... 기존 매핑들 ...
+  'opening': 'opening',
+  'closing': 'closing',
+  'hrnet': 'hrnet',
+  'unet_attention': 'unet_attention',
+  'unet-attention': 'unet_attention',
+  'unet+attention': 'unet_attention',
+};
+
+
+
+a 단축키
+msa6 .vue
+if (key === 'a') {
+          e.preventDefault();
+          if (this.measurementMode === 'area' || this.measurementMode === 'area-vertical' || this.measurementMode === 'area-horizontal') {
+            // 이미 영역 모드인 경우 방향 전환
+            this.areaDirection = this.areaDirection === 'horizontal' ? 'vertical' : 'horizontal';
+            
+            // 방향에 따라 구체적인 모드 설정
+            if (this.areaDirection === 'horizontal') {
+              this.measurementMode = 'area-horizontal';
+            } else {
+              this.measurementMode = 'area-vertical';
+            }
+            
+            this.showNotification(`영역 측정 방향: ${this.areaDirection === 'horizontal' ? '수평' : '수직'}`, 'info');
+          } else {
+            // 영역 모드 활성화
+            this.setMode('area');
+            this.showNotification('영역 선 측정 모드 활성화', 'info');
+          }
+          return;
+        }
+
+
+
+몽고 db 이름 저장은
+msa5 .py
+백엔드에서 덮어쓰기로 실행
+
+
+msa5 실행취소 방지
+msa5 .vue
+const undo = () => {
+  // MSA6 팝업이 열려있는지 확인
+  const msa6Popup = document.querySelector('.image-measurement-popup');
+  const isMSA6PopupVisible = msa6Popup && msa6Popup.style.display !== 'none' && msa6Popup.style.visibility !== 'hidden';
+  
+  // MSA6 팝업이 열려있으면 실행 취소 방지
+  if (isMSA6PopupVisible) {
+    console.log('MSA6 팝업이 열려있어 실행 취소가 차단되었습니다.');
+    return;
+  }
+  
+  if (undoStack.value.length === 0) return
+  
+  // 현재 상태를 redo 스택에 저장
+  redoStack.value.push(JSON.parse(JSON.stringify(elements.value)))
+  
+  // 마지막 저장된 상태로 되돌림
+  const lastState = undoStack.value.pop()
+  elements.value = lastState
+  
+  // 실행 취소 후 입력/출력 연결 상태 업데이트
+  updateConnections()
+}
+
+
+
+###패치노트 표시side_1_main.vue
+// 최초 로그인 시에만 패치노트 표시 (localStorage로 확인)
+          const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
+          if (!hasSeenPatchNote) {
+            this.showPatchNote = true;
+            localStorage.setItem('patchNoteSeen', 'true');
+          }
+
+
+
+
+
+
 ## Done List
 ```
 로그인 페이지 / sso 다이렉트로

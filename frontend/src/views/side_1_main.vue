@@ -122,7 +122,7 @@ export default {
       serverError: false,
       showUserMenu: false,
       resizeObserverTimeout: null,
-      showPatchNote: true
+      showPatchNote: false
     }
   },
   created() {
@@ -264,15 +264,38 @@ export default {
       }
     },
     async checkAuthentication() {
+      // 환경변수 기반 SSO 조건부 처리
+      const useSSO = process.env.VUE_APP_USE_SSO === 'true'
+      
       const token = localStorage.getItem('token');
       
       if (!token) {
-        this.isAuthenticated = false;
-        this.currentUser = null;
-        this.authChecked = true;
-        // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-        window.location.href = 'http://localhost:8000/api/auth/google/login';
-        return;
+        if (useSSO) {
+          this.isAuthenticated = false;
+          this.currentUser = null;
+          this.authChecked = true;
+          // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
+          window.location.href = 'http://localhost:8000/api/auth/google/login';
+          return;
+        } else {
+          // 개발 환경에서는 개발용 토큰 설정
+          console.log('개발 환경: 토큰이 없음, 개발용 토큰 설정')
+          const devToken = 'dev-token-' + Date.now()
+          const devUser = {
+            id: 'dev-user',
+            username: '개발자',
+            email: 'dev@example.com',
+            full_name: '개발자',
+            permission: 'admin',
+            is_active: true
+          }
+          localStorage.setItem('token', devToken)
+          localStorage.setItem('user', JSON.stringify(devUser))
+          this.isAuthenticated = true;
+          this.currentUser = devUser;
+          this.authChecked = true;
+          return;
+        }
       }
       
       try {
@@ -285,27 +308,71 @@ export default {
           this.currentUser = response.data.user;
           // 로그인 상태가 확인되면 로그인 모달이 표시되지 않도록 설정
           this.showLoginModal = false;
+
+          // 최초 로그인 시에만 패치노트 표시 (localStorage로 확인)
+          const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
+          if (!hasSeenPatchNote) {
+            this.showPatchNote = true;
+            localStorage.setItem('patchNoteSeen', 'true');
+          }
         } else {
+          if (useSSO) {
+            this.isAuthenticated = false;
+            this.currentUser = null;
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
+            window.location.href = 'http://localhost:8000/api/auth/google/login';
+          } else {
+            // 개발 환경에서는 개발용 토큰 재설정
+            console.log('개발 환경: 토큰 검증 실패, 개발용 토큰 재설정')
+            const devToken = 'dev-token-' + Date.now()
+            const devUser = {
+              id: 'dev-user',
+              username: '개발자',
+              email: 'dev@example.com',
+              full_name: '개발자',
+              permission: 'admin',
+              is_active: true
+            }
+            localStorage.setItem('token', devToken)
+            localStorage.setItem('user', JSON.stringify(devUser))
+            this.isAuthenticated = true;
+            this.currentUser = devUser;
+          }
+        }
+      } catch (error) {
+        console.error('Authentication check error:', error);
+        
+        if (useSSO) {
           this.isAuthenticated = false;
           this.currentUser = null;
           localStorage.removeItem('token');
           localStorage.removeItem('user');
-          // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-          window.location.href = 'http://localhost:8000/api/auth/google/login';
-        }
-      } catch (error) {
-        console.error('Authentication check error:', error);
-        this.isAuthenticated = false;
-        this.currentUser = null;
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        
-        // Check if it's a network error
-        if (error.code === 'ERR_NETWORK') {
-          this.serverError = true;
+          
+          // Check if it's a network error
+          if (error.code === 'ERR_NETWORK') {
+            this.serverError = true;
+          } else {
+            // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
+            window.location.href = 'http://localhost:8000/api/auth/google/login';
+          }
         } else {
-          // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-          window.location.href = 'http://localhost:8000/api/auth/google/login';
+          // 개발 환경에서는 네트워크 오류 시에도 개발용 토큰 설정
+          console.log('개발 환경: 네트워크 오류, 개발용 토큰 설정')
+          const devToken = 'dev-token-' + Date.now()
+          const devUser = {
+            id: 'dev-user',
+            username: '개발자',
+            email: 'dev@example.com',
+            full_name: '개발자',
+            permission: 'admin',
+            is_active: true
+          }
+          localStorage.setItem('token', devToken)
+          localStorage.setItem('user', JSON.stringify(devUser))
+          this.isAuthenticated = true;
+          this.currentUser = devUser;
         }
       }
       

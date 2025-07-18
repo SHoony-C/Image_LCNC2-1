@@ -144,7 +144,36 @@ async def get_nodes():
             "icon": "fas fa-object-group",
             "type": "image",
             "category": "utility"
-        }
+        },
+        # morphological operations 섹션에 추가
+        {
+            "id": "opening",
+            "label": "Opening",
+            "icon": "fas fa-expand-arrows-alt",
+            "type": "image",
+            "category": "morphological"
+        },
+        {
+            "id": "closing",
+            "label": "Closing",
+            "icon": "fas fa-compress-arrows-alt",
+            "type": "image",
+            "category": "morphological"
+        },
+        {
+            "id": "hrnet",
+            "label": "HRNet 세그멘테이션",
+            "icon": "fas fa-network-wired",
+            "type": "image",
+            "category": "segmentation"
+        },
+        {
+            "id": "unet_attention",
+            "label": "UNet + Attention",
+            "icon": "fas fa-brain",
+            "type": "image",
+            "category": "segmentation"
+        },
     ]
     
     defaultOptions = {
@@ -215,7 +244,47 @@ async def get_nodes():
             "options": {
                 "operation": ["average", "max", "min"]
             }
-        }
+        },
+
+        "opening": {
+            "kernel_size": 5,
+            "kernel_type": "rect",
+            "options": {
+                "kernel_size": [3, 5, 7, 9, 11, 13, 15],
+                "kernel_type": ["rect", "ellipse", "cross"]
+            }
+        },
+        "closing": {
+            "kernel_size": 5,
+            "kernel_type": "rect",
+            "options": {
+                "kernel_size": [3, 5, 7, 9, 11, 13, 15],
+                "kernel_type": ["rect", "ellipse", "cross"]
+            }
+        },
+        # AI 기반 세그멘테이션 섹션에 추가
+        "hrnet": {
+            "model_size": "hrnet18",
+            "confidence_threshold": 0.5,
+            "output_mode": "segmentation",
+            "options": {
+                "model_size": ["hrnet18", "hrnet32", "hrnet48"],
+                "output_mode": ["segmentation", "keypoints", "pose"],
+                "confidence_threshold": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+            }
+        },
+        "unet_attention": {
+            "attention_type": "self",
+            "attention_heads": 8,
+            "dropout_rate": 0.1,
+            "output_channels": 1,
+            "options": {
+                "attention_type": ["self", "cross", "spatial"],
+                "attention_heads": [1, 2, 4, 8, 16],
+                "dropout_rate": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
+                "output_channels": [1, 2, 3, 4, 5]
+            }
+        },
     }
     
     return {
@@ -457,7 +526,22 @@ async def get_workflow_by_hash(image_hash: str):
                 "label": "이미지 병합",
                 "icon": "fas fa-object-group",
                 "category": "utility"
-            }
+            },
+            # AI 기반 세그멘테이션 섹션에 추가
+            {
+                "id": "hrnet",
+                "label": "HRNet 세그멘테이션",
+                "icon": "fas fa-network-wired",
+                "type": "image",
+                "category": "segmentation"
+            },
+            {
+                "id": "unet_attention",
+                "label": "UNet + Attention",
+                "icon": "fas fa-brain",
+                "type": "image",
+                "category": "segmentation"
+            },
         ]
         
         print(f"available-nodes 응답: {nodes}")

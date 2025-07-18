@@ -5244,9 +5244,17 @@ export default {
         // A키: 영역 선 측정 모드 (한번 더 누르면 수직/수평 방향 전환)
         if (key === 'a') {
           e.preventDefault();
-          if (this.measurementMode === 'area') {
+          if (this.measurementMode === 'area' || this.measurementMode === 'area-vertical' || this.measurementMode === 'area-horizontal') {
             // 이미 영역 모드인 경우 방향 전환
             this.areaDirection = this.areaDirection === 'horizontal' ? 'vertical' : 'horizontal';
+            
+            // 방향에 따라 구체적인 모드 설정
+            if (this.areaDirection === 'horizontal') {
+              this.measurementMode = 'area-horizontal';
+            } else {
+              this.measurementMode = 'area-vertical';
+            }
+            
             this.showNotification(`영역 측정 방향: ${this.areaDirection === 'horizontal' ? '수평' : '수직'}`, 'info');
           } else {
             // 영역 모드 활성화
