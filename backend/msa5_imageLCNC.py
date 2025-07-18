@@ -202,8 +202,10 @@ async def get_nodes():
         # SAM2 세그멘테이션
         "sam2": {
             "alpha": 1.0,  # 마스크 오버레이 투명도 (0.0 = 투명, 1.0 = 불투명)
+            "mask_color_mode": "Multi-Color",  # 마스크 색상 모드 추가
             "options": {
-                "alpha": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+                "alpha": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+                "mask_color_mode": ["Multi-Color", "All-White"]  # 색상 모드 옵션 추가
             }
         },
         

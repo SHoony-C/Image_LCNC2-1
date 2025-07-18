@@ -1318,7 +1318,6 @@ select.param-input {
 
 .workflow-node {
   min-width: 80px;
-  max-width: 120px;
   padding: 8px 12px;
   background: white;
   border: 1px solid #e5e7eb;

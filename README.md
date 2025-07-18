@@ -1,3 +1,216 @@
+![image](https://github.com/user-attachments/assets/e1fbfc5c-7b05-4338-921b-a1b4d64b29a4)
+![image](https://github.com/user-attachments/assets/cb6d3b57-c44d-44ed-9aa6-289a0c8d34a0)
+
+
+<style scoped>
+/* Global container styles */
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+*, *:before, *:after {
+  box-sizing: inherit;
+}
+
+.main-view {
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.main-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Content area styles */
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+  height: calc(100vh - 55px); /* Account for header height */
+  width: 100%;
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* MSA Grid layout - exact height calculation */
+.msa-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-rows: minmax(300px, 1fr) minmax(300px, 1fr); /* 최소 높이 설정 */
+  height: calc(100vh - 180px);
+  width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+  position: relative;
+  contain: layout style; /* 레이아웃 계산 최적화 */
+}
+
+.top-row, .bottom-row {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(200px, 1fr) minmax(400px, 2fr) minmax(200px, 1fr); /* 최소 너비 설정 */
+  height: 100%;
+  width: 100%;
+  position: relative;
+  contain: layout style; /* 레이아웃 계산 최적화 */
+}
+
+.msa-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box; /* 박스 크기 계산 방식 명확히 */
+}
+
+.msa3 {
+  display: block !important; /* flex에서 block으로 변경하여 크기 계산 방식 단순화 */
+  background-color: white !important;
+  height: 100% !important;
+  width: 100% !important;
+  z-index: 1;
+  position: relative;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  /* 레이아웃 계산 안정화를 위한 추가 속성 */
+  contain: layout style; /* 성능 최적화 및 리플로우 제한 */
+  box-sizing: border-box;
+}
+
+.msa3-wrapper {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  display: block; /* flex에서 block으로 변경 */
+  position: relative;
+  padding: 0 !important;
+  margin: 0 !important;
+  /* 레이아웃 계산 안정화를 위한 추가 속성 */
+  contain: layout style; /* 성능 최적화 및 리플로우 제한 */
+  box-sizing: border-box;
+}
+
+/* Sidebar styles */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: -300px;
+  width: 300px;
+  height: 100vh;
+  background: white;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+  transition: left 0.3s ease;
+  z-index: 1000;
+}
+
+.sidebar-open {
+  left: 0;
+}
+
+.sidebar-header {
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+}
+
+.sidebar-header h3 {
+  margin: 0;
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.sidebar-nav {
+  padding: 0.5rem;
+}
+
+.nav-item {
+  display: block;
+  padding: 0.75rem;
+  color: #333;
+  text-decoration: none;
+  transition: background 0.2s;
+  border-radius: 4px;
+}
+
+.nav-item:hover {
+  background: #f5f5f5;
+}
+
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+}
+
+/* Mobile header */
+.mobile-header {
+  display: none;
+  padding: 0.75rem;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.hamburger-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 1200px) {
+  .mobile-header {
+    display: block;
+  }
+  
+  .top-row,
+  .bottom-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .msa-grid {
+    grid-template-rows: 1fr;
+    height: auto;
+  }
+}
+</style> 
+
+
+
+
+
+
 
 ## Done List
 ```

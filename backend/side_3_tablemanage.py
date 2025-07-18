@@ -124,9 +124,9 @@ async def get_table_data(
         # 권한 확인 제거 - 모든 사용자가 같은 데이터 조회 가능
         # 분석 타입에 따른 데이터 조회
         if analysis_type == "measurement":
-            data = get_measurement_table_data(actual_table_name, date_from, date_to, lot_wafer_search)
+            data = get_measurement_table_data(actual_table_name, date_from, date_to, lot_wafer_search, table_name)
         elif analysis_type == "defect":
-            data = get_defect_table_data(actual_table_name, date_from, date_to, lot_wafer_search)
+            data = get_defect_table_data(actual_table_name, date_from, date_to, lot_wafer_search, table_name)
         
         logger.info(f"Retrieved {len(data)} records from {actual_table_name}")
         
@@ -236,11 +236,11 @@ def update_generic_record(conn, table_name: str, columns: List[str], update_data
         logger.error(f"Params: {params}")
         return 0
 
-def get_measurement_table_data(table_name: str, date_from: Optional[str] = None, date_to: Optional[str] = None, lot_wafer_search: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_measurement_table_data(table_name: str, date_from: Optional[str] = None, date_to: Optional[str] = None, lot_wafer_search: Optional[str] = None, filter_table_name: Optional[str] = None) -> List[Dict[str, Any]]:
     """측정 데이터 조회 (범용) - 모든 사용자 데이터 조회"""
     try:
         logger.info(f"=== get_measurement_table_data START ===")
-        logger.info(f"Parameters: table_name={table_name}, date_from={date_from}, date_to={date_to}, lot_wafer_search={lot_wafer_search}")
+        logger.info(f"Parameters: table_name={table_name}, date_from={date_from}, date_to={date_to}, lot_wafer_search={lot_wafer_search}, filter_table_name={filter_table_name}")
         
         conn = lcnc_sql["engine"].connect()
         
@@ -279,6 +279,14 @@ def get_measurement_table_data(table_name: str, date_from: Optional[str] = None,
         query_str = f"SELECT {', '.join(select_fields)} FROM {table_name} WHERE 1=1"
         params = {}
         
+        # table_name 컬럼 필터 추가
+        if filter_table_name and 'table_name' in columns:
+            query_str += " AND table_name = :filter_table_name"
+            params["filter_table_name"] = filter_table_name
+            logger.info(f"Added table_name filter: {filter_table_name}")
+        
+
+
         # 날짜 컬럼 확인 및 필터 적용
         date_column = None
         if 'create_time' in columns:
@@ -346,9 +354,9 @@ def get_measurement_table_data(table_name: str, date_from: Optional[str] = None,
         logger.error(f"Exception details: {type(e).__name__}: {str(e)}")
         return []
 
-def get_defect_table_data(table_name: str, date_from: Optional[str] = None, date_to: Optional[str] = None, lot_wafer_search: Optional[str] = None) -> List[Dict[str, Any]]:
+def get_defect_table_data(table_name: str, date_from: Optional[str] = None, date_to: Optional[str] = None, lot_wafer_search: Optional[str] = None, filter_table_name: Optional[str] = None) -> List[Dict[str, Any]]:
     """불량 감지 데이터 조회 (범용) - measurement와 동일한 로직 사용"""
-    return get_measurement_table_data(table_name, date_from, date_to, lot_wafer_search)
+    return get_measurement_table_data(table_name, date_from, date_to, lot_wafer_search, filter_table_name)
 
 @router.get("/tables")
 async def get_available_tables():

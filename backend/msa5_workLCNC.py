@@ -1019,12 +1019,13 @@ async def process_sam2(image: UploadFile = File(...), params: str = Form(...)):
         
         # 파라미터 추출
         alpha = float(params.get("alpha", 0.6))  # 알파 블렌딩 값 추가
+        mask_color_mode = params.get("mask_color_mode", "Multi-Color")  # 마스크 색상 모드 추가
+
         points = params.get("points", [])
         point_labels = params.get("point_labels", [])
         boxes = params.get("boxes", [])
         
         print(f"[SAM2] 처리 시작 - 알파: {alpha}, 포인트: {len(points)}, 포인트 라벨: {len(point_labels)}, 박스: {len(boxes)}")
-        
         # SAM2 관련 라이브러리 임포트
         try:
             import torch
@@ -1073,19 +1074,30 @@ async def process_sam2(image: UploadFile = File(...), params: str = Form(...)):
                     colored_mask = np.zeros((height, width, 3), dtype=np.uint8)
                     
                     # 색상 팔레트
-                    colors = [
-                        [255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [255, 0, 255],
-                        [0, 255, 255], [255, 128, 0], [255, 0, 128], [128, 255, 0], [0, 255, 128],
-                        [128, 0, 255], [0, 128, 255], [255, 128, 128], [128, 255, 128], [128, 128, 255]
-                    ]
+                    if mask_color_mode == "All-White":
+                        # All White 모드: 모든 마스크를 흰색으로
+                        colors = [[255, 255, 255]]  # 흰색만
+                    else:
+                        # Multi Color 모드: 기존 다색 팔레트
+                        colors = [
+                            [255, 0, 0], [0, 255, 0], [0, 0, 255], [255, 255, 0], [255, 0, 255],
+                            [0, 255, 255], [255, 128, 0], [255, 0, 128], [128, 255, 0], [0, 255, 128],
+                            [128, 0, 255], [0, 128, 255], [255, 128, 128], [128, 255, 128], [128, 128, 255]
+                        ]
                     
                     # 생성된 마스크들을 색상으로 표시
                     for i, mask_data in enumerate(masks):
-                        if i >= len(colors):
-                            break
-                        mask = mask_data['segmentation']
-                        color = colors[i % len(colors)]
-                        colored_mask[mask] = color
+                        if mask_color_mode == "All-White":
+                            # All White 모드: 모든 마스크를 흰색으로
+                            mask = mask_data['segmentation']
+                            colored_mask[mask] = [255, 255, 255]  # 흰색
+                        else:
+                            # Multi Color 모드: 기존 로직
+                            if i >= len(colors):
+                                break
+                            mask = mask_data['segmentation']
+                            color = colors[i % len(colors)]
+                            colored_mask[mask] = color
                     
                     # 원본 이미지와 마스크 오버레이 (사용자 지정 알파 값 사용)
                     result_array = (image_array * (1 - alpha) + colored_mask * alpha).astype(np.uint8)

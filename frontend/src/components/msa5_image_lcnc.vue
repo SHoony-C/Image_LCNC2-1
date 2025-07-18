@@ -6,7 +6,7 @@
         <span>Smart Image Preprocessor</span>
       </div>
       <div class="header-right">
-        <button @click="() => { console.log('저장 버튼 클릭됨'); openWorkflowSaveDialog(); }" class="save-btn" :disabled="processingStatus !== 'completed'" title="현재 워크플로우 저장">
+        <button @click="() => { console.log('저장 버튼 클릭됨'); openWorkflowSaveDialog(); }" class="save-btn" :disabled="!canSaveWorkflow || processingStatus !== 'completed'" title="현재 워크플로우 저장">
           <i class="fas fa-save"></i>
           저장
         </button>
@@ -583,6 +583,9 @@ export default {
       
       // 입력/출력 연결 상태 업데이트
       updateConnections()
+      canSaveWorkflow.value = false; // 워크플로우 변경 시 저장 비활성화
+      processingStatus.value = 'idle'; // 저장버튼 비활성화
+
     }
     
     // 선택한 엣지(연결선) 삭제
@@ -605,7 +608,9 @@ export default {
       
       // 입력/출력 연결 상태 업데이트
       updateConnections()
-      
+      canSaveWorkflow.value = false; // 워크플로우 변경 시 저장 비활성화
+      processingStatus.value = 'idle'; // 저장버튼 비활성화
+
       //console.log('엣지 삭제 완료')
     }
 
@@ -750,6 +755,9 @@ export default {
             selectedNode.value = addedNode
           }
         }, 100)
+        canSaveWorkflow.value = false; // 워크플로우 변경 시 저장 비활성화
+        processingStatus.value = 'idle'; // 저장버튼 비활성화
+
       } catch (error) {
         console.error('노드 드롭 처리 중 오류:', error)
       }
@@ -2330,7 +2338,9 @@ export default {
       
       // 연결 상태 업데이트
       updateConnections();
-      
+      canSaveWorkflow.value = false; // 워크플로우 변경 시 저장 비활성화
+      processingStatus.value = 'idle'; // 저장버튼 비활성화
+
       //console.log(`연결 생성됨: ${params.source} -> ${params.target}`)
     }
     

@@ -57,6 +57,12 @@
         @close="showLoginModal = false"
         @login-success="handleLoginSuccess"
       />
+
+      <!-- 패치노트 팝업 -->
+      <PatchNoteModal 
+        :show="showPatchNote" 
+        @close="showPatchNote = false"
+      />
     </div>
   </div>
 </template>
@@ -72,6 +78,7 @@ import LoginModal from '@/components/login_modal.vue'
 import ServerConnectionError from '@/components/ServerConnectionError.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import axios from 'axios'
+import PatchNoteModal from '@/components/PatchNoteModal.vue'
 
 // Add click-outside directive
 const clickOutside = {
@@ -99,7 +106,8 @@ export default {
     MSA6FinalResult,
     LoginModal,
     ServerConnectionError,
-    AppHeader
+    AppHeader,
+    PatchNoteModal
   },
   directives: {
     clickOutside
@@ -113,7 +121,8 @@ export default {
       authChecked: false,
       serverError: false,
       showUserMenu: false,
-      resizeObserverTimeout: null
+      resizeObserverTimeout: null,
+      showPatchNote: true
     }
   },
   created() {
