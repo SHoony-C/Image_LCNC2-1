@@ -157,7 +157,7 @@ export default {
         const base64Data = imageUrl.split(',')[1]
         
         // MSA2의 Base64 유사 이미지 검색 API 호출
-        const response = await fetch('https://10.172.107.194/api/imageprocess/similar-images-base64', {
+        const response = await fetch('http://localhost:8000/api/imageprocess/similar-images-base64', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -211,13 +211,35 @@ export default {
           // console.log('[MSA1] 유사 이미지 데이터가 MSA2로 전송됨')
           
           // MSA3에 유사 이미지 데이터 전송 (이미지 디스플레이용)
+          // 원본 이미지와 동일한 파일명을 가진 이미지 필터링
+          const filteredSimilarImages = data.similar_images.filter(img => {
+            // 원본 이미지와 동일한 파일명인 경우 제외
+            if (img.filename === filename) {
+              console.log(`MSA1: 원본 이미지 제외: ${img.filename}`);
+              return false;
+            }
+            
+            // 파일명이 유사한 경우도 제외 (확장자 제외한 부분이 동일한 경우)
+            const originalName = filename.split('.')[0];
+            const similarName = img.filename.split('.')[0];
+            if (originalName === similarName) {
+              console.log(`MSA1: 원본 이미지와 유사한 파일명 제외: ${img.filename}`);
+              return false;
+            }
+            
+            return true;
+          });
+          
+          console.log(`MSA1: 필터링 후 유사 이미지 수: ${filteredSimilarImages.length}개 (원본: ${data.similar_images.length}개)`);
+          
           const msa3Event = new CustomEvent('msa1-to-msa3-similar-images', {
             detail: {
               mainImage: {
                 filename: filename,
-                url: imageUrl
+                url: imageUrl,
+                fromMSA1: true
               },
-              similarImages: data.similar_images
+              similarImages: filteredSimilarImages
             }
           })
           document.dispatchEvent(msa3Event)
@@ -266,7 +288,7 @@ export default {
         // ─── 2) 서버에 업로드 & 변환 ───────────────────────────────
         const form = new FormData()
         form.append('file', blob, filename)
-        const resp = await fetch('https://10.172.107.194/api/msa1/upload', {
+        const resp = await fetch('http://localhost:8000/api/msa1/upload', {
           method: 'POST',
           body: form,
         })
