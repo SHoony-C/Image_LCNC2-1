@@ -5,10 +5,10 @@
         <i class="fas fa-image"></i>
         <span>Smart Image Preprocessor</span>
       </div>
-      <div class="header-right">
+      <div class="msa5-header-right">
         <button @click="() => { console.log('저장 버튼 클릭됨'); openWorkflowSaveDialog(); }" class="save-btn" :disabled="!canSaveWorkflow || processingStatus !== 'completed'" title="현재 워크플로우 저장">
           <i class="fas fa-save"></i>
-          저장
+          Process 저장
         </button>
         <button @click="processStart" class="process-btn" :disabled="!inputImage">
           <i class="fas fa-play-circle"></i>
@@ -62,8 +62,8 @@
             <div class="merge-node-preview">
               <div class="diamond-preview">
                 <i class="fas fa-object-group"></i>
+                <span>이미지 병합</span>
               </div>
-              <span>이미지 병합</span>
             </div>
             <div class="merge-node-desc">
               여러 이미지를 하나로 병합합니다 (최대 5개 입력)
@@ -77,14 +77,15 @@
         <div class="workflow-error-highlight" v-if="processingStatus === 'error'"></div>
 
         <VueFlow v-model="elements" 
-          :default-viewport="{ x: 0, y: 0, zoom: 0.7 }"
-          :style="{ width: '100%', height: 'calc(100% - 40px)' }"
+          :default-viewport="{ x: 0, y: 0, zoom: 0.5 }"
+          :style="{ width: '100%', height: '100%' }"
+          :fit-view-on-init="false"
           @connect="onConnect" @node-drag-stop="onNodeDragStop" @node-click="onNodeClick" @edge-click="onEdgeClick"
           :min-zoom="0.2" :max-zoom="2" :snap-to-grid="true" :snap-grid="[15, 15]"
-          :fit-view-on-init="true"
           :auto-connect="false"
           @pane-ready="onPaneReady"
-          @init="onInit">
+          @init="onInit"
+        >
           <Background pattern-color="#aaa" gap="8" />
           <Controls />
           <MiniMap 
@@ -281,7 +282,7 @@
           </div>
           <div class="dialog-footer">
             <button class="cancel-btn" @click="cancelSaveWorkflow">취소</button>
-            <button class="save-btn" @click="confirmSaveWorkflow">저장</button>
+            <button class="save-btn-popup" @click="confirmSaveWorkflow">저장</button>
           </div>
         </div>
       </div>
@@ -538,7 +539,6 @@ export default {
         console.log('MSA6 팝업이 열려있어 실행 취소가 차단되었습니다.');
         return;
       }
-      
       if (undoStack.value.length === 0) return
       
       // 현재 상태를 redo 스택에 저장
@@ -1593,10 +1593,15 @@ export default {
           formData.append('format', imageFormat);
           //console.log(`[processNode] 원본 이미지 형식 파라미터 추가: ${imageFormat}`);
         }
-        
         // 백엔드 API 호출 - 노드 타입에 맞는 엔드포인트 사용
-        const apiUrl = `http://localhost:8000/api/msa5/work/${nodeType}`;
-        //console.log(`[processNode] 요청 URL: ${apiUrl}, 파일명: ${fileName}`);
+        let apiUrl;
+        if (nodeType === 'sam2') {
+          apiUrl = `https://10.166.218.74/itap/api/msa5/work/sam2`;
+        }
+        else {
+          apiUrl = `https://10.172.107.194/api/msa5/work/${nodeType}`;
+        }
+        console.log(`[processNode] 요청 URL: ${apiUrl}, 파일명: ${fileName}`);
         //console.log(`[processNode] 노드 타입 확인 - 최종: ${nodeType}, 원본: ${originalNodeType}`);
         
         // SAM2 노드의 경우 추가 로깅
@@ -1867,7 +1872,7 @@ export default {
         //console.log(`[processMergeNode] 병합 API 요청 준비, 출력 형식: ${primaryImageFormat || 'png'}`);
         
         // 백엔드 API 호출
-        const apiUrl = `http://localhost:8000/api/msa5/work/merge`;
+        const apiUrl = `https://10.172.107.194/api/msa5/work/merge`;
         const apiResponse = await fetch(apiUrl, {
           method: 'POST',
           body: formData
@@ -2226,7 +2231,7 @@ export default {
     const checkSavedWorkflow = async (imageHash) => {
       try {
         // 백엔드 API를 통해 해당 이미지 해시로 저장된 워크플로우 조회
-        const response = await fetch(`http://localhost:8000/api/lcnc/get-workflow-by-hash/${imageHash}`, {
+        const response = await fetch(`https://10.172.107.194/api/lcnc/get-workflow-by-hash/${imageHash}`, {
           method: 'GET',
           headers: {
             'Accept': 'application/json'
@@ -2427,7 +2432,7 @@ export default {
       // 중복 이름 확인을 위해 API 호출
       try {
         // 중복 확인 API 호출
-        const checkResponse = await fetch('http://localhost:8000/api/external_storage/check-title', {
+        const checkResponse = await fetch('https://10.172.107.194/api/external_storage/check-title', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -2464,7 +2469,7 @@ export default {
       if (!sessionId) return;
       
       try {
-        const response = await fetch(`http://localhost:8000/api/msa5/get-workflow/${sessionId}`);
+        const response = await fetch(`https://10.172.107.194/api/msa5/get-workflow/${sessionId}`);
         
         if (response.ok) {
           const data = await response.json();
@@ -2570,7 +2575,7 @@ export default {
       
       try {
         // 백엔드 API에서 노드 목록 로드 시도
-        const apiUrl = 'http://localhost:8000/api/msa5/nodes';
+        const apiUrl = 'https://10.172.107.194/api/msa5/nodes';
         //console.log(`API 호출 URL: ${apiUrl}`);
         
         // fetch API 호출 전에 로그 출력
@@ -2749,6 +2754,14 @@ export default {
 
     // 워크플로우 저장 기능 (저장 대화상자 열기)
     const saveWorkflow = async () => {
+      newWorkflowName.value = newWorkflowName.value
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_')         // 띄어쓰기 → _
+        .replace(/[^\w_]/g, '');      // 특수 문자 제거
+      console.log('워크플로우 저장 기능 - 변환된 이름:', newWorkflowName.value);
+
+
       if (!workflowName.value) {
         showStatusMessage.value = true;
         statusMessage.value = '워크플로우 이름을 입력하세요.';
@@ -2769,7 +2782,7 @@ export default {
           workflowToSave.nodes_summary = nodesSummary;
         }
         
-        const response = await fetch('http://localhost:8000/api/msa5/save-workflow', {
+        const response = await fetch('https://10.172.107.194/api/msa5/save-workflow', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -2827,10 +2840,18 @@ export default {
         showDuplicateNameError.value = true;
         return;
       }
+
+      newWorkflowName.value = newWorkflowName.value
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_')         // 띄어쓰기 → _
+        .replace(/[^\w_]/g, '');      // 특수 문자 제거
+      console.log('새 이름으로 저장 적용 - 변환된 이름:', newWorkflowName.value);
+
       
       try {
         // 중복 확인 API 호출
-        const checkResponse = await fetch('http://localhost:8000/api/external_storage/check-title', {
+        const checkResponse = await fetch('https://10.172.107.194/api/external_storage/check-title', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -3058,7 +3079,7 @@ export default {
         try {
           // 1. JSON 방식으로 시도
           //console.log('JSON 방식으로 이미지 저장 시도...');
-          const response = await fetch('http://localhost:8000/api/external_storage/save-images', {
+          const response = await fetch('https://10.172.107.194/api/external_storage/save-images', {
                 method: 'POST',
                 headers: {
               'Content-Type': 'application/json',
@@ -3163,7 +3184,7 @@ export default {
             //console.log('FormData 구성 완료, API 요청 시작...');
             
             // API 호출
-            const formResponse = await fetch('http://localhost:8000/api/external_storage/upload-file', {
+            const formResponse = await fetch('https://10.172.107.194/api/external_storage/upload-file', {
             method: 'POST',
               mode: 'cors',
               credentials: 'include',
@@ -3883,6 +3904,16 @@ export default {
         return;
       }
       
+
+      // #여기 변환해야해
+      newWorkflowName.value = newWorkflowName.value
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '_')         // 띄어쓰기 → _
+        .replace(/[^\w_]/g, '');      // 특수 문자 제거
+      console.log('워크플로우 서버에 저장 - 변환된 이름:', newWorkflowName.value);
+
+
       try {
         // 워크플로우 데이터 준비
         const workflowToSave = {
@@ -3898,7 +3929,7 @@ export default {
         }
         
         // 워크플로우 저장 API 호출
-        const response = await fetch('http://localhost:8000/api/msa5/save-workflow', {
+        const response = await fetch('https://10.172.107.194/api/msa5/save-workflow', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -3983,7 +4014,7 @@ export default {
                 //console.log('- After 이미지:', afterImageBase64 ? '성공' : '실패');
                 
                 // 이미지 저장 API 호출 (JSON 방식)
-                const imageResponse = await fetch('http://localhost:8000/api/external_storage/save-images', {
+                const imageResponse = await fetch('https://10.172.107.194/api/external_storage/save-images', {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',

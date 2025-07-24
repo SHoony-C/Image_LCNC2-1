@@ -19,7 +19,7 @@ try:
     import umap
     import umap.umap_ as umap
     UMAP_AVAILABLE = True
-    print("[DEBUG] UMAP successfully imported")
+    # print("[DEBUG] UMAP successfully imported")
 except ImportError:
     print("[DEBUG] UMAP not available, using fallback method")
 
@@ -41,7 +41,7 @@ def initialize_resnet():
     global resnet_model, resnet_transform
     
     if resnet_model is None:
-        print("[RESNET] ResNet50 모델 로딩 중...")
+        # print("[RESNET] ResNet50 모델 로딩 중...")
         resnet_model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V2)
         resnet_model.eval()
         
@@ -52,7 +52,7 @@ def initialize_resnet():
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
-        print("[RESNET] ResNet50 모델 로딩 완료")
+        # print("[RESNET] ResNet50 모델 로딩 완료")
 
 class ResNetFeatureExtractor:
     def __init__(self, model):
@@ -91,7 +91,7 @@ def extract_resnet_features_from_base64(base64_data):
         # 2048차원 벡터로 변환
         features_flat = features.view(-1).numpy()
         
-        print(f"[RESNET] Base64 이미지에서 특징 추출 완료: {len(features_flat)}차원")
+        # print(f"[RESNET] Base64 이미지에서 특징 추출 완료: {len(features_flat)}차원")
         return features_flat
         
     except Exception as e:
@@ -102,14 +102,14 @@ def reduce_to_3d_with_umap(high_dim_vector, reference_vectors=None):
     """UMAP을 사용하여 고차원 벡터를 3차원으로 축소합니다."""
     try:
         if not UMAP_AVAILABLE:
-            print("[UMAP] UMAP 사용 불가, 폴백 방법 사용")
+            # print("[UMAP] UMAP 사용 불가, 폴백 방법 사용")
             return reduce_to_3d_fallback(high_dim_vector)
         
         if reference_vectors is None or len(reference_vectors) == 0:
-            print("[UMAP] 참조 벡터 없음, 폴백 방법 사용")
+            # print("[UMAP] 참조 벡터 없음, 폴백 방법 사용")
             return reduce_to_3d_fallback(high_dim_vector)
         
-        print(f"[UMAP] 3D 축소 시작: {len(high_dim_vector)}차원 -> 3차원")
+        # print(f"[UMAP] 3D 축소 시작: {len(high_dim_vector)}차원 -> 3차원")
         
         # 참조 벡터들과 함께 UMAP 적용
         all_vectors = reference_vectors + [high_dim_vector]
@@ -130,7 +130,7 @@ def reduce_to_3d_with_umap(high_dim_vector, reference_vectors=None):
         # 마지막 벡터가 입력 벡터의 3D 좌표
         result_3d = reduced_vectors[-1].tolist()
         
-        print(f"[UMAP] 3D 축소 완료: {result_3d}")
+        # print(f"[UMAP] 3D 축소 완료: {result_3d}")
         return result_3d
         
     except Exception as e:
@@ -154,7 +154,7 @@ def reduce_to_3d_fallback(high_dim_vector):
         group3 = np.mean(vector_array[2*group_size:])
         
         result = [float(group1), float(group2), float(group3)]
-        print(f"[FALLBACK] 3D 축소 완료: {result}")
+        # print(f"[FALLBACK] 3D 축소 완료: {result}")
         return result
         
     except Exception as e:
@@ -164,12 +164,12 @@ def reduce_to_3d_fallback(high_dim_vector):
 def calculate_base64_image_vector(base64_data):
     """Base64 이미지 데이터에서 3차원 벡터를 계산합니다."""
     try:
-        print(f"[RESNET] Base64 이미지 벡터 계산 시작")
+        # print(f"[RESNET] Base64 이미지 벡터 계산 시작")
         
         # ResNet50 특징 추출
         features = extract_resnet_features_from_base64(base64_data)
         if features is None:
-            print(f"[ERROR] 특징 추출 실패")
+            # print(f"[ERROR] 특징 추출 실패")
             return None
         
         # 기존 벡터 데이터 로드 (참조용)
@@ -182,14 +182,14 @@ def calculate_base64_image_vector(base64_data):
                     existing_vectors = json.load(f)
                     # 3D 벡터들을 고차원으로 확장 (참조용)
                     reference_vectors = [v + [0.0] * (len(features) - len(v)) for v in existing_vectors if len(v) >= 3]
-                print(f"[RESNET] 참조 벡터 로드: {len(reference_vectors)}개")
+                # print(f"[RESNET] 참조 벡터 로드: {len(reference_vectors)}개")
             except Exception as e:
                 print(f"[ERROR] 참조 벡터 로드 실패: {str(e)}")
         
         # 3차원으로 축소
         vector_3d = reduce_to_3d_with_umap(features.tolist(), reference_vectors)
         
-        print(f"[RESNET] Base64 이미지 3D 벡터 계산 완료: {vector_3d}")
+        # print(f"[RESNET] Base64 이미지 3D 벡터 계산 완료: {vector_3d}")
         return vector_3d
         
     except Exception as e:
@@ -241,14 +241,14 @@ async def find_similar_images_base64(request_data: dict):
         if not base64_data:
             raise HTTPException(status_code=400, detail="image_data가 필요합니다")
         
-        print(f"[MAIN] Base64 유사 이미지 검색 시작: {filename}")
+        # print(f"[MAIN] Base64 유사 이미지 검색 시작: {filename}")
         
         # Base64 이미지에서 3D 벡터 계산
         uploaded_vector = calculate_base64_image_vector(base64_data)
         if uploaded_vector is None:
             raise HTTPException(status_code=500, detail="이미지 벡터 계산 실패")
         
-        print(f"[RESNET] 계산된 3D 벡터: {uploaded_vector}")
+        # print(f"[RESNET] 계산된 3D 벡터: {uploaded_vector}")
         
         # 기존 벡터 데이터 로드
         vectors_path = os.path.join(VECTORS_DIR, "processed_vectors.json")
@@ -263,7 +263,7 @@ async def find_similar_images_base64(request_data: dict):
                     vectors = json.load(f)
                 with open(metadata_path, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
-                print(f"[MAIN] 벡터 데이터 로드 완료: {len(vectors)}개 벡터, {len(metadata)}개 메타데이터")
+                # print(f"[MAIN] 벡터 데이터 로드 완료: {len(vectors)}개 벡터, {len(metadata)}개 메타데이터")
             except Exception as e:
                 print(f"[ERROR] 벡터 데이터 로드 실패: {str(e)}")
                 raise HTTPException(status_code=500, detail="벡터 데이터 로드 실패")
@@ -308,20 +308,20 @@ async def find_similar_images_base64(request_data: dict):
                     "tag_type": tag_type
                 })
                 
-                print(f"[RESNET] {filename_meta}: 거리={dist:.6f}, 태그={tag_type}")
+                # print(f"[RESNET] {filename_meta}: 거리={dist:.6f}, 태그={tag_type}")
                 
             except Exception as calc_error:
                 print(f"[ERROR] 거리 계산 오류 ({i}): {str(calc_error)}")
         
         # 거리 기준 정렬 (가까운 순)
         distances.sort(key=lambda x: x["distance"])
-        print(f"[RESNET] 거리 계산 완료: {len(distances)}개")
+        # print(f"[RESNET] 거리 계산 완료: {len(distances)}개")
         
         # 상위 5개 출력
-        print(f"[RESNET] 상위 5개 가장 유사한 이미지:")
+        # print(f"[RESNET] 상위 5개 가장 유사한 이미지:")
         for i, item in enumerate(distances[:5]):
             similarity = max(0, min(100, 100 * (1 / (1 + item["distance"]))))
-            print(f"  {i+1}. {item['filename']}: 거리={item['distance']:.6f}, 유사도={similarity:.2f}%, 태그={item['tag_type']}")
+            # print(f"  {i+1}. {item['filename']}: 거리={item['distance']:.6f}, 유사도={similarity:.2f}%, 태그={item['tag_type']}")
         
         # 태그별로 분류
         iapp_images = [item for item in distances if item["tag_type"] == "I-TAP"]
@@ -361,7 +361,7 @@ async def find_similar_images_base64(request_data: dict):
         # 전체 결과를 유사도 순으로 정렬
         similar_images.sort(key=lambda x: x["similarity"], reverse=True)
         
-        print(f"[RESNET] ✅ Base64 이미지 유사도 계산 완료: {len(similar_images)}개 결과")
+        # print(f"[RESNET] ✅ Base64 이미지 유사도 계산 완료: {len(similar_images)}개 결과")
         
         return {
             "status": "success",
@@ -389,7 +389,7 @@ async def receive_similar_image(data: dict):
         similarity = data.get("similarity")
         source_filename = data.get("source_filename")
         
-        print(f"[MSA2] 최유사 이미지 수신됨: {filename} (유사도: {similarity}%, 원본: {source_filename})")
+        # print(f"[MSA2] 최유사 이미지 수신됨: {filename} (유사도: {similarity}%, 원본: {source_filename})")
         
         # 프론트엔드로 이벤트 전송 (WebSocket 또는 다른 방법으로 구현 가능)
         # 여기서는 로그만 출력
