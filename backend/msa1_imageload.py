@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from typing import List, Dict, Any
 import os
 import shutil
@@ -23,22 +23,32 @@ async def upload_and_convert(
     try:
         # 1) 받는 파일을 메모리 버퍼로 읽기
         contents = await file.read()
+        print(f"Debug: content_type={file.content_type}, size={len(contents)} bytes")
+
+        # 2) Pillow로 이미지 열기
         input_buffer = io.BytesIO(contents)
+        input_buffer.seek(0)
+        with Image.open(input_buffer) as img:
+            print(f"Debug: format={img.format}, mode={img.mode}, size={img.size}")
 
-        # 2) Pillow로 열기 (TIFF 포함 대부분 포맷 지원)
-        img = Image.open(input_buffer)
+            # 3) 16비트 그레이스케일(I;16) 처리
+            if img.mode == "I;16":
+                # 픽셀값 i ∈ [0,65535] → i>>8 ∈ [0,255]
+                img = img.point(lambda i: i >> 8)
+                print("Debug: applied 16→8bit shift via point()")
 
-        # 3) RGBA 모드로 변환 (투명도 필요시)
-        if img.mode not in ("RGBA", "RGB"):
-            img = img.convert("RGBA")
+            # 4) 모든 모드를 RGB로 통일
+            img = img.convert("RGB")
+            print(f"Debug: final mode={img.mode}")
 
-        # 4) PNG 포맷으로 다시 메모리 버퍼에 저장
-        output_buffer = io.BytesIO()
-        img.save(output_buffer, format="PNG")
-        output_buffer.seek(0)
+            # 5) PNG로 저장
+            output_buffer = io.BytesIO()
+            img.save(output_buffer, format="PNG")
+        output_bytes = output_buffer.getvalue()
+        print(f"Debug: PNG header={output_bytes[:8]}, length={len(output_bytes)} bytes")
 
-        # 5) 클라이언트에 스트리밍으로 반환
-        return StreamingResponse(output_buffer, media_type="image/png")
+        # 6) 스트리밍 응답
+        return Response(content=output_bytes, media_type="image/png")
 
     except UnidentifiedImageError:
         raise HTTPException(
