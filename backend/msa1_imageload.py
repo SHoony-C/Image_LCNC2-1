@@ -1,30 +1,55 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi.responses import StreamingResponse
 from typing import List, Dict, Any
 import os
 import shutil
 from datetime import datetime
+from PIL import Image, UnidentifiedImageError
+import io
 
 router = APIRouter()
 
+
 @router.post("/upload")
-async def upload_image(file: UploadFile = File(...)):
+async def upload_and_convert(
+    file: UploadFile = File(...)
+):
+    """
+    - 클라이언트에서 업로드된 어떤 이미지(TIFF, JPEG, PNG 등)를
+    - 서버에서 PNG로 변환한 뒤
+    - 바로 바이너리 스트림으로 반환합니다.
+    """
+    # print('접속 성공')
     try:
-        # 원본 파일명 그대로 사용 (타임스탬프 제거)
-        filename = file.filename
-        file_path = os.path.join(UPLOAD_DIR, filename)
-        
-        # 같은 이름의 파일이 있으면 덮어쓰기
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        return {
-            "status": "success",
-            "message": "Image uploaded successfully",
-            "filename": filename,
-            "path": file_path
-        }
+        # 1) 받는 파일을 메모리 버퍼로 읽기
+        contents = await file.read()
+        input_buffer = io.BytesIO(contents)
+
+        # 2) Pillow로 열기 (TIFF 포함 대부분 포맷 지원)
+        img = Image.open(input_buffer)
+
+        # 3) RGBA 모드로 변환 (투명도 필요시)
+        if img.mode not in ("RGBA", "RGB"):
+            img = img.convert("RGBA")
+
+        # 4) PNG 포맷으로 다시 메모리 버퍼에 저장
+        output_buffer = io.BytesIO()
+        img.save(output_buffer, format="PNG")
+        output_buffer.seek(0)
+
+        # 5) 클라이언트에 스트리밍으로 반환
+        return StreamingResponse(output_buffer, media_type="image/png")
+
+    except UnidentifiedImageError:
+        raise HTTPException(
+            status_code=415,
+            detail="지원하지 않는 이미지 포맷입니다."
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500,
+            detail=f"이미지 변환 중 오류 발생: {e}"
+        )
 
 @router.get("/list")
 async def get_images():
@@ -41,3 +66,4 @@ async def get_images():
         return {"status": "success", "images": images}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
+

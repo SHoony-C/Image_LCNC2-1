@@ -637,41 +637,275 @@ export default {
         // 벡터 차원 확인
         const vectorDim = vectors[0].length;
         if (vectorDim < 3) {
-          throw new Error(`Vector dimension (${vectorDim}) is too small for 3D projection`);
+          console.warn(`Vector dimension (${vectorDim}) is too small for 3D projection, using fallback`);
+          return this.fallbackVectorProjection(vectors);
         }
 
-        // 벡터를 3개의 그룹으로 나누어 평균 계산
-        const projectedVectors = vectors.map(vec => {
-          const groupSize = Math.floor(vec.length / 3);
-          const groups = [
-            vec.slice(0, groupSize),
-            vec.slice(groupSize, 2 * groupSize),
-            vec.slice(2 * groupSize)
-          ];
-          
-          return groups.map(group => 
-            group.reduce((sum, val) => sum + (typeof val === 'number' ? val : 0), 0) / group.length
-          );
+        // 벡터 크기별 세밀한 처리
+        const projectedVectors = vectors.map((vec, index) => {
+          return this.processVectorBySize(vec, index);
         });
 
-        // 정규화
-        const dimensions = [0, 1, 2].map(dim => ({
-          min: Math.min(...projectedVectors.map(v => v[dim])),
-          max: Math.max(...projectedVectors.map(v => v[dim]))
-        }));
+        // 정규화 개선
+        const normalizedVectors = this.normalizeVectors(projectedVectors);
 
-        return projectedVectors.map(vec => 
-          vec.map((val, i) => {
-            const min = dimensions[i].min;
-            const max = dimensions[i].max;
-            return max > min ? (val - min) / (max - min) : 0.5;
-          })
+        // 모든 좌표가 0인 경우 방지
+        const hasNonZeroCoords = normalizedVectors.some(vec => 
+          vec.some(coord => coord !== 0)
         );
+        
+        if (!hasNonZeroCoords) {
+          console.warn('All coordinates are zero, using fallback projection');
+          return this.fallbackVectorProjection(vectors);
+        }
+
+        return normalizedVectors;
 
       } catch (error) {
         console.error('Error in vector projection:', error);
-        return vectors.map(() => [0.5, 0.5, 0.5]); // 에러 시 기본값 반환
+        return this.fallbackVectorProjection(vectors);
       }
+    },
+    
+    // 벡터 크기별 처리 함수
+    processVectorBySize(vec, index) {
+      const length = vec.length;
+      
+      // 1. 빈 벡터 처리
+      if (!vec || length === 0) {
+        return [0.1 + (index * 0.1), 0.2 + (index * 0.05), 0.3 + (index * 0.08)];
+      }
+      
+      // 2. 매우 작은 벡터 (1-2개 요소)
+      if (length <= 2) {
+        return this.processTinyVector(vec, index);
+      }
+      
+      // 3. 작은 벡터 (3-10개 요소)
+      if (length <= 10) {
+        return this.processSmallVector(vec);
+      }
+      
+      // 4. 중간 크기 벡터 (11-100개 요소)
+      if (length <= 100) {
+        return this.processMediumVector(vec);
+      }
+      
+      // 5. 큰 벡터 (100개 이상)
+      return this.processLargeVector(vec);
+    },
+    
+    // 매우 작은 벡터 처리
+    processTinyVector(vec, index) {
+      if (vec.length === 1) {
+        const val = parseFloat(vec[0]) || 0;
+        return [val, val * 0.7, val * 0.3];
+      } else if (vec.length === 2) {
+        const val1 = parseFloat(vec[0]) || 0;
+        const val2 = parseFloat(vec[1]) || 0;
+        return [val1, val2, (val1 + val2) / 2];
+      }
+      return [0.1 + (index * 0.1), 0.2 + (index * 0.05), 0.3 + (index * 0.08)];
+    },
+    
+    // 작은 벡터 처리 (3-10개 요소)
+    processSmallVector(vec) {
+      const length = vec.length;
+      
+      if (length === 3) {
+        return [
+          parseFloat(vec[0]) || 0,
+          parseFloat(vec[1]) || 0,
+          parseFloat(vec[2]) || 0
+        ];
+      }
+      
+      if (length <= 5) {
+        // 첫 3개 값 사용
+        return [
+          parseFloat(vec[0]) || 0,
+          parseFloat(vec[1]) || 0,
+          parseFloat(vec[2]) || 0
+        ];
+      }
+      
+      // 6-10개인 경우 균등 분할
+      const groupSize = Math.floor(length / 3);
+      const remainder = length % 3;
+      
+      const groups = [];
+      let startIdx = 0;
+      
+      for (let i = 0; i < 3; i++) {
+        if (i < remainder) {
+          groups.push(vec.slice(startIdx, startIdx + groupSize + 1));
+          startIdx += groupSize + 1;
+        } else {
+          groups.push(vec.slice(startIdx, startIdx + groupSize));
+          startIdx += groupSize;
+        }
+      }
+      
+      return groups.map(group => {
+        const sum = group.reduce((acc, val) => acc + (typeof val === 'number' ? val : 0), 0);
+        const avg = group.length > 0 ? sum / group.length : 0;
+        return isNaN(avg) ? 0 : avg;
+      });
+    },
+    
+    // 중간 크기 벡터 처리 (11-100개 요소)
+    processMediumVector(vec) {
+      const length = vec.length;
+      
+      // 가중치 기반 분할
+      const weights = [];
+      for (let i = 0; i < length; i++) {
+        weights.push(0.5 + (i / length) * 1.0); // 0.5 ~ 1.5 범위
+      }
+      
+      const weightedVec = vec.map((val, i) => (parseFloat(val) || 0) * weights[i]);
+      
+      // 3개 그룹으로 분할
+      const groupSize = Math.floor(length / 3);
+      const remainder = length % 3;
+      
+      const groups = [];
+      let startIdx = 0;
+      
+      for (let i = 0; i < 3; i++) {
+        if (i < remainder) {
+          groups.push(weightedVec.slice(startIdx, startIdx + groupSize + 1));
+          startIdx += groupSize + 1;
+        } else {
+          groups.push(weightedVec.slice(startIdx, startIdx + groupSize));
+          startIdx += groupSize;
+        }
+      }
+      
+      return groups.map(group => {
+        if (group.length === 0) return 0;
+        
+        const mean = group.reduce((sum, val) => sum + val, 0) / group.length;
+        const variance = group.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / group.length;
+        const std = Math.sqrt(variance);
+        
+        // 평균과 표준편차를 결합
+        return mean + std * 0.1;
+      });
+    },
+    
+    // 큰 벡터 처리 (100개 이상)
+    processLargeVector(vec) {
+      const length = vec.length;
+      
+      // 통계 계산
+      const values = vec.map(val => parseFloat(val) || 0);
+      const mean = values.reduce((sum, val) => sum + val, 0) / length;
+      const variance = values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / length;
+      const std = Math.sqrt(variance);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      
+      // 3개 구간으로 분할
+      const startSize = Math.floor(length / 4);
+      const endSize = Math.floor(length / 4);
+      const middleSize = length - startSize - endSize;
+      
+      const startSection = values.slice(0, startSize);
+      const middleSection = values.slice(startSize, startSize + middleSize);
+      const endSection = values.slice(startSize + middleSize);
+      
+      // 각 구간의 특성 계산
+      const calculateSectionFeatures = (section) => {
+        if (section.length === 0) return 0;
+        
+        const sectionMean = section.reduce((sum, val) => sum + val, 0) / section.length;
+        const sectionVariance = section.reduce((sum, val) => sum + Math.pow(val - sectionMean, 2), 0) / section.length;
+        const sectionStd = Math.sqrt(sectionVariance);
+        const sectionMax = Math.max(...section);
+        
+        // 가중 평균으로 결합
+        return sectionMean * 0.6 + sectionStd * 0.3 + sectionMax * 0.1;
+      };
+      
+      // 3차원 좌표 생성
+      let xCoord = calculateSectionFeatures(startSection);
+      let yCoord = calculateSectionFeatures(middleSection);
+      let zCoord = calculateSectionFeatures(endSection);
+      
+      // 정규화
+      if (max !== min) {
+        xCoord = (xCoord - min) / (max - min);
+        yCoord = (yCoord - min) / (max - min);
+        zCoord = (zCoord - min) / (max - min);
+      }
+      
+      // NaN 값 처리
+      if (isNaN(xCoord)) xCoord = 0;
+      if (isNaN(yCoord)) yCoord = 0;
+      if (isNaN(zCoord)) zCoord = 0;
+      
+      const result = [xCoord, yCoord, zCoord];
+      
+      // 모든 값이 0인 경우 방지
+      if (result.every(v => v === 0)) {
+        return [
+          mean || 0.1,
+          std || 0.2,
+          (max + min) / 2 || 0.3
+        ];
+      }
+      
+      return result;
+    },
+    
+    // 벡터 정규화 개선
+    normalizeVectors(projectedVectors) {
+      const dimensions = [0, 1, 2].map(dim => {
+        const values = projectedVectors
+          .map(v => v[dim])
+          .filter(val => !isNaN(val) && isFinite(val) && val !== null);
+        
+        if (values.length === 0) return { min: 0, max: 1 };
+        
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        return { min, max };
+      });
+
+      return projectedVectors.map(vec => 
+        vec.map((val, i) => {
+          const min = dimensions[i].min;
+          const max = dimensions[i].max;
+          
+          // NaN이나 무한대 값 처리
+          if (isNaN(val) || !isFinite(val)) {
+            return 0.5;
+          }
+          
+          // 모든 값이 같은 경우 처리
+          if (max === min) {
+            return 0.5;
+          }
+          
+          return (val - min) / (max - min);
+        })
+      );
+    },
+    
+    // 폴백 벡터 투영 함수
+    fallbackVectorProjection(vectors) {
+      console.log('Using fallback vector projection');
+      
+      return vectors.map((vec, index) => {
+        if (!vec || vec.length === 0) {
+          // 완전히 빈 벡터인 경우 인덱스 기반 좌표 생성
+          return [0.1 + (index * 0.1), 0.2 + (index * 0.05), 0.3 + (index * 0.08)];
+        }
+        
+        // 벡터가 있는 경우 개선된 처리
+        return this.processSmallVector(vec);
+      });
     },
     
     calculate3DDistance(point1, point2) {
@@ -1013,7 +1247,7 @@ export default {
       this.vectors = [...vectors]; // Create a new copy
       
       // 라벨 확인 - 콘솔에 출력해서 실제 이미지 파일명 확인
-      // console.log('Original labels received:', labels);
+      console.log('Original labels received:', labels);
       
       if (labels && Array.isArray(labels) && labels.length > 0) {
         this.labels = [...labels]; // Create a new copy
@@ -1055,7 +1289,7 @@ export default {
     
     // 인덱스로 이미지 선택하는 함수 (Plotly 이벤트용)
     selectImageByIndex(index) {
-      // console.log(`======= 이미지 선택 시작 (인덱스: ${index}) =======`);
+      console.log(`======= 이미지 선택 시작 (인덱스: ${index}) =======`);
       
       // 인덱스 유효성 검사
       if (index === undefined || index === null || isNaN(index)) {
@@ -1078,7 +1312,7 @@ export default {
       
       // 동일한 이미지 재선택 방지
       if (this.selectedIndex === index) {
-        // console.log(`이미 선택된 이미지입니다 (인덱스: ${index}, 파일명: ${this.labels[index]})`);
+        console.log(`이미 선택된 이미지입니다 (인덱스: ${index}, 파일명: ${this.labels[index]})`);
         return;
       }
       
@@ -1090,10 +1324,10 @@ export default {
         this.selectedIndex = index;
         this.selectedFilename = this.labels[index];
         
-        // console.log(`선택된 이미지 정보 업데이트 완료:`);
-        // console.log(`- 인덱스: ${this.selectedIndex}`);
-        // console.log(`- 파일명: ${this.selectedFilename}`);
-        // console.log(`- 좌표: ${JSON.stringify(this.projectedVectors[index])}`);
+        console.log(`선택된 이미지 정보 업데이트 완료:`);
+        console.log(`- 인덱스: ${this.selectedIndex}`);
+        console.log(`- 파일명: ${this.selectedFilename}`);
+        console.log(`- 좌표: ${JSON.stringify(this.projectedVectors[index])}`);
         
         // 선택한 이미지 정보 구성
         const selectedImage = {
@@ -1131,7 +1365,7 @@ export default {
         // 전역 객체에 직접 저장
         if (window.MSASharedData) {
           window.MSASharedData.currentImage = selectedImage;
-          // console.log('MSA2: 전역 데이터에 이미지 정보 저장 완료');
+          console.log('MSA2: 전역 데이터에 이미지 정보 저장 완료');
         } else {
           console.warn('MSA2: 전역 MSASharedData 객체가 없습니다');
           // 전역 객체가 없으면 생성
@@ -1139,7 +1373,7 @@ export default {
             currentImage: selectedImage,
             similarImages: []
           };
-          // console.log('MSA2: 전역 MSASharedData 객체 생성 완료');
+          console.log('MSA2: 전역 MSASharedData 객체 생성 완료');
         }
         
         // 유사 이미지 찾기
@@ -1148,7 +1382,7 @@ export default {
             // 전역 객체에 유사 이미지 저장
             if (window.MSASharedData) {
               window.MSASharedData.similarImages = similarImages;
-              // console.log(`MSA2: 유사 이미지 정보를 MSA3로 전송합니다: ${similarImages.length} 개`);
+              console.log(`MSA2: 유사 이미지 정보를 MSA3로 전송합니다: ${similarImages.length} 개`);
             }
             
             // 이벤트 발생 및 데이터 전송
@@ -1161,7 +1395,7 @@ export default {
             this.sendImageDataToMSA3(selectedImage);
           });
         
-        // console.log(`======= 이미지 선택 완료 (인덱스: ${index}) =======`);
+        console.log(`======= 이미지 선택 완료 (인덱스: ${index}) =======`);
       } catch (error) {
         console.error('MSA2: 이미지 선택 처리 중 오류 발생:', error);
       }

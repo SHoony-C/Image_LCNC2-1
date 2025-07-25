@@ -134,6 +134,12 @@ export default {
     const token = urlParams.get('token');
     const userId = urlParams.get('user_id');
     const errorParam = urlParams.get('error');
+
+    // 전역 패치노트 표시 이벤트 리스너 추가
+    window.addEventListener('showPatchNote', () => {
+      this.showPatchNote = true;
+    });
+    
     
     if (token && userId) {
       // SSO로부터 받은 토큰 저장
@@ -142,6 +148,13 @@ export default {
       // URL에서 파라미터 제거 (보안을 위해)
       const cleanUrl = window.location.pathname;
       window.history.replaceState({}, document.title, cleanUrl);
+
+      // SSO 로그인 성공 시 패치노트 표시
+      const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
+      if (!hasSeenPatchNote) {
+        this.showPatchNote = true;
+        localStorage.setItem('patchNoteSeen', 'true');
+      }
       
       // 사용자 정보 조회
       this.checkAuthentication();
@@ -163,6 +176,13 @@ export default {
         event.preventDefault();
       }
     });
+  },
+  beforeDestroy() {
+  // 이벤트 리스너 정리
+  window.removeEventListener('showPatchNote', () => {
+    this.showPatchNote = true;
+  });
+  document.removeEventListener('click', this.closeOnOutsideClick);
   },
   mounted() {
     // 레이아웃 안정화를 위한 지연 처리
@@ -339,6 +359,13 @@ export default {
             localStorage.setItem('user', JSON.stringify(devUser))
             this.isAuthenticated = true;
             this.currentUser = devUser;
+
+            // 개발 환경에서도 패치노트 표시 로직 추가
+            const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
+            if (!hasSeenPatchNote) {
+              this.showPatchNote = true;
+              localStorage.setItem('patchNoteSeen', 'true');
+            }
           }
         }
       } catch (error) {
@@ -388,6 +415,8 @@ export default {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem('remember');
+        localStorage.removeItem('patchNoteSeen');  // 이 줄 추가
+
         
         this.isAuthenticated = false;
         this.currentUser = null;
@@ -399,6 +428,8 @@ export default {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         localStorage.removeItem('remember');
+        localStorage.removeItem('patchNoteSeen');  // 이 줄 추가
+
         
         this.isAuthenticated = false;
         this.currentUser = null;

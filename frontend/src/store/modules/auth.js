@@ -20,6 +20,7 @@ const mutations = {
     state.user = null
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+    localStorage.removeItem('patchNoteSeen')  // 이 줄 추가
   },
   SET_AUTH_CHECKED(state, value) {
     state.isAuthChecked = value
@@ -294,6 +295,15 @@ const actions = {
         
         console.log('설정할 사용자 정보:', userInfo);
         commit('SET_USER', userInfo);
+
+        // SSO 로그인 성공 시 패치노트 표시 로직 추가
+        const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
+        if (!hasSeenPatchNote) {
+          // Vue 컴포넌트가 아닌 store에서는 직접 DOM 조작이 어려우므로
+          // 전역 이벤트를 발생시켜 main 컴포넌트에서 처리하도록 함
+          window.dispatchEvent(new CustomEvent('showPatchNote'));
+          localStorage.setItem('patchNoteSeen', 'true');
+        }
         return Promise.resolve(true);
       }
       

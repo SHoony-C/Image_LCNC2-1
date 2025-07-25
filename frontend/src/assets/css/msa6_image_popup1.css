@@ -376,6 +376,11 @@
   
   .results-table tr {
     cursor: pointer;
+    /* user-select: none; 제거하거나 아래로 변경 */
+  }
+  
+  /* 또는 선택적으로 적용 */
+  .results-table tr:not(.selectable-text) {
     user-select: none;
   }
   
