@@ -5230,14 +5230,14 @@ export default {
         )) {
           return; // 텍스트 입력 중에는 단축키 처리하지 않음
         }
-        if ((event.ctrlKey || event.metaKey) && ['c', 'a', 'v', 'x'].includes(event.key.toLowerCase())) {
+        if ((event.ctrlKey || event.metaKey) && ['c', 'a', 'x'].includes(event.key.toLowerCase())) {
           return; // 기본 복사/붙여넣기/전체선택/잘라내기 허용
         }
 
         const key = e.key.toLowerCase();
 
         // 기본 텍스트 조작 키는 허용 (추가 필요)
-        if (e.ctrlKey && ['c', 'a', 'v', 'x'].includes(key)) {
+        if (e.ctrlKey && ['c', 'a', 'x'].includes(key)) {
           return; // 기본 복사/붙여넣기/전체선택/잘라내기 허용
         }
 
