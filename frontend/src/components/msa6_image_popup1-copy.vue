@@ -403,8 +403,6 @@
                         <th>Area ({{ scaleMethod === 'scaleBar' ? scaleBarUnit + '²' : 'px²' }})</th>
                         <th v-if="circleOptions.striation">Striation (%)</th>
                         <th v-if="circleOptions.distortion">Distortion (%)</th>
-                        <th></th> <!-- 삭제 버튼용 -->
-
                       </tr>
                     </thead>
                     <tbody>
@@ -421,11 +419,7 @@
                         <td>{{ (defect.areaScaled && !isNaN(defect.areaScaled)) ? defect.areaScaled.toFixed(2) : '0.00' }}</td>
                         <td v-if="circleOptions.striation">{{ ((defect.striation || 0) / 100).toFixed(1) }}%</td>
                         <td v-if="circleOptions.distortion">{{ ((defect.distortion || 0) / 100).toFixed(1) }}%</td>
-                        <td class="action-buttons">
-                          <button class="option-btn" @click.stop="deleteSegment(defect)">
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </td>
+                        
                       </tr>
                     </tbody>
                   </table>
@@ -1150,32 +1144,7 @@ export default {
     // 기준선 기반 자르기 유틸리티 함수들 추가
     trimMeasurementByReferenceLine,
     trimSingleMeasurementByReferenceLine,
-    deleteSegment(segment) {
-  // segmentedMeasurements에서 해당 segment 삭제
-  const idx = this.segmentedMeasurements.indexOf(segment);
-  if (idx !== -1) {
-    this.segmentedMeasurements.splice(idx, 1);
-  }
-  // localMeasurements에서도 삭제(필요시)
-  const idx2 = this.localMeasurements.indexOf(segment);
-  if (idx2 !== -1) {
-    this.localMeasurements.splice(idx2, 1);
-  }
-  // defectMeasurements에서도 삭제
-  const idx3 = this.defectMeasurements.indexOf(segment);
-  if (idx3 !== -1) {
-    this.defectMeasurements.splice(idx3, 1);
-  }
-  // 선택된 행에서도 삭제
-  const selIdx = this.selectedRows.indexOf(segment);
-  if (selIdx !== -1) {
-    this.selectedRows.splice(selIdx, 1);
-  }
-  // 캔버스 다시 그리기
-  this.$nextTick(() => this.render());
-  // 필요하면 부모에 emit
-  this.emitMeasurementsUpdate && this.emitMeasurementsUpdate();
-},
+    
     downloadCSV() {
   if (this.filteredMeasurements.length === 0) {
     this.showNotification('다운로드할 측정 데이터가 없습니다.', 'warning');
@@ -2303,21 +2272,24 @@ export default {
       const imageX = Math.floor((x / canvas.width) * img.naturalWidth);
       const imageY = Math.floor((y / canvas.height) * img.naturalHeight);
       
-      // 주변 픽셀을 포함한 밝기 계산 (1x1 영역)
+      // 주변 픽셀을 포함한 밝기 계산 (3x3 영역)
       let totalBrightness = 0;
       let pixelCount = 0;
       
-      // 1x1 영역으로 변경 (중앙 픽셀만)
-      const sampleX = imageX;
-      const sampleY = imageY;
-      
-      if (sampleX >= 0 && sampleX < img.naturalWidth && 
-          sampleY >= 0 && sampleY < img.naturalHeight) {
-        const index = (sampleY * img.naturalWidth + sampleX) * 4;
-        if (index >= 0 && index < this.imageData.data.length) {
-          // 흑백 이미지의 경우 R 채널만 사용
-          totalBrightness += this.imageData.data[index];
-          pixelCount++;
+      for (let offsetY = -1; offsetY <= 1; offsetY++) {
+        for (let offsetX = -1; offsetX <= 1; offsetX++) {
+          const sampleX = imageX + offsetX;
+          const sampleY = imageY + offsetY;
+          
+          if (sampleX >= 0 && sampleX < img.naturalWidth && 
+              sampleY >= 0 && sampleY < img.naturalHeight) {
+            const index = (sampleY * img.naturalWidth + sampleX) * 4;
+            if (index >= 0 && index < this.imageData.data.length) {
+              // 흑백 이미지의 경우 R 채널만 사용
+              totalBrightness += this.imageData.data[index];
+              pixelCount++;
+            }
+          }
         }
       }
       
@@ -2579,6 +2551,16 @@ export default {
               centerY + 4
             );
             
+            // 4. 불량 오른쪽에 item_id - subitem_id 표시 (녹색)
+            this.ctx.fillStyle = '#00ff00';
+            this.ctx.font = '10px Arial';
+            this.ctx.textAlign = 'left';
+            const idText = `${defect.itemId} - ${defect.subItemId}`;
+            this.ctx.fillText(
+              idText, 
+              centerX + radiusX + 5, 
+              centerY + 4
+            );
             
             this.ctx.restore();
           });
@@ -3784,6 +3766,49 @@ export default {
        }
      },
      
+     async uploadImageAndGetUrl(imageUrl) {
+       try {
+         // 이미지를 Blob으로 변환
+         const response = await fetch(imageUrl);
+         const blob = await response.blob();
+         
+         // FormData 생성
+         const formData = new FormData();
+         const filename = `image_${Date.now()}.png`;
+         formData.append('file', blob, filename);
+         
+         // 백엔드 API 호출
+         const uploadResponse = await fetch('http://localhost:8000/api/msa6/generate_image_url', {
+           method: 'POST',
+           body: formData
+         });
+         
+         if (!uploadResponse.ok) {
+           throw new Error(`HTTP error! status: ${uploadResponse.status}`);
+         }
+         
+         const result = await uploadResponse.json();
+         
+         if (result.status === 'success') {
+           // 생성된 URL을 클립보드에 복사
+           const fullUrl = `${window.location.origin}${result.url}`;
+           
+           navigator.clipboard.writeText(fullUrl).then(() => {
+             this.showNotification('이미지 URL이 클립보드에 복사되었습니다.', 'success');
+           }).catch((error) => {
+             console.error('[uploadImageAndGetUrl] 클립보드 복사 실패:', error);
+             // 대체 방법 시도
+             this.fallbackCopyToClipboard(fullUrl);
+           });
+         } else {
+           throw new Error(result.message || '이미지 URL 생성에 실패했습니다.');
+         }
+         
+       } catch (error) {
+         console.error('[uploadImageAndGetUrl] 이미지 업로드 실패:', error);
+         this.showNotification(`이미지 URL 생성 실패: ${error.message}`, 'error');
+       }
+     },
     
     fallbackCopyToClipboard(text) {
       try {
@@ -4142,6 +4167,19 @@ export default {
       }
     },
 
+    handleDefectMouseUp() {
+      try {
+        // 드래그 종료
+        if (this.isDragging) {
+          this.isDragging = false;
+          this.dragStartIndex = -1;
+          this.dragEndIndex = -1;
+          this.dragStartRow = null;
+        }
+      } catch (error) {
+        console.error('[handleDefectMouseUp] 불량 드래그 종료 중 오류:', error);
+      }
+    },
     
     // 일반 측정 결과 테이블 마우스 이벤트 핸들러
     handleRowMouseDown(segment, index) {
@@ -4346,6 +4384,16 @@ export default {
               centerY + 4 * Math.min(scaleX, scaleY)
             );
             
+            // 4. 불량 오른쪽에 item_id - subitem_id 표시 (녹색)
+            ctx.fillStyle = '#00ff00';
+            ctx.font = `${10 * Math.min(scaleX, scaleY)}px Arial`;
+            ctx.textAlign = 'left';
+            const idText = `${defect.itemId} - ${defect.subItemId}`;
+            ctx.fillText(
+              idText, 
+              centerX + radiusX + 5 * scaleX, 
+              centerY + 4 * Math.min(scaleX, scaleY)
+            );
           });
         }
 
@@ -5079,6 +5127,16 @@ export default {
               centerY + 4 * Math.min(scaleX, scaleY)
             );
             
+            // 4. 불량 오른쪽에 item_id - subitem_id 표시 (녹색)
+            ctx.fillStyle = '#00ff00';
+            ctx.font = `${10 * Math.min(scaleX, scaleY)}px Arial`;
+            ctx.textAlign = 'left';
+            const idText = `${defect.itemId} - ${defect.subItemId}`;
+            ctx.fillText(
+              idText, 
+              centerX + radiusX + 5 * scaleX, 
+              centerY + 4 * Math.min(scaleX, scaleY)
+            );
           });
         }
 
