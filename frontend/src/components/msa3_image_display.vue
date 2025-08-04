@@ -523,14 +523,17 @@ export default {
           // 이미 URL이 있는 경우 그대로 사용, 없으면 생성
           const imageUrl = img.url || this.getImageUrl(img.filename);
           
-          // 유사도 값이 이미 있으면 그대로 사용, 없으면 거리를 기반으로 계산
+          // 유사도 값이 이미 있으면 그대로 사용, 없으면 코사인 유사도로 계산
           let similarity = img.similarity;
           if (similarity === undefined || similarity === null) {
-            if (img.distance !== undefined && img.distance !== null) {
-              similarity = (1 - img.distance) * 100;
-            } else {
-              similarity = 50; // 기본값
-            }
+              // 코사인 유사도 기반 계산 (msa2와 동일한 방식)
+              if (img.distance === 0) {
+                similarity = 100; // 완전히 동일한 경우
+              } else {
+                // 거리를 코사인 유사도로 변환
+                const cosineSimilarity = Math.max(0, 1 - (img.distance * img.distance / 2));
+                similarity = Math.round(cosineSimilarity * 100);
+              }
           }
           
           // 태그 타입 확인 (파일명으로 추론, 백엔드 태그 값 우선)
@@ -578,9 +581,9 @@ export default {
         console.log(`MSA3: 유사 이미지 처리 완료 - I-app: ${selectedIappImages.length}개, Analysis: ${selectedAnalysisImages.length}개, 총 ${this.similarImages.length}개`);
         
         // MSA1 데이터가 아닌 경우에만 MSA4로 Analysis 태그 이미지들의 txt 파일 내용 전송
-        if (!isFromMSA1) {
-          this.sendAnalysisImagesToMSA4(selectedAnalysisImages);
-        }
+        // if (!isFromMSA1) {
+        this.sendAnalysisImagesToMSA4(selectedAnalysisImages);
+        // }
       } catch (error) {
         console.error('MSA3: 유사 이미지 처리 중 오류:', error);
       } finally {
@@ -593,6 +596,7 @@ export default {
     
     // Analysis 태그 이미지들의 txt 파일 내용을 MSA4로 전송
     async sendAnalysisImagesToMSA4(analysisImages) {
+      console.log('asdasasdasdasd')
       if (!analysisImages || analysisImages.length === 0) {
         return;
       }

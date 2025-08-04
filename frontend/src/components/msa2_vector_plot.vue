@@ -1166,19 +1166,45 @@ export default {
           const topIAppImages = iAppDistances.slice(0, 3);
           const topAnalysisImages = analysisDistances.slice(0, 3);
           
-          // 이미지 변환 함수
+          // 이미지 변환 함수 - 정확한 코사인 유사도 계산
           const transformToSimilarImage = (item) => {
-            // 거리를 유사도로 변환 (1 - 정규화된 거리)
-            const maxDistance = 1.732; // 3D 공간에서 최대 거리 (대략적 값)
-            const normalizedDistance = Math.min(item.distance / maxDistance, 1);
-            const similarity = Math.round((1 - normalizedDistance) * 100);
+            const distance = item.distance;
+            const selectedIndex = this.selectedImageIndex;
             
-            return {
-              filename: item.filename,
-              similarity: similarity,
-              url: this.getImageUrl(item.filename),
-              tag_type: item.tag_type
-            };
+            // 원본 벡터를 사용한 정확한 코사인 유사도 계산
+            if (this.vectors && this.vectors[selectedIndex] && this.vectors[item.index]) {
+              const vectorA = this.vectors[selectedIndex];
+              const vectorB = this.vectors[item.index];
+              
+              // 코사인 유사도 계산
+              const dotProduct = vectorA.reduce((sum, val, i) => sum + val * vectorB[i], 0);
+              const magnitudeA = Math.sqrt(vectorA.reduce((sum, val) => sum + val * val, 0));
+              const magnitudeB = Math.sqrt(vectorB.reduce((sum, val) => sum + val * val, 0));
+              
+              const cosineSimilarity = dotProduct / (magnitudeA * magnitudeB);
+              
+              // 코사인 유사도를 백분율로 변환 (-1~1 → 0~100)
+              const similarity = Math.round(((cosineSimilarity + 1) / 2) * 100);
+              
+              return {
+                filename: item.filename,
+                similarity: similarity,
+                url: this.getImageUrl(item.filename),
+                tag_type: item.tag_type,
+                distance: distance
+              };
+            } else {
+              // 원본 벡터가 없는 경우 거리 기반 근사 계산
+              const similarity = Math.max(0, Math.round(100 - (distance * 20)));
+              
+              return {
+                filename: item.filename,
+                similarity: similarity,
+                url: this.getImageUrl(item.filename),
+                tag_type: item.tag_type,
+                distance: distance
+              };
+            }
           };
           
           // 변환 및 결합

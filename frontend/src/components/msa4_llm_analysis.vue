@@ -183,7 +183,34 @@ export default {
       // 마지막 처리 데이터 저장
       this.lastProcessedData = JSON.parse(JSON.stringify(data));
       
-      this.analysisData = data.data || [];
+      // 유사도 계산 처리 (msa2, msa3와 동일한 코사인 유사도 계산)
+      const processedData = data.data || [];
+      const processedAnalysisData = processedData.map(item => {
+        let similarity = item.similarity;
+        
+        // 유사도가 없거나 null인 경우 코사인 유사도로 계산
+        if (similarity === undefined || similarity === null) {
+          if (item.distance !== undefined && item.distance !== null) {
+            // 코사인 유사도 기반 계산 (msa2, msa3와 동일한 방식)
+            if (item.distance === 0) {
+              similarity = 100; // 완전히 동일한 경우
+            } else {
+              // 거리를 코사인 유사도로 변환
+              const cosineSimilarity = Math.max(0, 1 - (item.distance * item.distance / 2));
+              similarity = Math.round(cosineSimilarity * 100);
+            }
+          } else {
+            similarity = 50; // 기본값
+          }
+        }
+        
+        return {
+          ...item,
+          similarity: similarity
+        };
+      });
+      
+      this.analysisData = processedAnalysisData;
       this.currentAnalysisImages = [...this.analysisData];
       this.hasAnalysisData = this.analysisData.length > 0;
       this.analysisResult = '';

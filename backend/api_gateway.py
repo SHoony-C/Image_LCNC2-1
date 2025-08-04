@@ -231,20 +231,20 @@ async def get_completion(request: Request):
             # For demonstration, we'll just return a mock response
             
             # Example of how you might call an external API:
-            # response = requests.post(
-            #     "https://api.openai.com/v1/completions",
-            #     headers={
-            #         "Authorization": f"Bearer {openai_api_key}",
-            #         "Content-Type": "application/json"
-            #     },
-            #     json={
-            #         "model": "gpt-3.5-turbo-instruct",
-            #         "prompt": full_prompt,
-            #         "max_tokens": 500
-            #     }
-            # )
-            # result = response.json()
-            # ai_response = result.get("choices", [{}])[0].get("text", "")
+            response = requests.post(
+                "https://api.openai.com/v1/completions",
+                headers={
+                    "Authorization": f"Bearer {openai_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "gpt-3.5-turbo-instruct",
+                    "prompt": full_prompt,
+                    "max_tokens": 500
+                }
+            )
+            result = response.json()
+            ai_response = result.get("choices", [{}])[0].get("text", "")
             
             # For now, generate a simple mock response
             mock_responses = [
