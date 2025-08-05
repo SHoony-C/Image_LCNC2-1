@@ -63,6 +63,7 @@
         :show="showPatchNote" 
         @close="showPatchNote = false"
       />
+
     </div>
   </div>
 </template>
@@ -79,6 +80,7 @@ import ServerConnectionError from '@/components/ServerConnectionError.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import axios from 'axios'
 import PatchNoteModal from '@/components/PatchNoteModal.vue'
+
 
 // Add click-outside directive
 const clickOutside = {
@@ -126,24 +128,22 @@ export default {
     }
   },
   created() {
+
+    window.addEventListener('showPatchNote', () => {
+      this.showPatchNote = true;
+    });
     // Add event listener for clicks outside dropdown
     document.addEventListener('click', this.closeOnOutsideClick);
     
     // URL 파라미터에서 토큰 확인 (SSO 리다이렉트 처리)
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
+    const id_token = urlParams.get('id_token');
     const userId = urlParams.get('user_id');
     const errorParam = urlParams.get('error');
-
-    // 전역 패치노트 표시 이벤트 리스너 추가
-    window.addEventListener('showPatchNote', () => {
-      this.showPatchNote = true;
-    });
     
-    
-    if (token && userId) {
+    if (id_token && userId) {
       // SSO로부터 받은 토큰 저장
-      localStorage.setItem('token', token);
+      localStorage.setItem('id_token', id_token);
       
       // URL에서 파라미터 제거 (보안을 위해)
       const cleanUrl = window.location.pathname;
@@ -151,7 +151,9 @@ export default {
 
       // SSO 로그인 성공 시 패치노트 표시
       const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
+      console.log('패치노트 체크');
       if (!hasSeenPatchNote) {
+        console.log('패치노트 표시');
         this.showPatchNote = true;
         localStorage.setItem('patchNoteSeen', 'true');
       }
@@ -177,14 +179,17 @@ export default {
       }
     });
   },
+
   beforeDestroy() {
-  // 이벤트 리스너 정리
-  window.removeEventListener('showPatchNote', () => {
-    this.showPatchNote = true;
-  });
-  document.removeEventListener('click', this.closeOnOutsideClick);
+    // 이벤트 리스너 정리
+    window.removeEventListener('showPatchNote', () => {
+      this.showPatchNote = true;
+    });
+    document.removeEventListener('click', this.closeOnOutsideClick);
   },
+
   mounted() {
+    window.addEventListener('showPatchNote', this.openPatchNote)
     // 레이아웃 안정화를 위한 지연 처리
     this.$nextTick(() => {
       // MSA 컴포넌트 간 통신을 위한 전역 객체 확인 및 생성
@@ -246,8 +251,13 @@ export default {
   beforeUnmount() {
     // Clean up event listener
     document.removeEventListener('click', this.closeOnOutsideClick);
+    window.removeEventListener('showPatchNote', this.openPatchNote);
   },
   methods: {
+    openPatchNote() {
+      console.log('[MainPage] showPatchNote 이벤트 수신 → 모달 열기')
+      this.showPatchNote = true
+    },
     toggleSidebar() {
       this.isSidebarOpen = !this.isSidebarOpen;
     },
@@ -274,7 +284,7 @@ export default {
     async testServerConnection() {
       try {
         // Try to connect to the health endpoint
-        await axios.get('/health');
+        await axios.get('https://10.172.107.194/api/health');
         this.serverError = false;
       } catch (error) {
         console.error('Server connection test failed:', error);
@@ -284,18 +294,35 @@ export default {
       }
     },
     async checkAuthentication() {
-      // 환경변수 기반 SSO 조건부 처리
       const useSSO = process.env.VUE_APP_USE_SSO === 'true'
+      const id_token = localStorage.getItem('id_token');
+
+      // API 호출
+        const response_ssd = await fetch('https://ssd.pds.samsungds.net/api/v0/count/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept' : '*/*'
+          },
+          body:  JSON.stringify({"appId": "8d190441-6458-43f8-bb3e-c98d411b0911"})
+        });
+
+      // API 호출
+        const response = await fetch('https://10.172.107.194/api/msa6/save-with-table-name', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(requestData)
+        });
       
-      const token = localStorage.getItem('token');
-      
-      if (!token) {
+      if (!id_token) {
         if (useSSO) {
           this.isAuthenticated = false;
           this.currentUser = null;
           this.authChecked = true;
           // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-          window.location.href = 'http://localhost:8000/api/auth/google/login';
+          window.location.href = 'https://10.172.107.194/api/auth/samsung/login';
           return;
         } else {
           // 개발 환경에서는 개발용 토큰 설정
@@ -314,13 +341,24 @@ export default {
           this.isAuthenticated = true;
           this.currentUser = devUser;
           this.authChecked = true;
+          const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
+          if (!hasSeenPatchNote) {
+            console.log('패치노트 표시 (개발 환경) → 최초 표시');  // ← 여기에 로그 추가
+            this.showPatchNote = true;
+            localStorage.setItem('patchNoteSeen', 'true');
+          }
           return;
         }
       }
       
       try {
-        const response = await axios.get('http://localhost:8000/api/auth/check-auth', {
-          params: { token }
+        const response = await axios.get('https://10.172.107.194/api/auth/check-auth', {
+          params: {
+              id_token: id_token,
+              username: JSON.parse(localStorage.getItem('user'))?.username,
+              mail: JSON.parse(localStorage.getItem('user'))?.mail,
+              department: JSON.parse(localStorage.getItem('user'))?.department
+          },
         });
         
         if (response.data.authenticated) {
@@ -328,10 +366,10 @@ export default {
           this.currentUser = response.data.user;
           // 로그인 상태가 확인되면 로그인 모달이 표시되지 않도록 설정
           this.showLoginModal = false;
-
           // 최초 로그인 시에만 패치노트 표시 (localStorage로 확인)
           const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
           if (!hasSeenPatchNote) {
+            console.log('패치노트 표시 (개발 환경) → 최초 표시');  // ← 여기에 로그 추가
             this.showPatchNote = true;
             localStorage.setItem('patchNoteSeen', 'true');
           }
@@ -342,15 +380,16 @@ export default {
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-            window.location.href = 'http://localhost:8000/api/auth/google/login';
+            window.location.href = 'https://10.172.107.194/api/auth/samsung/login';
           } else {
             // 개발 환경에서는 개발용 토큰 재설정
             console.log('개발 환경: 토큰 검증 실패, 개발용 토큰 재설정')
             const devToken = 'dev-token-' + Date.now()
             const devUser = {
               id: 'dev-user',
-              username: '개발자',
-              email: 'dev@example.com',
+              username: '개발용 승훈',
+              department:'개발부서1',
+              mail: 'dev@example.com',
               full_name: '개발자',
               permission: 'admin',
               is_active: true
@@ -359,18 +398,10 @@ export default {
             localStorage.setItem('user', JSON.stringify(devUser))
             this.isAuthenticated = true;
             this.currentUser = devUser;
-
-            // 개발 환경에서도 패치노트 표시 로직 추가
-            const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
-            if (!hasSeenPatchNote) {
-              this.showPatchNote = true;
-              localStorage.setItem('patchNoteSeen', 'true');
-            }
           }
         }
       } catch (error) {
         console.error('Authentication check error:', error);
-        
         if (useSSO) {
           this.isAuthenticated = false;
           this.currentUser = null;
@@ -382,7 +413,7 @@ export default {
             this.serverError = true;
           } else {
             // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-            window.location.href = 'http://localhost:8000/api/auth/google/login';
+            window.location.href = 'https://10.172.107.194/api/auth/samsung/login';
           }
         } else {
           // 개발 환경에서는 네트워크 오류 시에도 개발용 토큰 설정
@@ -411,12 +442,11 @@ export default {
     },
     async handleLogout() {
       try {
-        await axios.get('http://localhost:8000/api/auth/slo');
-        localStorage.removeItem('token');
+        await axios.get('https://10.172.107.194/api/auth/slo');
+        localStorage.removeItem('id_token');
         localStorage.removeItem('user');
         localStorage.removeItem('remember');
-        localStorage.removeItem('patchNoteSeen');  // 이 줄 추가
-
+        localStorage.removeItem('patchNoteSeen');
         
         this.isAuthenticated = false;
         this.currentUser = null;
@@ -425,11 +455,10 @@ export default {
         console.error('Logout error:', error);
         
         // Force logout even if server request fails
-        localStorage.removeItem('token');
+        localStorage.removeItem('id_token');
         localStorage.removeItem('user');
         localStorage.removeItem('remember');
-        localStorage.removeItem('patchNoteSeen');  // 이 줄 추가
-
+        localStorage.removeItem('patchNoteSeen');
         
         this.isAuthenticated = false;
         this.currentUser = null;
@@ -510,6 +539,7 @@ html, body {
   width: 100%;
   position: relative;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 /* MSA Grid layout - exact height calculation */
@@ -517,7 +547,7 @@ html, body {
   display: grid;
   gap: 16px;
   grid-template-rows: minmax(300px, 1fr) minmax(300px, 1fr); /* 최소 높이 설정 */
-  height: calc(100vh - 180px);
+  height: calc(100vh - 120px);
   width: 100%;
   padding: 16px;
   box-sizing: border-box;

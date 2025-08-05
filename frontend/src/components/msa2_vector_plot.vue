@@ -16,7 +16,7 @@
 
     <div class="content-container">
       <div class="plot-container">
-        <div id="plotly-visualization"></div>
+        <div id="plotly-visualization" ref="plotlyContainer"></div>
         <div v-if="!isDataLoaded && !loadingComplete" class="loading-overlay">
           <div class="loading-spinner"></div>
           <div class="loading-message">데이터 로딩 중...</div>
@@ -324,8 +324,16 @@ export default {
     // 컴포넌트 크기 변경 감지를 위한 ResizeObserver 설정
     this.setupResizeObserver();
     
-    // 기본 3D 그래프 시각화 생성
-    this.createVisualization();
+    // 기본 3D 그래프 초기화
+    this.initializePlot();
+
+    // 창 크기 변경 시 플롯 리사이즈
+    this.resizeHandler = () => {
+      if (this.$refs.plotlyContainer) {
+        Plotly.Plots.resize(this.$refs.plotlyContainer);
+      }
+    };
+    window.addEventListener('resize', this.resizeHandler);
     
     // MSA 컴포넌트 간 통신 상태 콘솔에 로깅
     // console.log('%c[MSA4] Component ready for inter-component communication', 
@@ -358,7 +366,9 @@ export default {
     if (this.resizeHandler) {
       window.removeEventListener('resize', this.resizeHandler);
     }
-    
+    if (this.$refs.plotlyContainer) {
+      Plotly.purge(this.$refs.plotlyContainer);
+    }
     // logDebug('MSA4 event listeners and observers cleaned up');
   },
   methods: {
@@ -541,14 +551,14 @@ export default {
         // Add cache-busting parameter to prevent browser caching
         const timestamp = new Date().getTime();
         // 처리된 벡터 파일 직접 접근
-        const processedVectorsResponse = await fetch(`http://localhost:8000/storage/vector/processed_vectors.json?t=${timestamp}`, {
+        const processedVectorsResponse = await fetch(`https://10.172.107.194/api/storage/vector/processed_vectors.json?t=${timestamp}`, {
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'Expires': '0'
           }
         });
-        const processedMetadataResponse = await fetch(`http://localhost:8000/storage/vector/processed_metadata.json?t=${timestamp}`, {
+        const processedMetadataResponse = await fetch(`https://10.172.107.194/api/storage/vector/processed_metadata.json?t=${timestamp}`, {
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
@@ -989,15 +999,12 @@ export default {
           // logDebug(`Container size changed: ${width}x${height}`);
           
           // Plotly 플롯이 존재하고 DOM에 표시되어 있는 경우에만 리사이즈
-          const plotDiv = document.getElementById('plotly-visualization');
+          const plotDiv = this.$refs.plotlyContainer;
           if (plotDiv && plotDiv.innerHTML !== '' && plotDiv.clientWidth > 0) {
             // requestAnimationFrame으로 레이아웃 계산 최적화
             requestAnimationFrame(() => {
             try {
-              window.Plotly.relayout(plotDiv, {
-                width: plotDiv.clientWidth,
-                height: plotDiv.clientHeight
-              });
+              Plotly.Plots.resize(plotDiv);
               // logDebug('Plot resized successfully');
             } catch (error) {
               console.error('Error resizing plot:', error);
@@ -1013,11 +1020,11 @@ export default {
     },
 
     // 3D 시각화 생성 함수 추가
-    createVisualization() {
+    initializePlot() {
       // logDebug('Creating 3D visualization');
       
       // 시각화 컨테이너 요소 선택
-      const container = document.getElementById('plotly-visualization');
+      const container = this.$refs.plotlyContainer;
       if (!container) {
         // logDebug('Visualization container not found');
         return;
@@ -1027,7 +1034,7 @@ export default {
       if (container.clientWidth === 0 || container.clientHeight === 0) {
         // logDebug('Container has zero dimensions, delaying visualization creation');
         // 컨테이너 크기가 설정될 때까지 지연
-        setTimeout(() => this.createVisualization(), 100);
+        setTimeout(() => this.initializePlot(), 100);
         return;
       }
       
@@ -1075,9 +1082,9 @@ export default {
       try {
         // 이미 생성된 플롯이 있으면 제거
         if (container.innerHTML !== '') {
-          window.Plotly.purge(container);
+          Plotly.purge(container);
         }
-        
+        Plotly.newPlot(container, emptyData, layout, {displayModeBar: false, responsive: true});
       } catch (error) {
         console.error('Error creating Plotly visualization:', error);
       }
@@ -1166,45 +1173,19 @@ export default {
           const topIAppImages = iAppDistances.slice(0, 3);
           const topAnalysisImages = analysisDistances.slice(0, 3);
           
-          // 이미지 변환 함수 - 정확한 코사인 유사도 계산
+          // 이미지 변환 함수
           const transformToSimilarImage = (item) => {
-            const distance = item.distance;
-            const selectedIndex = this.selectedImageIndex;
+            // 거리를 유사도로 변환 (1 - 정규화된 거리)
+            const maxDistance = 1.732; // 3D 공간에서 최대 거리 (대략적 값)
+            const normalizedDistance = Math.min(item.distance / maxDistance, 1);
+            const similarity = Math.round((1 - normalizedDistance) * 100);
             
-            // 원본 벡터를 사용한 정확한 코사인 유사도 계산
-            if (this.vectors && this.vectors[selectedIndex] && this.vectors[item.index]) {
-              const vectorA = this.vectors[selectedIndex];
-              const vectorB = this.vectors[item.index];
-              
-              // 코사인 유사도 계산
-              const dotProduct = vectorA.reduce((sum, val, i) => sum + val * vectorB[i], 0);
-              const magnitudeA = Math.sqrt(vectorA.reduce((sum, val) => sum + val * val, 0));
-              const magnitudeB = Math.sqrt(vectorB.reduce((sum, val) => sum + val * val, 0));
-              
-              const cosineSimilarity = dotProduct / (magnitudeA * magnitudeB);
-              
-              // 코사인 유사도를 백분율로 변환 (-1~1 → 0~100)
-              const similarity = Math.round(((cosineSimilarity + 1) / 2) * 100);
-              
-              return {
-                filename: item.filename,
-                similarity: similarity,
-                url: this.getImageUrl(item.filename),
-                tag_type: item.tag_type,
-                distance: distance
-              };
-            } else {
-              // 원본 벡터가 없는 경우 거리 기반 근사 계산
-              const similarity = Math.max(0, Math.round(100 - (distance * 20)));
-              
-              return {
-                filename: item.filename,
-                similarity: similarity,
-                url: this.getImageUrl(item.filename),
-                tag_type: item.tag_type,
-                distance: distance
-              };
-            }
+            return {
+              filename: item.filename,
+              similarity: similarity,
+              url: this.getImageUrl(item.filename),
+              tag_type: item.tag_type
+            };
           };
           
           // 변환 및 결합
@@ -1229,7 +1210,7 @@ export default {
     // API 엔드포인트 설정 함수 수정
     getApiEndpoint(path) {
       // API는 8000 포트 사용
-      const baseUrl = 'http://localhost:8000';
+      const baseUrl = 'https://10.172.107.194';
       return `${baseUrl}${path}`;
     },
 
@@ -1256,7 +1237,7 @@ export default {
       }
       
       // API 서버를 통해 이미지 요청
-      return `http://localhost:8000/api/imageanalysis/images/${imageFilename}`;
+      return `https://10.172.107.194/api/imageanalysis/images/${imageFilename}`;
     },
 
     // 벡터 데이터 처리 함수
@@ -1296,9 +1277,9 @@ export default {
           return;
         }
         
-        // Plotly 데이터 준비 (여기서 createPlot 호출)
+        // Plotly 데이터 준비 (여기서 updatePlot 호출)
         // console.log("벡터 데이터 처리 완료, 그래프 생성 시작...");
-        this.createPlot();
+        this.updatePlot();
         // console.log("그래프 생성 완료");
         
         // 데이터 로드 상태 업데이트
@@ -1365,7 +1346,7 @@ export default {
         // 3D 그래프에서 선택된 점 강조 표시
         try {
           // console.log('3D 그래프에서 선택된 점 강조 표시 시작...');
-          const plotContainer = document.getElementById('plotly-visualization');
+          const plotContainer = this.$refs.plotlyContainer;
           if (plotContainer) {
             // 새로운 하이라이트 메서드 호출
             this.highlightPointByColor(index);
@@ -1375,7 +1356,7 @@ export default {
             
             // 요소를 찾을 수 없는 경우 지연 후 재시도
             setTimeout(() => {
-              const retryContainer = document.getElementById('plotly-visualization');
+              const retryContainer = this.$refs.plotlyContainer;
               if (retryContainer) {
                 this.highlightPointByColor(index);
                 // console.log('3D 그래프 점 강조 표시 지연 재시도 완료');
@@ -1433,7 +1414,7 @@ export default {
     updatePlotMarkers(selectedIndex) {
       try {
         // 컨테이너 유효성 검사
-        const container = document.getElementById('plotly-visualization');
+        const container = this.$refs.plotlyContainer;
         if (!container) {
           console.error('시각화 컨테이너를 찾을 수 없습니다');
           return;
@@ -1455,7 +1436,7 @@ export default {
           // 그래프가 비어있거나 데이터가 없는 경우 새로 그래프 생성
           if (!container.data || container.data.length === 0) {
             // console.log('플롯이 비어있어 새로 생성합니다');
-            this.createPlot();
+            this.updatePlot();
           return;
         }
         
@@ -1534,11 +1515,11 @@ export default {
           // 오류 복구 시도 - 그래프 재생성
           try {
             // console.log('오류 복구: 그래프 재생성 시도');
-            this.createPlot();
+            this.updatePlot();
             
             // 그래프 생성 후 점 선택 재시도
             setTimeout(() => {
-              const retryContainer = document.getElementById('plotly-visualization');
+              const retryContainer = this.$refs.plotlyContainer;
               if (retryContainer && retryContainer.data) {
                 this.addSelectedPointTraces(retryContainer, selectedIndex, -1);
               }
@@ -1818,16 +1799,18 @@ export default {
     },
     
     // 3D 플롯 생성 - 완전히 새로운 방식 (더 간단하게)
-    createPlot() {
+    updatePlot() {
+      console.warn('Update Plot');
       // logDebug('초간단 3D 시각화 생성 시작');
       
       // 1. 컨테이너 확인
-      const container = document.getElementById('plotly-visualization');
-      if (!container) {
-        console.warn('시각화 컨테이너가 없습니다. 200ms 후 재시도합니다.');
-        setTimeout(() => this.createPlot(), 200);
-        return;
-      }
+      const container = this.$refs.plotlyContainer;
+
+      // if (!container) {
+      //   console.warn('시각화 컨테이너가 없습니다. 200ms 후 재시도합니다.');
+      //   setTimeout(() => this.updatePlot(), 200);
+      //   return;
+      // }
       
       // 컨테이너 크기 저장 (중요: 이후 업데이트에 사용)
       this.containerWidth = container.clientWidth;
@@ -2062,7 +2045,7 @@ export default {
         // console.log(`색상 기반 점 하이라이트: 인덱스 ${index}`);
         
         // 컨테이너 확인
-        const container = document.getElementById('plotly-visualization');
+        const container = this.$refs.plotlyContainer;
         if (!container || !container.data || !container.data[0]) {
           console.warn('플롯 컨테이너가 초기화되지 않았습니다.');
           return;
@@ -2612,10 +2595,13 @@ export default {
     this.cleanupWebGLContexts = () => {
       // canvas 요소들 중 WebGL 컨텍스트가 있는 요소 검색
       const canvases = document.querySelectorAll('canvas');
+      const container = this.$refs.plotlyContainer;
       const plotlyCanvases = Array.from(canvases).filter(canvas => {
         // plotly-visualization 내부에 없는 캔버스는 제외
         const parent = canvas.closest('#plotly-visualization');
         return !parent && canvas.id.includes('gl-canvas');
+        const insidePlot = container && container.contains(canvas);
+        return !insidePlot && canvas.id.includes('gl-canvas');
       });
       
       // 사용하지 않는 WebGL 캔버스 정리

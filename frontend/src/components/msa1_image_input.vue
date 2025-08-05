@@ -1,5 +1,5 @@
 <template>
-  <div class="msa-component" :class="{ active: isActive }" @paste="handlePaste">
+  <div class="msa-component" :class="{ active: isActive }" @paste="handlePaste" tabindex="0">
     <div class="card-header">
       <div class="header-left">
         <i class="fas fa-cloud-upload-alt"></i>
@@ -31,7 +31,7 @@
             <i class="fas fa-image"></i>
           </div>
           <h3>이미지를 추가하세요</h3>
-          <p>Ctrl+V로 붙여넣거나 이미지를 드래그하세요</p>
+          <p>Ctrl+V로 붙여넣거나 이미지를 첨부하세요</p>
         </div>
         <div v-else class="preview-container">
           <img :src="previewImage" alt="Preview" class="preview-image">
@@ -54,8 +54,17 @@ export default {
       isActive: false,
       status: 'pending', // pending, processing, success, warning
       statusText: '대기중',
-      previewImage: null
+      previewImage: null,
+      isProcessingImage: false
     }
+  },
+  mounted() {
+    // 전역 포커스 상태에서도 이미지 붙여넣기를 처리할 수 있도록 리스너 등록
+    document.addEventListener('paste', this.handlePaste);
+    this.$refs.pasteArea.focus();
+  },
+  beforeUnmount() {
+    document.removeEventListener('paste', this.handlePaste)
   },
   methods: {
     triggerFileInput() {
@@ -76,78 +85,91 @@ export default {
       }
     },
     handlePaste(event) {
-      const items = (event.clipboardData || event.originalEvent.clipboardData).items
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile()
-          this.processImage(file)
-          break
+      event.preventDefault();
+      if (this.isProcessingImage) return;
+
+      const clipboard = event.clipboardData || event.originalEvent.clipboardData;
+      let file = null;
+      if (clipboard.items) {
+        for (const item of clipboard.items) {
+          if (item.type.startsWith('image/')) {
+            file = item.getAsFile();
+            break;
+          }
         }
       }
+      if (!file && clipboard.files?.length) {
+        const candidate = clipboard.files[0];
+        if (candidate.type.startsWith('image/')) file = candidate;
+      }
+      if (!file) return;
+
+      this.isProcessingImage = true;
+      // processImage가 Promise라면 finally가 정상 동작
+      this.processImage(file).finally(() => {
+        this.isProcessingImage = false;
+      });
     },
     processImage(file) {
-      if (file && file.type.startsWith('image/')) {
-        const reader = new FileReader()
-        reader.onload = async (e) => {
-          // 이미지 용량 체크 및 해상도 조정
-          const processedImageData = await this.checkAndResizeImage(e.target.result, file.name)
-          
-          this.previewImage = processedImageData
-          this.status = 'processing'
-          this.statusText = '유사 이미지 검색 중...'
-          this.isActive = true
-          
-          // 로그 저장 - 이미지 업로드
-          LogService.logAction('upload_image', {
-            filename: file.name,
-            filesize: file.size,
-            filetype: file.type
-          })
-          
-          try {
-            // 백엔드에 유사 이미지 검색 요청 (올바른 경로로 수정)
-            await this.searchSimilarImages(file.name, processedImageData)
-            
-            this.status = 'success'
-            this.statusText = '이미지 준비됨'
-          } catch (error) {
-            console.error('[MSA1] 유사 이미지 검색 실패:', error)
-            this.status = 'warning'
-            this.statusText = '검색 실패'
-          }
-          
-          // MSA4로 이미지 전송
-          const msa4Event = new CustomEvent('msa1-to-msa4-image', { 
-            detail: { 
-              imageUrl: processedImageData,
-              imageName: file.name
-            }
-          })
-          document.dispatchEvent(msa4Event)
-          // console.log('[MSA1] 이미지가 MSA4로 전송됨:', file.name)
-          
-          // 로그 저장 - MSA4 전송
-          // LogService.logAction('send_to_msa4', {
-          //   filename: file.name
-          // })
-          
-          // MSA5로 이미지 전송
-          const msa5Event = new CustomEvent('msa1-to-msa5-image', { 
-            detail: { 
-              imageUrl: processedImageData,
-              imageName: file.name
-            }
-          })
-          document.dispatchEvent(msa5Event)
-          // console.log('[MSA1] 이미지가 MSA5로 전송됨:', file.name)
-          
-          // 로그 저장 - MSA5 전송
-          // LogService.logAction('send_to_msa5', {
-          //   filename: file.name
-          // })
+      // Promise 반환
+      return new Promise((resolve, reject) => {
+        if (!(file && file.type.startsWith('image/'))) {
+          resolve();
+          return;
         }
-        reader.readAsDataURL(file)
-      }
+
+        const reader = new FileReader();
+
+        reader.onerror = (err) => {
+          console.error('[MSA1] FileReader error:', err);
+          reject(err);
+        };
+
+        reader.onload = async (e) => {
+          try {
+            // 1) 이미지 용량 체크 및 해상도 조정
+            const processedImageData = await this.checkAndResizeImage(e.target.result, file.name);
+
+            // 2) preview/status 업데이트
+            this.previewImage  = processedImageData;
+            this.status        = 'processing';
+            this.statusText    = '유사 이미지 검색 중...';
+            this.isActive      = true;
+
+            // 3) 로그 저장
+            LogService.logAction('upload_image', {
+              filename: file.name,
+              filesize: file.size,
+              filetype: file.type
+            });
+
+            // 4) 유사 이미지 검색
+            try {
+              await this.searchSimilarImages(file.name, processedImageData);
+              this.status     = 'success';
+              this.statusText = '이미지 준비됨';
+            } catch (err) {
+              console.error('[MSA1] 유사 이미지 검색 실패:', err);
+              this.status     = 'warning';
+              this.statusText = '검색 실패';
+            }
+
+            // 5) MSA4, MSA5로 이벤트 발송
+            document.dispatchEvent(new CustomEvent('msa1-to-msa4-image', {
+              detail: { imageUrl: processedImageData, imageName: file.name }
+            }));
+            document.dispatchEvent(new CustomEvent('msa1-to-msa5-image', {
+              detail: { imageUrl: processedImageData, imageName: file.name }
+            }));
+
+            resolve();
+          } catch (err) {
+            reject(err);
+          }
+        };
+
+        reader.readAsDataURL(file);
+      });
     },
     async searchSimilarImages(filename, imageUrl) {
       try {
@@ -157,7 +179,7 @@ export default {
         const base64Data = imageUrl.split(',')[1]
         
         // MSA2의 Base64 유사 이미지 검색 API 호출
-        const response = await fetch('http://localhost:8000/api/imageprocess/similar-images-base64', {
+        const response = await fetch('https://10.172.107.194/api/imageprocess/similar-images-base64', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -199,7 +221,7 @@ export default {
           const msa2Event = new CustomEvent('msa1-to-msa2-similar-images', {
             detail: {
               mainImage: {
-                filename: filename,
+                filename: "temp_image_aaasd.png",
                 url: imageUrl
               },
               similarImages: data.similar_images,
@@ -235,7 +257,7 @@ export default {
           const msa3Event = new CustomEvent('msa1-to-msa3-similar-images', {
             detail: {
               mainImage: {
-                filename: filename,
+                filename: "temp_image_aaasd.png",
                 url: imageUrl,
                 fromMSA1: true
               },
@@ -288,7 +310,7 @@ export default {
         // ─── 2) 서버에 업로드 & 변환 ───────────────────────────────
         const form = new FormData()
         form.append('file', blob, filename)
-        const resp = await fetch('http://localhost:8000/api/msa1/upload', {
+        const resp = await fetch('https://10.172.107.194/api/msa1/upload', {
           method: 'POST',
           body: form,
         })
