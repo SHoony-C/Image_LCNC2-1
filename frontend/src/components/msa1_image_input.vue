@@ -179,7 +179,7 @@ export default {
         const base64Data = imageUrl.split(',')[1]
         
         // MSA2의 Base64 유사 이미지 검색 API 호출
-        const response = await fetch('https://10.172.107.194/api/imageprocess/similar-images-base64', {
+        const response = await fetch('http://localhost:8000/api/imageprocess/similar-images-base64', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -310,7 +310,7 @@ export default {
         // ─── 2) 서버에 업로드 & 변환 ───────────────────────────────
         const form = new FormData()
         form.append('file', blob, filename)
-        const resp = await fetch('https://10.172.107.194/api/msa1/upload', {
+        const resp = await fetch('http://localhost:8000/api/msa1/upload', {
           method: 'POST',
           body: form,
         })

@@ -185,30 +185,77 @@ export default {
       
       // 유사도 계산 처리 (msa2, msa3와 동일한 코사인 유사도 계산)
       const processedData = data.data || [];
-      const processedAnalysisData = processedData.map(item => {
+      console.log('MSA4: 원본 데이터 수신:', processedData.map((item, idx) => ({
+        index: idx,
+        imageName: item.imageName,
+        similarity: item.similarity,
+        similarityType: typeof item.similarity,
+        fromMSA1: item.fromMSA1,
+        distance: item.distance
+      })));
+      
+      const processedAnalysisData = processedData.map((item, idx) => {
         let similarity = item.similarity;
         
-        // 유사도가 없거나 null인 경우 코사인 유사도로 계산
-        if (similarity === undefined || similarity === null) {
-          if (item.distance !== undefined && item.distance !== null) {
-            // 코사인 유사도 기반 계산 (msa2, msa3와 동일한 방식)
-            if (item.distance === 0) {
-              similarity = 100; // 완전히 동일한 경우
+        // MSA1에서 온 데이터인지 확인 (fromMSA1 속성이 있거나 similarity가 이미 정확한 값인 경우)
+        const isFromMSA1 = item.fromMSA1 === true || (item.similarity && typeof item.similarity === 'number' && item.similarity > 0);
+        
+        console.log(`MSA4: 처리 중인 아이템 ${idx}:`, {
+          imageName: item.imageName,
+          originalSimilarity: item.similarity,
+          originalSimilarityType: typeof item.similarity,
+          fromMSA1: item.fromMSA1,
+          isFromMSA1: isFromMSA1,
+          distance: item.distance
+        });
+        
+        if (isFromMSA1) {
+          // MSA1에서 온 데이터는 원본 similarity 값을 그대로 사용
+          console.log(`MSA4: MSA1에서 온 데이터 - similarity 값 보존: ${item.similarity}`);
+          similarity = item.similarity;
+        } else {
+          // MSA1이 아닌 데이터만 similarity 재계산
+          console.log(`MSA4: MSA1이 아닌 데이터 - similarity 재계산 시작`);
+          // 유사도가 없거나 null인 경우 코사인 유사도로 계산
+          if (similarity === undefined || similarity === null) {
+            if (item.distance !== undefined && item.distance !== null) {
+              // 코사인 유사도 기반 계산 (msa2, msa3와 동일한 방식)
+              if (item.distance === 0) {
+                similarity = 100; // 완전히 동일한 경우
+              } else {
+                // 거리를 코사인 유사도로 변환
+                const cosineSimilarity = Math.max(0, 1 - (item.distance * item.distance / 2));
+                similarity = Math.round(cosineSimilarity * 100);
+              }
             } else {
-              // 거리를 코사인 유사도로 변환
-              const cosineSimilarity = Math.max(0, 1 - (item.distance * item.distance / 2));
-              similarity = Math.round(cosineSimilarity * 100);
+              similarity = 50; // 기본값
             }
-          } else {
-            similarity = 50; // 기본값
           }
+          console.log(`MSA4: similarity 계산 결과: ${similarity}`);
         }
         
-        return {
+        const result = {
           ...item,
           similarity: similarity
         };
+        
+        console.log(`MSA4: 최종 처리 결과 ${idx}:`, {
+          imageName: result.imageName,
+          finalSimilarity: result.similarity,
+          finalSimilarityType: typeof result.similarity,
+          fromMSA1: result.fromMSA1
+        });
+        
+        return result;
       });
+      
+      console.log('MSA4: 최종 processedAnalysisData:', processedAnalysisData.map((item, idx) => ({
+        index: idx,
+        imageName: item.imageName,
+        similarity: item.similarity,
+        similarityType: typeof item.similarity,
+        fromMSA1: item.fromMSA1
+      })));
       
       this.analysisData = processedAnalysisData;
       this.currentAnalysisImages = [...this.analysisData];

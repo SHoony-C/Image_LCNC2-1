@@ -604,7 +604,7 @@ export default {
             const imageName = image.filename.split('.')[0];
             
             // 백엔드 프록시를 통해 IIS 서버의 txt 파일 가져오기
-            const proxyUrl = `https://10.172.107.194/api/imagestorage/fetch-txt/${imageName}`;
+            const proxyUrl = `http://localhost:8000/api/imagestorage/fetch-txt/${imageName}`;
             
             // console.log(`MSA3: Fetching txt via backend proxy from IIS server: ${imageName}.txt`);
             
@@ -718,7 +718,7 @@ export default {
         }
 
         // 백엔드 프록시를 통해 IIS 서버의 txt 파일 가져오기
-        const proxyUrl = `https://10.172.107.194/api/imagestorage/fetch-txt/${imageName}`;
+        const proxyUrl = `http://localhost:8000/api/imagestorage/fetch-txt/${imageName}`;
         
         // console.log(`MSA3: Fetching single txt via backend proxy from IIS server: ${imageName}.txt`);
         
@@ -803,7 +803,7 @@ export default {
       // 실패한 URL이 IIS 서버 직접 접근인 경우, 백엔드 프록시로 재시도
       if (failedUrl.includes('localhost:8091')) {
         const filename = failedUrl.split('/').pop();
-        const backupUrl = `https://10.172.107.194/api/imageanalysis/images/${imageFilename}`;
+        const backupUrl = `http://localhost:8000/api/imageanalysis/images/${imageFilename}`;
         
         console.log(`MSA3: 백엔드 프록시로 재시도: ${backupUrl}`);
         
@@ -940,7 +940,7 @@ export default {
       const encodedSearchFilename = encodeURIComponent(searchFilename);
       
       // 직접 워크플로우 이름만 사용하는 방식으로 변경 (MongoDB workflow_name 필드와 일치)
-      const apiUrl = `https://10.172.107.194/api/imageanalysis/workflow/by-image/${encodedSearchFilename}`;
+      const apiUrl = `http://localhost:8000/api/imageanalysis/workflow/by-image/${encodedSearchFilename}`;
       
       // API 요청 - I-app 이미지 워크플로우 정보
       //console.log('MSA3: Sending fetch request to API');
@@ -971,7 +971,7 @@ export default {
               }
               
               // 대체 방법으로 직접 이름만 사용해서 다시 시도
-              const simpleNameUrl = `https://10.172.107.194/api/imageanalysis/workflow/by-image/${searchFilename}`;
+              const simpleNameUrl = `http://localhost:8000/api/imageanalysis/workflow/by-image/${searchFilename}`;
               // console.log(`MSA3: Trying alternative URL: ${simpleNameUrl}`);
               return fetch(simpleNameUrl)
                 .then(altResponse => {

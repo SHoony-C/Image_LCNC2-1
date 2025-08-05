@@ -551,14 +551,14 @@ export default {
         // Add cache-busting parameter to prevent browser caching
         const timestamp = new Date().getTime();
         // 처리된 벡터 파일 직접 접근
-        const processedVectorsResponse = await fetch(`https://10.172.107.194/api/storage/vector/processed_vectors.json?t=${timestamp}`, {
+        const processedVectorsResponse = await fetch(`http://localhost:8000/storage/vector/processed_vectors.json?t=${timestamp}`, {
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
             'Expires': '0'
           }
         });
-        const processedMetadataResponse = await fetch(`https://10.172.107.194/api/storage/vector/processed_metadata.json?t=${timestamp}`, {
+        const processedMetadataResponse = await fetch(`http://localhost:8000/storage/vector/processed_metadata.json?t=${timestamp}`, {
           headers: {
             'Cache-Control': 'no-cache, no-store, must-revalidate',
             'Pragma': 'no-cache',
@@ -1237,7 +1237,7 @@ export default {
       }
       
       // API 서버를 통해 이미지 요청
-      return `https://10.172.107.194/api/imageanalysis/images/${imageFilename}`;
+      return `http://localhost:8000/imageanalysis/images/${imageFilename}`;
     },
 
     // 벡터 데이터 처리 함수
@@ -1765,27 +1765,34 @@ export default {
         });
         document.dispatchEvent(event);
         
+        // msa2_vector_plot.vue의 sendImageDataToMSA3 함수에서 수정할 부분
+
         // 유사 이미지 검색 및 전송
         this.findSimilarImagesByDistance(imageData.index)
           .then(similarImages => {
             // 유사 이미지가 있는 경우에만 전송
             if (similarImages && similarImages.length > 0) {
+              // MSA2에서 온 데이터임을 명시
+              const msa2SimilarImages = similarImages.map(img => ({
+                ...img,
+                fromMSA1: false // MSA2에서 온 데이터임을 명시
+              }));
+              
               // Vue 이벤트 버스를 통한 전송
-              this.$eventBus.emit('similar-images-found', similarImages);
+              this.$eventBus.emit('similar-images-found', msa2SimilarImages);
               
               // DOM 이벤트를 통한 전송
               const similarEvent = new CustomEvent('msa2-to-msa3-similar-images', {
-                detail: similarImages,
+                detail: msa2SimilarImages,
                 bubbles: true
               });
               document.dispatchEvent(similarEvent);
               
               // 이미지 개수 확인
-              const iAppCount = similarImages.filter(img => img.tag_type === 'I-TAP').length;
-              const analysisCount = similarImages.filter(img => img.tag_type === 'Analysis').length;
+              const iAppCount = msa2SimilarImages.filter(img => img.tag_type === 'I-TAP').length;
+              const analysisCount = msa2SimilarImages.filter(img => img.tag_type === 'Analysis').length;
               
-              // 로그 메시지 수정
-              // console.log(`선택된 이미지 1개 / ${similarImages.length}개의 (tag별 I-app: ${iAppCount}, Analysis: ${analysisCount}) 유사 이미지 전송 완료`);
+              console.log(`MSA2에서 전송: 선택된 이미지 1개 / ${msa2SimilarImages.length}개의 유사 이미지 (I-app: ${iAppCount}, Analysis: ${analysisCount})`);
             }
           })
           .catch(error => {

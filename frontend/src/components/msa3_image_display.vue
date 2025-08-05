@@ -27,10 +27,10 @@
             <i :class="isIAppTag(mainImage.filename) ? 'fas fa-cogs' : 'fas fa-chart-bar'"></i>
             <span>{{ isIAppTag(mainImage.filename) ? 'I-TAP' : 'Analysis' }}</span>
           </div>
-          <!-- 유사도 표시 (MSA1에서 온 이미지인 경우) -->
-          <div v-if="mainImage.fromMSA1" class="selected-similarity">
+          <!-- 유사도 표시 (MSA1에서 온 경우에만 표시) -->
+          <div v-if="mainImage && mainImage.fromMSA1" class="selected-similarity">
             <i class="fas fa-percentage"></i>
-            <span>{{ formatSimilarity(mainImage.similarity) }}% 유사</span>
+            <span>{{ formatSimilarity(mainImage.similarity || 0) }}% 유사</span>
           </div>
           <div class="image-wrapper" @click="showImageDetailsPopup(mainImage.filename)">
             <img v-if="mainImage" :src="mainImage.url" :alt="mainImage.filename" @error="handleImageError" @load="handleImageLoad" />
@@ -121,7 +121,8 @@ export default {
       layoutInitialized: false, // 레이아웃 초기화 상태 추적
       resizeHandler: null,
       isProcessingSimilarImages: false,
-      isProcessingMSA1Data: false // MSA1 데이터 처리 중 플래그 추가
+      isProcessingMSA1Data: false, // MSA1 데이터 처리 중 플래그 추가
+      lastMSA1ProcessTime: null, // 최근 MSA1 데이터 처리 시간 저장
     }
   },
   computed: {
@@ -300,9 +301,9 @@ export default {
     
     // MSA2에서 보내는 커스텀 이벤트 핸들러
     handleMSA2Event(event) {
-      // MSA1 데이터 처리 중이면 무시
+      // MSA1 데이터 처리 중이면 완전히 무시
       if (this.isProcessingMSA1Data) {
-        console.log('MSA3: MSA1 데이터 처리 중이므로 MSA2 이벤트 무시');
+        console.log('MSA3: MSA1 데이터 처리 중이므로 MSA2 이벤트 완전 무시');
         return;
       }
       
@@ -312,25 +313,49 @@ export default {
     },
     
     // // MSA2에서 보내는 유사 이미지 커스텀 이벤트 핸들러
-    // handleMSA2SimilarImages(event) {
-    //   // MSA1 데이터 처리 중이면 무시
-    //   if (this.isProcessingMSA1Data) {
-    //     console.log('MSA3: MSA1 데이터 처리 중이므로 MSA2 유사 이미지 이벤트 무시');
-    //     return;
-    //   }
+    // msa3_image_display.vue에서 수정할 부분
+
+    // MSA2에서 보내는 유사 이미지 커스텀 이벤트 핸들러 (수정된 버전)
+    handleMSA2SimilarImages(event) {
+      // MSA1 데이터 처리 중이면 완전히 무시
+      if (this.isProcessingMSA1Data) {
+        console.log('MSA3: MSA1 데이터 처리 중이므로 MSA2 유사 이미지 이벤트 완전 무시');
+        return;
+      }
       
-    //   if (event.detail && Array.isArray(event.detail)) {
-    //     this.handleSimilarImagesFound(event.detail);
-    //   }
-    // },
+      // MSA1에서 온 데이터가 최근에 처리되었는지 확인 (3초 이내)
+      const now = Date.now();
+      const lastMSA1ProcessTime = this.lastMSA1ProcessTime || 0;
+      const timeSinceMSA1Process = now - lastMSA1ProcessTime;
+      
+      if (timeSinceMSA1Process < 3000) { // 3초 이내
+        console.log(`MSA3: MSA1 데이터 처리 후 ${timeSinceMSA1Process}ms 경과 - MSA2 데이터 무시`);
+        return;
+      }
+      
+      // MSA2에서 온 데이터인지 확인 (fromMSA1 속성이 없거나 false인 경우)
+      if (event.detail && Array.isArray(event.detail)) {
+        const isFromMSA2 = event.detail.length > 0 && !event.detail[0].fromMSA1;
+        
+        if (isFromMSA2) {
+          console.log('MSA3: MSA2에서 온 유사 이미지 데이터 처리');
+          this.handleSimilarImagesFound(event.detail);
+        } else {
+          console.log('MSA3: MSA1에서 온 유사 이미지 데이터는 무시');
+        }
+      }
+    },
 
     
     // MSA1에서 보내는 유사 이미지 커스텀 이벤트 핸들러 (새로 추가)
     handleMSA1SimilarImages(event) {
       console.log('=== MSA3: handleMSA1SimilarImages 함수 시작 ===');
+      console.log('MSA3: 이벤트 데이터 전체:', event);
+      console.log('MSA3: 이벤트 상세 데이터:', event.detail);
       
       // MSA1 데이터 처리 시작 플래그 설정
       this.isProcessingMSA1Data = true;
+      console.log('MSA3: isProcessingMSA1Data 플래그 설정됨:', this.isProcessingMSA1Data);
       
       try {
         console.log('[MSA3] MSA1에서 유사 이미지 데이터 수신:', event.detail);
@@ -344,19 +369,23 @@ export default {
           const similarImages = event.detail.similarImages;
           console.log(`MSA3: 총 ${similarImages.length}개의 유사 이미지 수신`);
           
-          // // 받은 원본 데이터 로그
-          // console.log('MSA3: 원본 유사 이미지 데이터:', similarImages.map(img => ({
-          //   filename: img.filename,
-          //   similarity: img.similarity,
-          //   distance: img.distance
-          // })));
+          // 받은 원본 데이터 로그 - 상세 정보
+          console.log('MSA3: 원본 유사 이미지 데이터 상세:', similarImages.map((img, idx) => ({
+            index: idx,
+            filename: img.filename,
+            similarity: img.similarity,
+            similarityType: typeof img.similarity,
+            distance: img.distance,
+            tag_type: img.tag_type,
+            fromMSA1: img.fromMSA1
+          })));
           
           if (similarImages.length > 0) {
-            // 유사도 순으로 정렬 (높은 순서대로)
+            // 유사도 순으로 정렬 (높은 순서대로) - 원본 similarity 값 사용
             const sortedImages = similarImages.sort((a, b) => {
               const similarityA = parseFloat(a.similarity) || 0;
               const similarityB = parseFloat(b.similarity) || 0;
-              // console.log(`MSA3: 정렬 비교 - ${a.filename}(${similarityA}%) vs ${b.filename}(${similarityB}%)`);
+              console.log(`MSA3: 정렬 비교 - ${a.filename}(${similarityA}%) vs ${b.filename}(${similarityB}%)`);
               return similarityB - similarityA; // 내림차순 (높은 유사도가 먼저)
             });
 
@@ -365,12 +394,32 @@ export default {
               index: index,
               filename: img.filename,
               similarity: img.similarity,
+              similarityType: typeof img.similarity,
               url: img.url
             })));
             
             // 가장 유사도 높은 이미지를 선택된 이미지로 설정
             const topImage = sortedImages[0];
             console.log(`MSA3: 최고 유사도 이미지 선택: ${topImage.filename} (유사도: ${topImage.similarity}%)`);
+            console.log('MSA3: topImage 전체 객체:', topImage);
+            console.log('MSA3: topImage의 모든 키:', Object.keys(topImage));
+            console.log('MSA3: topImage similarity 값:', topImage.similarity);
+            console.log('MSA3: topImage similarity 타입:', typeof topImage.similarity);
+            
+            // 메인 이미지로 직접 설정
+            this.mainImage = {
+              filename: topImage.filename,
+              url: topImage.url || this.getImageUrl(topImage.filename),
+              similarity: topImage.similarity, // 직접 similarity 설정
+              fromMSA1: true
+            };
+            
+            console.log('MSA3: mainImage 직접 설정 완료:', {
+              filename: this.mainImage.filename,
+              similarity: this.mainImage.similarity,
+              similarityType: typeof this.mainImage.similarity,
+              fromMSA1: this.mainImage.fromMSA1
+            });
             
             const selectedImage = {
               ...topImage,
@@ -381,12 +430,22 @@ export default {
             console.log(`MSA3: 선택된 이미지 최종 정보:`, {
               filename: selectedImage.filename,
               similarity: selectedImage.similarity,
+              similarityType: typeof selectedImage.similarity,
               url: selectedImage.url,
               fromMSA1: selectedImage.fromMSA1
             });
             
-            // 메인 이미지로 설정
-            this.mainImage = selectedImage;
+            // selectedImage의 모든 속성 출력
+            console.log('MSA3: selectedImage 전체 객체:', selectedImage);
+            console.log('MSA3: selectedImage의 모든 키:', Object.keys(selectedImage));
+            console.log('MSA3: selectedImage의 모든 값:', Object.values(selectedImage));
+            
+            // similarity 값이 제대로 있는지 확인
+            if (selectedImage.similarity !== undefined && selectedImage.similarity !== null) {
+              console.log('MSA3: selectedImage similarity 값 확인됨:', selectedImage.similarity);
+            } else {
+              console.warn('MSA3: selectedImage similarity 값이 없음');
+            }
             
             // 나머지 이미지들을 유사 이미지로 설정 (URL도 함께 설정)
             const remainingImages = sortedImages.slice(1).map(img => ({
@@ -396,41 +455,53 @@ export default {
             }));
             
             console.log(`MSA3: 나머지 ${remainingImages.length}개 이미지를 유사 이미지로 설정`);
-            console.log('MSA3: 나머지 이미지들:', remainingImages.map(img => ({
+            console.log('MSA3: 나머지 이미지들 상세:', remainingImages.map((img, idx) => ({
+              index: idx,
               filename: img.filename,
-              similarity: img.similarity
+              similarity: img.similarity,
+              similarityType: typeof img.similarity,
+              fromMSA1: img.fromMSA1
             })));
             
-            // 유사 이미지 처리 (유사도 표시를 위해 handleSimilarImagesFound 호출)
-            this.handleSimilarImagesFound(remainingImages);
+            // MSA1 데이터는 직접 처리하여 similarity 값 보호
+            console.log('MSA3: processMSA1SimilarImages 함수 호출 시작');
+            this.processMSA1SimilarImages(remainingImages);
+            console.log('MSA3: processMSA1SimilarImages 함수 호출 완료');
             
             console.log('[MSA3] MSA1 유사 이미지 데이터 처리 완료');
             console.log('MSA3: 최종 mainImage 상태:', {
               filename: this.mainImage?.filename,
               url: this.mainImage?.url,
               similarity: this.mainImage?.similarity,
+              similarityType: typeof this.mainImage?.similarity,
               fromMSA1: this.mainImage?.fromMSA1
             });
-            console.log('MSA3: 최종 similarImages 상태:', this.similarImages.map(img => ({
+            console.log('MSA3: 최종 similarImages 상태:', this.similarImages.map((img, idx) => ({
+              index: idx,
               filename: img.filename,
               similarity: img.similarity,
+              similarityType: typeof img.similarity,
               fromMSA1: img.fromMSA1
             })));
+            
+            // MSA1 데이터 처리 완료 시간 기록
+            this.lastMSA1ProcessTime = Date.now();
+            console.log('MSA3: MSA1 데이터 처리 완료 시간 기록:', this.lastMSA1ProcessTime);
           } else {
             console.warn('MSA3: 유사 이미지가 없습니다');
           }
         } else {
           console.warn('MSA3: event.detail 또는 similarImages가 없습니다');
+          console.warn('MSA3: event.detail:', event.detail);
+          console.warn('MSA3: similarImages:', event.detail?.similarImages);
         }
       } catch (error) {
         console.error('[MSA3] MSA1 유사 이미지 데이터 처리 오류:', error);
+        console.error('[MSA3] 오류 스택:', error.stack);
       } finally {
-        // 3초 후 MSA1 데이터 처리 완료 플래그 해제 (다른 데이터가 덮어쓰는 것을 방지)
+        // MSA1 데이터 처리 완료 플래그 즉시 해제
         this.isProcessingMSA1Data = false;
-        // setTimeout(() => {
-        //   this.isProcessingMSA1Data = false;
-        //   console.log('MSA3: MSA1 데이터 처리 완료 플래그 해제');
-        // }, 3000);
+        console.log('MSA3: MSA1 데이터 처리 완료 플래그 해제:', this.isProcessingMSA1Data);
       }
       
   
@@ -438,54 +509,133 @@ export default {
       console.log('=== MSA3: handleMSA1SimilarImages 함수 종료 ===');
     },
     
+    // MSA1 데이터 전용 처리 함수 - similarity 값 완전 보호
+    processMSA1SimilarImages(images) {
+      console.log('=== MSA1 전용 처리 함수 시작 - similarity 값 완전 보호 ===');
+      console.log('MSA1 전용 처리: 입력 이미지 개수:', images.length);
+      
+      if (!images || !Array.isArray(images)) {
+        console.log('MSA1 전용 처리: images가 배열이 아닙니다.');
+        return;
+      }
+      
+      try {
+        // MSA1 데이터는 원본 similarity 값을 절대 변경하지 않음
+        console.log('MSA1 전용 처리: 원본 similarity 값 보존 시작');
+        const processedImages = images.map((img, idx) => {
+          const imageUrl = img.url || this.getImageUrl(img.filename);
+          // MSA1에서 온 데이터는 원본 similarity 값을 절대 변경하지 않음
+          const similarity = img.similarity; // 원본 값 그대로 사용
+          let tagType = img.tag_type || (this.isIAppTag(img.filename) ? 'I-TAP' : 'Analysis');
+          console.log(`[MSA1 전용 처리 ${idx}]`, {
+            filename: img.filename,
+            originalSimilarity: img.similarity,
+            originalSimilarityType: typeof img.similarity,
+            preservedSimilarity: similarity,
+            preservedSimilarityType: typeof similarity,
+            computedTag: tagType,
+            finalUrl: imageUrl,
+            fromMSA1: img.fromMSA1
+          });
+          return { ...img, url: imageUrl, similarity, tag_type: tagType };
+        });
+        console.log('✅ MSA1 전용 processedImages:', processedImages.map((img, idx) => ({
+          index: idx,
+          filename: img.filename,
+          similarity: img.similarity,
+          similarityType: typeof img.similarity,
+          fromMSA1: img.fromMSA1
+        })));
+
+        // 태그별 필터링
+        const iappImages = processedImages.filter(img => img.tag_type === 'I-TAP');
+        const analysisImages = processedImages.filter(img => img.tag_type === 'Analysis');
+        console.log(`🔖 MSA1 전용 태그별 필터링: I-TAP(${iappImages.length}), Analysis(${analysisImages.length})`);
+
+        // 정렬 전 샘플 확인
+        console.log('MSA1 전용 정렬 전 샘플 (I-TAP):', iappImages.slice(0,3).map(img => ({
+          filename: img.filename,
+          similarity: img.similarity,
+          similarityType: typeof img.similarity
+        })));
+        console.log('MSA1 전용 정렬 전 샘플 (Analysis):', analysisImages.slice(0,3).map(img => ({
+          filename: img.filename,
+          similarity: img.similarity,
+          similarityType: typeof img.similarity
+        })));
+
+        // 유사도 순으로 정렬 (원본 similarity 값 사용)
+        iappImages.sort((a, b) => b.similarity - a.similarity);
+        analysisImages.sort((a, b) => b.similarity - a.similarity);
+        console.log('✅ MSA1 전용 정렬된 I-TAP 상위 3:', iappImages.slice(0,3).map(img => ({
+          filename: img.filename,
+          similarity: img.similarity,
+          similarityType: typeof img.similarity
+        })));
+        console.log('✅ MSA1 전용 정렬된 Analysis 상위 3:', analysisImages.slice(0,3).map(img => ({
+          filename: img.filename,
+          similarity: img.similarity,
+          similarityType: typeof img.similarity
+        })));
+
+        // 상위 3개씩 선택
+        const selectedIappImages = iappImages.slice(0, 3);
+        const selectedAnalysisImages = analysisImages.slice(0, 3);
+        console.log('▶ MSA1 전용 selectedIappImages:', selectedIappImages.map(img => ({
+          filename: img.filename,
+          similarity: img.similarity,
+          similarityType: typeof img.similarity
+        })));
+        console.log('▶ MSA1 전용 selectedAnalysisImages:', selectedAnalysisImages.map(img => ({
+          filename: img.filename,
+          similarity: img.similarity,
+          similarityType: typeof img.similarity
+        })));
+
+        // 최종 결합
+        this.similarImages = [...selectedIappImages, ...selectedAnalysisImages];
+        console.log('📝 MSA1 전용 this.similarImages 업데이트 완료:', this.similarImages.map((img, idx) => ({
+          index: idx,
+          filename: img.filename,
+          similarity: img.similarity,
+          similarityType: typeof img.similarity,
+          fromMSA1: img.fromMSA1
+        })));
+
+        // MSA4 전송 조건
+        console.log('MSA1 전용 MSA4 전송 대상 Analysis 이미지:', selectedAnalysisImages.map(img => ({
+          filename: img.filename,
+          similarity: img.similarity,
+          similarityType: typeof img.similarity
+        })));
+        this.sendAnalysisImagesToMSA4(selectedAnalysisImages);
+        
+        console.log('=== MSA1 전용 처리 함수 완료 - similarity 값 완전 보호됨 ===');
+      } catch (error) {
+        console.error('🚨 MSA1 전용 처리 중 오류:', error);
+        console.error('🚨 오류 스택:', error.stack);
+      }
+    },
+    
     // 선택된 이미지 처리
     handleImageSelected(image) {
-      // MSA1 데이터 처리 중이면 무시
-      if (this.isProcessingMSA1Data) {
-        console.log('MSA3: MSA1 데이터 처리 중이므로 handleImageSelected 무시');
-        return;
-      }
+      console.log('MSA3: handleImageSelected 호출됨 - 이미지:', image.filename, 'fromMSA1:', image.fromMSA1, 'similarity:', image.similarity);
       
-      // 더 엄격한 유효성 검사
-      if (!image || 
-          typeof image !== 'object' || 
-          !image.filename || 
-          image.filename === 'undefined' ||
-          image.filename === 'null') {
-        console.warn('MSA3: handleImageSelected - 유효하지 않은 이미지 데이터:', image);
-        return;
-      }
+      // 기존 mainImage의 similarity와 fromMSA1 값을 보존
+      const existingSimilarity = this.mainImage ? this.mainImage.similarity : undefined;
+      const existingFromMSA1 = this.mainImage ? this.mainImage.fromMSA1 : undefined;
       
-      // // 이미 처리된 이미지인지 확인 (중복 방지)
-      // if (this.mainImage && this.mainImage.filename === image.filename) {
-      //   console.log(`MSA3: 이미 처리된 이미지입니다: ${image.filename}`);
-      //   return;
-      // }
+      console.log('MSA3: 기존 mainImage 값들 - similarity:', existingSimilarity, 'fromMSA1:', existingFromMSA1);
       
-      console.log(`MSA3: handleImageSelected 호출됨 - 이미지: ${image.filename}, fromMSA1: ${image.fromMSA1}, similarity: ${image.similarity}`);
+      // 새로운 이미지로 설정하되, 기존 값들을 보존
+      this.mainImage = {
+        filename: image.filename,
+        url: image.url || this.getImageUrl(image.filename),
+        similarity: image.similarity !== undefined ? image.similarity : existingSimilarity,
+        fromMSA1: image.fromMSA1 !== undefined ? image.fromMSA1 : existingFromMSA1
+      };
       
-      // 유효하지 않은 이미지 필터링 - 'image' 추가
-      if (image.filename === 'main' || 
-          image.filename === 'image' ||
-          (image.filename && (image.filename.includes('localhost') || 
-                           image.filename.includes('undefined') || 
-                           image.filename.includes('null')))) {
-        console.warn(`MSA3: 유효하지 않은 이미지 파일명 무시: ${image.filename}`);
-        return;
-      }
-      
-      // 이미지 URL이 없거나 유효하지 않은 경우 생성
-      if (!image.url && image.filename) {
-        image.url = this.getImageUrl(image.filename);
-      } else if (image.url && (image.url.includes('localhost:8080/main') || 
-                              image.url.includes('undefined') || 
-                              image.url.includes('null'))) {
-        console.warn(`MSA3: 유효하지 않은 이미지 URL 수정: ${image.url}`);
-        image.url = this.getImageUrl(image.filename || 'default');
-      }
-      
-      this.mainImage = {...image};
-      console.log(`MSA3: mainImage 설정 완료 - filename: ${this.mainImage.filename}, fromMSA1: ${this.mainImage.fromMSA1}, similarity: ${this.mainImage.similarity}`);
+      console.log('MSA3: mainImage 설정 완료 - filename:', this.mainImage.filename, 'fromMSA1:', this.mainImage.fromMSA1, 'similarity:', this.mainImage.similarity);
       
       // 메인 이미지 변경 처리 (MSA4로 데이터 전송 포함)
       this.handleMainImageChanged(this.mainImage);
@@ -523,50 +673,104 @@ export default {
       }
 
       try {
-        // 1) 전처리 단계
-        const processedImages = images.map((img, idx) => {
-          const imageUrl = img.url || this.getImageUrl(img.filename);
-          const similarity = img.similarity != null ? img.similarity : null;
-          let tagType = img.tag_type || (this.isIAppTag(img.filename) ? 'I-TAP' : 'Analysis');
-          console.log(`[전처리 ${idx}]`, {
-            filename: img.filename,
-            rawDistance: img.distance,
-            rawSimilarity: img.similarity,
-            computedTag: tagType,
-            finalUrl: imageUrl
+        // MSA1에서 온 데이터인 경우 원본 similarity 값을 보존
+        if (isFromMSA1) {
+          console.log('MSA1에서 온 데이터: 원본 similarity 값 보존');
+          
+          // 1) 전처리 단계 - MSA1 데이터는 similarity 값을 그대로 사용
+          const processedImages = images.map((img, idx) => {
+            const imageUrl = img.url || this.getImageUrl(img.filename);
+            // MSA1에서 온 데이터는 원본 similarity 값을 그대로 사용
+            const similarity = img.similarity != null ? img.similarity : null;
+            let tagType = img.tag_type || (this.isIAppTag(img.filename) ? 'I-TAP' : 'Analysis');
+            console.log(`[MSA1 전처리 ${idx}]`, {
+              filename: img.filename,
+              originalSimilarity: img.similarity,
+              preservedSimilarity: similarity,
+              computedTag: tagType,
+              finalUrl: imageUrl
+            });
+            return { ...img, url: imageUrl, similarity, tag_type: tagType };
           });
-          return { ...img, url: imageUrl, similarity, tag_type: tagType };
-        });
-        console.log('✅ processedImages:', processedImages);
+          console.log('✅ MSA1 processedImages:', processedImages);
 
-        // 2) 태그별 필터링
-        const iappImages = processedImages.filter(img => img.tag_type === 'I-TAP');
-        const analysisImages = processedImages.filter(img => img.tag_type === 'Analysis');
-        console.log(`🔖 태그별 필터링: I-TAP(${iappImages.length}), Analysis(${analysisImages.length})`);
+          // 2) 태그별 필터링
+          const iappImages = processedImages.filter(img => img.tag_type === 'I-TAP');
+          const analysisImages = processedImages.filter(img => img.tag_type === 'Analysis');
+          console.log(`🔖 MSA1 태그별 필터링: I-TAP(${iappImages.length}), Analysis(${analysisImages.length})`);
 
-        // 3) 정렬 전 샘플 확인
-        console.log('정렬 전 샘플 (I-TAP):', iappImages.slice(0,3));
-        console.log('정렬 전 샘플 (Analysis):', analysisImages.slice(0,3));
+          // 3) 정렬 전 샘플 확인
+          console.log('MSA1 정렬 전 샘플 (I-TAP):', iappImages.slice(0,3));
+          console.log('MSA1 정렬 전 샘플 (Analysis):', analysisImages.slice(0,3));
 
-        // 4) 유사도 순으로 정렬
-        iappImages.sort((a, b) => b.similarity - a.similarity);
-        analysisImages.sort((a, b) => b.similarity - a.similarity);
-        console.log('✅ 정렬된 I-TAP 상위 3:', iappImages.slice(0,3));
-        console.log('✅ 정렬된 Analysis 상위 3:', analysisImages.slice(0,3));
+          // 4) 유사도 순으로 정렬 (원본 similarity 값 사용)
+          iappImages.sort((a, b) => b.similarity - a.similarity);
+          analysisImages.sort((a, b) => b.similarity - a.similarity);
+          console.log('✅ MSA1 정렬된 I-TAP 상위 3:', iappImages.slice(0,3));
+          console.log('✅ MSA1 정렬된 Analysis 상위 3:', analysisImages.slice(0,3));
 
-        // 5) 상위 3개씩 선택
-        const selectedIappImages = iappImages.slice(0, 3);
-        const selectedAnalysisImages = analysisImages.slice(0, 3);
-        console.log('▶ selectedIappImages:', selectedIappImages);
-        console.log('▶ selectedAnalysisImages:', selectedAnalysisImages);
+          // 5) 상위 3개씩 선택
+          const selectedIappImages = iappImages.slice(0, 3);
+          const selectedAnalysisImages = analysisImages.slice(0, 3);
+          console.log('▶ MSA1 selectedIappImages:', selectedIappImages);
+          console.log('▶ MSA1 selectedAnalysisImages:', selectedAnalysisImages);
 
-        // 6) 최종 결합
-        this.similarImages = [...selectedIappImages, ...selectedAnalysisImages];
-        console.log('📝 this.similarImages 업데이트 완료:', this.similarImages);
+          // 6) 최종 결합
+          this.similarImages = [...selectedIappImages, ...selectedAnalysisImages];
+          console.log('📝 MSA1 this.similarImages 업데이트 완료:', this.similarImages);
 
-        // 7) MSA4 전송 조건
-        console.log('MSA4 전송 대상 Analysis 이미지:', selectedAnalysisImages);
+          // 7) MSA4 전송 조건
+          console.log('MSA1 MSA4 전송 대상 Analysis 이미지:', selectedAnalysisImages);
           this.sendAnalysisImagesToMSA4(selectedAnalysisImages);
+        } else {
+          // MSA1이 아닌 다른 소스에서 온 데이터는 기존 로직 사용
+          console.log('MSA1이 아닌 데이터: 기존 처리 로직 사용');
+          
+          // 1) 전처리 단계
+          const processedImages = images.map((img, idx) => {
+            const imageUrl = img.url || this.getImageUrl(img.filename);
+            const similarity = img.similarity != null ? img.similarity : null;
+            let tagType = img.tag_type || (this.isIAppTag(img.filename) ? 'I-TAP' : 'Analysis');
+            console.log(`[전처리 ${idx}]`, {
+              filename: img.filename,
+              rawDistance: img.distance,
+              rawSimilarity: img.similarity,
+              computedTag: tagType,
+              finalUrl: imageUrl
+            });
+            return { ...img, url: imageUrl, similarity, tag_type: tagType };
+          });
+          console.log('✅ processedImages:', processedImages);
+
+          // 2) 태그별 필터링
+          const iappImages = processedImages.filter(img => img.tag_type === 'I-TAP');
+          const analysisImages = processedImages.filter(img => img.tag_type === 'Analysis');
+          console.log(`🔖 태그별 필터링: I-TAP(${iappImages.length}), Analysis(${analysisImages.length})`);
+
+          // 3) 정렬 전 샘플 확인
+          console.log('정렬 전 샘플 (I-TAP):', iappImages.slice(0,3));
+          console.log('정렬 전 샘플 (Analysis):', analysisImages.slice(0,3));
+
+          // 4) 유사도 순으로 정렬
+          iappImages.sort((a, b) => b.similarity - a.similarity);
+          analysisImages.sort((a, b) => b.similarity - a.similarity);
+          console.log('✅ 정렬된 I-TAP 상위 3:', iappImages.slice(0,3));
+          console.log('✅ 정렬된 Analysis 상위 3:', analysisImages.slice(0,3));
+
+          // 5) 상위 3개씩 선택
+          const selectedIappImages = iappImages.slice(0, 3);
+          const selectedAnalysisImages = analysisImages.slice(0, 3);
+          console.log('▶ selectedIappImages:', selectedIappImages);
+          console.log('▶ selectedAnalysisImages:', selectedAnalysisImages);
+
+          // 6) 최종 결합
+          this.similarImages = [...selectedIappImages, ...selectedAnalysisImages];
+          console.log('📝 this.similarImages 업데이트 완료:', this.similarImages);
+
+          // 7) MSA4 전송 조건
+          console.log('MSA4 전송 대상 Analysis 이미지:', selectedAnalysisImages);
+          this.sendAnalysisImagesToMSA4(selectedAnalysisImages);
+        }
       } catch (error) {
         console.error('🚨 유사 이미지 처리 중 오류:', error);
       } finally {
@@ -604,7 +808,7 @@ export default {
             const imageName = image.filename.split('.')[0];
             
             // 백엔드 프록시를 통해 IIS 서버의 txt 파일 가져오기
-            const proxyUrl = `https://10.172.107.194/api/imagestorage/fetch-txt/${imageName}`;
+            const proxyUrl = `http://localhost:8000/api/imagestorage/fetch-txt/${imageName}`;
             
             // console.log(`MSA3: Fetching txt via backend proxy from IIS server: ${imageName}.txt`);
             
@@ -622,7 +826,8 @@ export default {
                 textContents.push({
                   imageName: image.filename,
                   textContent: result.textContent,
-                  similarity: image.similarity || 0
+                  similarity: image.similarity || 0,
+                  fromMSA1: image.fromMSA1 || false // MSA1에서 온 데이터임을 명시
                 });
                 // console.log(`MSA3: Successfully fetched txt for ${image.filename} via backend proxy`);
               }
@@ -718,7 +923,7 @@ export default {
         }
 
         // 백엔드 프록시를 통해 IIS 서버의 txt 파일 가져오기
-        const proxyUrl = `https://10.172.107.194/api/imagestorage/fetch-txt/${imageName}`;
+        const proxyUrl = `http://localhost:8000/api/imagestorage/fetch-txt/${imageName}`;
         
         // console.log(`MSA3: Fetching single txt via backend proxy from IIS server: ${imageName}.txt`);
         
@@ -803,7 +1008,7 @@ export default {
       // 실패한 URL이 IIS 서버 직접 접근인 경우, 백엔드 프록시로 재시도
       if (failedUrl.includes('localhost:8091')) {
         const filename = failedUrl.split('/').pop();
-        const backupUrl = `https://10.172.107.194/api/imageanalysis/images/${imageFilename}`;
+        const backupUrl = `http://localhost:8000/api/imageanalysis/images/${imageFilename}`;
         
         console.log(`MSA3: 백엔드 프록시로 재시도: ${backupUrl}`);
         
@@ -940,7 +1145,7 @@ export default {
       const encodedSearchFilename = encodeURIComponent(searchFilename);
       
       // 직접 워크플로우 이름만 사용하는 방식으로 변경 (MongoDB workflow_name 필드와 일치)
-      const apiUrl = `https://10.172.107.194/api/imageanalysis/workflow/by-image/${encodedSearchFilename}`;
+      const apiUrl = `http://localhost:8000/api/imageanalysis/workflow/by-image/${encodedSearchFilename}`;
       
       // API 요청 - I-app 이미지 워크플로우 정보
       //console.log('MSA3: Sending fetch request to API');
@@ -971,7 +1176,7 @@ export default {
               }
               
               // 대체 방법으로 직접 이름만 사용해서 다시 시도
-              const simpleNameUrl = `https://10.172.107.194/api/imageanalysis/workflow/by-image/${searchFilename}`;
+              const simpleNameUrl = `http://localhost:8000/api/imageanalysis/workflow/by-image/${searchFilename}`;
               // console.log(`MSA3: Trying alternative URL: ${simpleNameUrl}`);
               return fetch(simpleNameUrl)
                 .then(altResponse => {
@@ -2017,5 +2222,22 @@ h4 {
 .analysis-column .similar-image-item:hover {
   box-shadow: 0 4px 12px rgba(255, 165, 0, 0.2);
   border-color: #e67e22;
+}
+
+.similarity-info {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.similarity-info i {
+  margin-right: 5px;
+  color: #228be6;
+  font-size: 16px;
+}
+
+.similarity-info span {
+  font-size: 14px;
+  color: #495057;
 }
 </style> 

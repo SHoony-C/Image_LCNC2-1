@@ -284,7 +284,7 @@ export default {
     async testServerConnection() {
       try {
         // Try to connect to the health endpoint
-        await axios.get('https://10.172.107.194/api/health');
+        await axios.get('http://localhost:8000/api/health');
         this.serverError = false;
       } catch (error) {
         console.error('Server connection test failed:', error);
@@ -297,18 +297,18 @@ export default {
       const useSSO = process.env.VUE_APP_USE_SSO === 'true'
       const id_token = localStorage.getItem('id_token');
 
-      // API 호출
-        const response_ssd = await fetch('https://ssd.pds.samsungds.net/api/v0/count/add', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept' : '*/*'
-          },
-          body:  JSON.stringify({"appId": "8d190441-6458-43f8-bb3e-c98d411b0911"})
-        });
+      // // API 호출
+      //   const response_ssd = await fetch('https://ssd.pds.samsungds.net/api/v0/count/add', {
+      //     method: 'POST',
+      //     headers: {
+      //       'Content-Type': 'application/json',
+      //       'Accept' : '*/*'
+      //     },
+      //     body:  JSON.stringify({"appId": "8d190441-6458-43f8-bb3e-c98d411b0911"})
+      //   });
 
       // API 호출
-        const response = await fetch('https://10.172.107.194/api/msa6/save-with-table-name', {
+        const response = await fetch('http://localhost:8000/api/msa6/save-with-table-name', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -322,7 +322,7 @@ export default {
           this.currentUser = null;
           this.authChecked = true;
           // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-          window.location.href = 'https://10.172.107.194/api/auth/samsung/login';
+          window.location.href = 'http://localhost:8000/api/auth/samsung/login';
           return;
         } else {
           // 개발 환경에서는 개발용 토큰 설정
@@ -352,7 +352,7 @@ export default {
       }
       
       try {
-        const response = await axios.get('https://10.172.107.194/api/auth/check-auth', {
+        const response = await axios.get('http://localhost:8000/api/auth/check-auth', {
           params: {
               id_token: id_token,
               username: JSON.parse(localStorage.getItem('user'))?.username,
@@ -380,7 +380,7 @@ export default {
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-            window.location.href = 'https://10.172.107.194/api/auth/samsung/login';
+            window.location.href = 'http://localhost:8000/api/auth/samsung/login';
           } else {
             // 개발 환경에서는 개발용 토큰 재설정
             console.log('개발 환경: 토큰 검증 실패, 개발용 토큰 재설정')
@@ -413,7 +413,7 @@ export default {
             this.serverError = true;
           } else {
             // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-            window.location.href = 'https://10.172.107.194/api/auth/samsung/login';
+            window.location.href = 'http://localhost:8000/api/auth/samsung/login';
           }
         } else {
           // 개발 환경에서는 네트워크 오류 시에도 개발용 토큰 설정
@@ -442,7 +442,7 @@ export default {
     },
     async handleLogout() {
       try {
-        await axios.get('https://10.172.107.194/api/auth/slo');
+        await axios.get('http://localhost:8000/api/auth/slo');
         localStorage.removeItem('id_token');
         localStorage.removeItem('user');
         localStorage.removeItem('remember');

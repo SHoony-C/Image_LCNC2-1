@@ -482,9 +482,9 @@ export class DefectDetector {
       return;
     }
     
-    // 최적화된 클러스터링으로 불량 영역 찾기
+    // 모든 불량 픽셀을 한 번에 클러스터링
     // console.log('클러스터링 시작...');
-    const clusters = this.clusterStoppedPixelsOptimized(this.stoppedPixels);
+    const clusters = this.clusterAllStoppedPixels(this.stoppedPixels);
     
     // 중단 요청 확인
     if (!this.isProcessing) {
@@ -492,7 +492,7 @@ export class DefectDetector {
       return;
     }
     
-    // console(`클러스터링 완료 - ${clusters.length}개 클러스터 발견`);
+    // console.log(`클러스터링 완료 - ${clusters.length}개 클러스터 발견`);
     
     // 불량 영역이 100개를 초과하는 경우 경고
     if (clusters.length > 100) {
@@ -575,7 +575,103 @@ export class DefectDetector {
   }
 
   /**
-   * 정확한 클러스터링 알고리즘 (8방향 인접 픽셀 기반)
+   * 모든 불량 픽셀을 한 번에 클러스터링하는 개선된 함수
+   */
+  clusterAllStoppedPixels(pixels) {
+    if (pixels.length === 0) return [];
+    
+    const minClusterSize = 3; // 최소 클러스터 크기
+    
+    // console.log(`총 ${pixels.length}개 불량 픽셀을 클러스터링 시작...`);
+    
+    // 1단계: 8방향 인접 픽셀 기반 클러스터링
+    const clusters = this.perform8DirectionClustering(pixels, minClusterSize);
+    
+    // console.log(`1단계 클러스터링 완료: ${clusters.length}개 클러스터 발견`);
+    
+    // 2단계: 인접한 클러스터들을 병합 (더 관대한 조건으로 개선)
+    const mergedClusters = this.mergeAdjacentClustersImproved(clusters, minClusterSize);
+    
+    // console.log(`2단계 클러스터 병합 완료: ${mergedClusters.length}개 최종 클러스터`);
+    
+    return mergedClusters;
+  }
+
+  /**
+   * 인접한 클러스터들을 병합 (개선된 버전 - 더 관대한 조건)
+   */
+  mergeAdjacentClustersImproved(clusters, minClusterSize) {
+    if (clusters.length <= 1) return clusters;
+    
+    // 각 클러스터의 경계 박스 계산
+    const clusterBounds = clusters.map(cluster => {
+      let minX = cluster[0].x, maxX = cluster[0].x;
+      let minY = cluster[0].y, maxY = cluster[0].y;
+      
+      for (const pixel of cluster) {
+        minX = Math.min(minX, pixel.x);
+        maxX = Math.max(maxX, pixel.x);
+        minY = Math.min(minY, pixel.y);
+        maxY = Math.max(maxY, pixel.y);
+      }
+      
+      return { minX, maxX, minY, maxY, cluster };
+    });
+    
+    // 인접한 클러스터들을 병합 (더 관대한 조건: 5픽셀 이내)
+    const merged = new Array(clusters.length).fill(false);
+    const result = [];
+    
+    for (let i = 0; i < clusters.length; i++) {
+      if (merged[i]) continue;
+      
+      const currentCluster = clusters[i];
+      const currentBounds = clusterBounds[i];
+      
+      // 현재 클러스터와 인접한 다른 클러스터들을 찾아 병합
+      for (let j = i + 1; j < clusters.length; j++) {
+        if (merged[j]) continue;
+        
+        const otherBounds = clusterBounds[j];
+        
+        // 두 클러스터가 인접한지 확인 (더 관대한 조건: 5픽셀 이내)
+        if (this.areClustersAdjacentImproved(currentBounds, otherBounds, 5)) {
+          // 클러스터 병합
+          currentCluster.push(...clusters[j]);
+          merged[j] = true;
+          
+          // 경계 업데이트
+          currentBounds.minX = Math.min(currentBounds.minX, otherBounds.minX);
+          currentBounds.maxX = Math.max(currentBounds.maxX, otherBounds.maxX);
+          currentBounds.minY = Math.min(currentBounds.minY, otherBounds.minY);
+          currentBounds.maxY = Math.max(currentBounds.maxY, otherBounds.maxY);
+          
+          // console.log(`클러스터 ${i+1}과 ${j+1} 병합됨`);
+        }
+      }
+      
+      // 최소 크기 이상인 클러스터만 결과에 추가
+      if (currentCluster.length >= minClusterSize) {
+        result.push(currentCluster);
+      }
+    }
+    
+    return result;
+  }
+
+  /**
+   * 두 클러스터가 인접한지 확인 (개선된 버전 - 더 관대한 조건)
+   */
+  areClustersAdjacentImproved(bounds1, bounds2, maxDistance = 5) {
+    // 두 경계 박스가 maxDistance 픽셀 이내에 있는지 확인
+    const overlapX = !(bounds1.maxX < bounds2.minX - maxDistance || bounds2.maxX < bounds1.minX - maxDistance);
+    const overlapY = !(bounds1.maxY < bounds2.minY - maxDistance || bounds2.maxY < bounds1.minY - maxDistance);
+    
+    return overlapX && overlapY;
+  }
+
+  /**
+   * 정확한 클러스터링 알고리즘 (8방향 인접 픽셀 기반) - 개선된 버전
    */
   clusterStoppedPixelsOptimized(pixels) {
     if (pixels.length === 0) return [];
@@ -596,7 +692,70 @@ export class DefectDetector {
     // 1단계: 8방향 인접 픽셀 기반 클러스터링
     const clusters = this.perform8DirectionClustering(pixels, minClusterSize);
     
-    return clusters;
+    // 2단계: 인접한 클러스터들을 병합 (개선된 버전)
+    const mergedClusters = this.mergeAdjacentClusters(clusters, minClusterSize);
+    
+    return mergedClusters;
+  }
+
+  /**
+   * 인접한 클러스터들을 병합 (개선된 버전)
+   */
+  mergeAdjacentClusters(clusters, minClusterSize) {
+    if (clusters.length <= 1) return clusters;
+    
+    // 각 클러스터의 경계 박스 계산
+    const clusterBounds = clusters.map(cluster => {
+      let minX = cluster[0].x, maxX = cluster[0].x;
+      let minY = cluster[0].y, maxY = cluster[0].y;
+      
+      for (const pixel of cluster) {
+        minX = Math.min(minX, pixel.x);
+        maxX = Math.max(maxX, pixel.x);
+        minY = Math.min(minY, pixel.y);
+        maxY = Math.max(maxY, pixel.y);
+      }
+      
+      return { minX, maxX, minY, maxY, cluster };
+    });
+    
+    // 인접한 클러스터들을 병합 (더 관대한 조건)
+    const merged = new Array(clusters.length).fill(false);
+    const result = [];
+    
+    for (let i = 0; i < clusters.length; i++) {
+      if (merged[i]) continue;
+      
+      const currentCluster = clusters[i];
+      const currentBounds = clusterBounds[i];
+      
+      // 현재 클러스터와 인접한 다른 클러스터들을 찾아 병합
+      for (let j = i + 1; j < clusters.length; j++) {
+        if (merged[j]) continue;
+        
+        const otherBounds = clusterBounds[j];
+        
+        // 두 클러스터가 인접한지 확인 (더 관대한 조건: 3픽셀 이내)
+        if (this.areClustersAdjacentImproved(currentBounds, otherBounds, 3)) {
+          // 클러스터 병합
+          currentCluster.push(...clusters[j]);
+          merged[j] = true;
+          
+          // 경계 업데이트
+          currentBounds.minX = Math.min(currentBounds.minX, otherBounds.minX);
+          currentBounds.maxX = Math.max(currentBounds.maxX, otherBounds.maxX);
+          currentBounds.minY = Math.min(currentBounds.minY, otherBounds.minY);
+          currentBounds.maxY = Math.max(currentBounds.maxY, otherBounds.maxY);
+        }
+      }
+      
+      // 최소 크기 이상인 클러스터만 결과에 추가
+      if (currentCluster.length >= minClusterSize) {
+        result.push(currentCluster);
+      }
+    }
+    
+    return result;
   }
 
   /**
@@ -778,35 +937,29 @@ export class DefectDetector {
       }
     };
     
-    // 8방향 인접 픽셀 확인 및 클러스터링 (최적화된 버전)
+    // 8방향 인접 픽셀 확인 및 클러스터링 (개선된 버전)
     const directions = [
       [-1, -1], [-1, 0], [-1, 1],  // 좌상, 좌, 좌하
       [0, -1],           [0, 1],     // 상, 하
       [1, -1],  [1, 0],  [1, 1]     // 우상, 우, 우하
     ];
     
-    // 대용량 데이터의 경우 배치 처리로 성능 향상
-    const batchSize = Math.min(1000, Math.ceil(pixels.length / 10));
-    
-    for (let batchStart = 0; batchStart < pixels.length; batchStart += batchSize) {
-      const batchEnd = Math.min(batchStart + batchSize, pixels.length);
+    // 모든 픽셀에 대해 8방향 인접 픽셀 확인
+    for (let i = 0; i < pixels.length; i++) {
+      const pixel = pixels[i];
       
-      for (let i = batchStart; i < batchEnd; i++) {
-        const pixel = pixels[i];
+      // 8방향 인접 픽셀 확인
+      for (const [dx, dy] of directions) {
+        const neighborX = pixel.x + dx;
+        const neighborY = pixel.y + dy;
+        const neighborKey = `${neighborX},${neighborY}`;
         
-        // 8방향 인접 픽셀 확인
-        for (const [dx, dy] of directions) {
-          const neighborX = pixel.x + dx;
-          const neighborY = pixel.y + dy;
-          const neighborKey = `${neighborX},${neighborY}`;
-          
-          // 인접 픽셀이 감지된 픽셀인지 확인
-          const neighborIndex = pixelMap.get(neighborKey);
-          
-          if (neighborIndex !== undefined && neighborIndex !== i) {
-            // 인접한 감지 픽셀들을 하나로 클러스터링
-            union(i, neighborIndex);
-          }
+        // 인접 픽셀이 감지된 픽셀인지 확인
+        const neighborIndex = pixelMap.get(neighborKey);
+        
+        if (neighborIndex !== undefined && neighborIndex !== i) {
+          // 인접한 감지 픽셀들을 하나로 클러스터링
+          union(i, neighborIndex);
         }
       }
     }
@@ -822,7 +975,11 @@ export class DefectDetector {
     }
     
     // 최소 크기 이상의 클러스터만 반환
-    return Array.from(clusters.values()).filter(cluster => cluster.length >= minClusterSize);
+    const validClusters = Array.from(clusters.values()).filter(cluster => cluster.length >= minClusterSize);
+    
+    // console.log(`8방향 클러스터링 완료: ${validClusters.length}개 클러스터 발견`);
+    
+    return validClusters;
   }
 
   /**
@@ -911,7 +1068,7 @@ export class DefectDetector {
   }
 
   /**
-   * 최적화된 불량 특성 분석 (간소화된 버전)
+   * 최적화된 불량 특성 분석 (striation과 distortion 계산 포함)
    */
   analyzeDefectCharacteristicsOptimized(cluster, bounds) {
     const { centerX, centerY, radiusX, radiusY } = bounds;
@@ -925,18 +1082,18 @@ export class DefectDetector {
       };
     }
     
-    // 한 번의 순회로 평균 밝기 계산 (간소화)
+    // 한 번의 순회로 평균 밝기 계산
     let sumBrightness = 0;
-    
     for (const pixel of cluster) {
       sumBrightness += pixel.brightness;
     }
-    
     const averageBrightness = sumBrightness / cluster.length;
     
-    // 간소화된 특성 분석 (필요한 경우에만 상세 분석 수행)
-    const distortionValue = 0; // 기본값으로 설정 (필요시 계산)
-    const striationValue = 0;  // 기본값으로 설정 (필요시 계산)
+    // Striation 계산 (방향성 패턴 분석)
+    const striationValue = this.calculateStriation(cluster, centerX, centerY);
+    
+    // Distortion 계산 (형태 왜곡도 분석)
+    const distortionValue = this.calculateDistortion(cluster, centerX, centerY, radiusX, radiusY);
     
     return {
       distortion: distortionValue,
@@ -947,49 +1104,143 @@ export class DefectDetector {
   }
 
   /**
-   * 최적화된 edge 픽셀 찾기
+   * Striation (방향성 패턴) 계산
+   */
+  calculateStriation(cluster, centerX, centerY) {
+    if (cluster.length < 3) return 0;
+    
+    // 각 픽셀의 중심점으로부터의 방향과 거리 계산
+    const directions = [];
+    
+    for (const pixel of cluster) {
+      const dx = pixel.x - centerX;
+      const dy = pixel.y - centerY;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (distance > 0) {
+        const angle = Math.atan2(dy, dx);
+        directions.push({ angle, distance });
+      }
+    }
+    
+    if (directions.length < 3) return 0;
+    
+    // 방향성 패턴 분석
+    const angleHistogram = new Array(8).fill(0); // 8개 방향으로 분할
+    const angleStep = (2 * Math.PI) / 8;
+    
+    for (const { angle } of directions) {
+      const normalizedAngle = angle < 0 ? angle + 2 * Math.PI : angle;
+      const binIndex = Math.floor(normalizedAngle / angleStep);
+      angleHistogram[binIndex]++;
+    }
+    
+    // 방향성의 균등성 계산 (entropy 기반)
+    const totalPixels = directions.length;
+    let entropy = 0;
+    
+    for (const count of angleHistogram) {
+      if (count > 0) {
+        const probability = count / totalPixels;
+        entropy -= probability * Math.log2(probability);
+      }
+    }
+    
+    // 최대 엔트로피는 log2(8) = 3
+    const maxEntropy = Math.log2(8);
+    const striation = 1 - (entropy / maxEntropy); // 0~1 범위로 정규화
+    
+    return Math.round(striation * 100); // 0~100 범위로 변환
+  }
+
+  /**
+   * Distortion (형태 왜곡도) 계산
+   */
+  calculateDistortion(cluster, centerX, centerY, radiusX, radiusY) {
+    if (cluster.length < 3) return 0;
+    
+    // 이상적인 타원과 실제 픽셀 분포의 차이 계산
+    let totalDeviation = 0;
+    let validPixels = 0;
+    
+    for (const pixel of cluster) {
+      const dx = pixel.x - centerX;
+      const dy = pixel.y - centerY;
+      
+      // 이상적인 타원상의 거리 계산
+      const idealDistance = this.calculateIdealEllipseDistance(dx, dy, radiusX, radiusY);
+      
+      // 실제 거리
+      const actualDistance = Math.sqrt(dx * dx + dy * dy);
+      
+      if (idealDistance > 0) {
+        const deviation = Math.abs(actualDistance - idealDistance) / idealDistance;
+        totalDeviation += deviation;
+        validPixels++;
+      }
+    }
+    
+    if (validPixels === 0) return 0;
+    
+    const averageDeviation = totalDeviation / validPixels;
+    const distortion = Math.min(averageDeviation * 100, 100); // 0~100 범위로 제한
+    
+    return Math.round(distortion);
+  }
+
+  /**
+   * 이상적인 타원상의 거리 계산
+   */
+  calculateIdealEllipseDistance(dx, dy, radiusX, radiusY) {
+    if (radiusX === 0 || radiusY === 0) return 0;
+    
+    // 타원의 매개변수 방정식을 사용하여 이상적인 거리 계산
+    const angle = Math.atan2(dy, dx);
+    
+    // 타원의 매개변수 방정식
+    const idealX = radiusX * Math.cos(angle);
+    const idealY = radiusY * Math.sin(angle);
+    
+    return Math.sqrt(idealX * idealX + idealY * idealY);
+  }
+
+  /**
+   * 최적화된 edge 픽셀 찾기 (간단하고 확실한 방식)
    */
   findEdgePixelsOptimized(cluster) {
+    if (cluster.length === 0) return [];
+    
     // 클러스터가 작으면 모든 픽셀을 edge로 간주
-    if (cluster.length <= 20) {
+    if (cluster.length <= 10) {
       return cluster;
     }
     
-    // 클러스터가 너무 크면 효율적인 edge 찾기 사용
-    if (cluster.length > 5000) {
-      // console.log(`🔍 대용량 클러스터 edge 처리: ${cluster.length.toLocaleString()}개 픽셀 → 효율적인 edge 찾기 사용`);
-      return this.findEfficientEdgePixels(cluster);
-    }
-    
-    // 중간 크기 클러스터의 경우 샘플링하여 edge 픽셀 찾기
-    const sampleRate = Math.max(1, Math.floor(cluster.length / 50)); // 최대 50개까지만
     const edgePixels = [];
-    
-    // 클러스터 픽셀들의 좌표를 Set으로 저장하여 빠른 검색 가능 (크기 제한)
     const clusterPixelSet = new Set();
-    const maxSetSize = 10000; // Set 최대 크기 제한
     
+    // 클러스터 픽셀들을 Set에 저장
     for (const pixel of cluster) {
-      if (clusterPixelSet.size >= maxSetSize) {
-        console.warn('⚠️ 클러스터 픽셀 Set 크기가 너무 커서 샘플링합니다.');
-        break;
-      }
       clusterPixelSet.add(`${pixel.x},${pixel.y}`);
     }
     
-    for (let i = 0; i < cluster.length; i += sampleRate) {
-      const pixel = cluster[i];
-      
-      // 간단한 edge 검사 (4방향만) - 밝기 재계산 없이 클러스터 경계만 확인
+    // 각 픽셀에 대해 4방향 이웃 확인
+    for (const pixel of cluster) {
       let isEdge = false;
-      const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
       
-      for (const [dx, dy] of directions) {
-        const neighborX = pixel.x + dx;
-        const neighborY = pixel.y + dy;
+      // 4방향 (상, 하, 좌, 우) 확인
+      const directions = [
+        { dx: 0, dy: -1 },  // 상
+        { dx: 0, dy: 1 },   // 하
+        { dx: -1, dy: 0 },  // 좌
+        { dx: 1, dy: 0 }    // 우
+      ];
+      
+      for (const dir of directions) {
+        const neighborX = pixel.x + dir.dx;
+        const neighborY = pixel.y + dir.dy;
         const neighborKey = `${neighborX},${neighborY}`;
         
-        // 이웃 픽셀이 클러스터에 없으면 edge로 판단
+        // 이웃 픽셀이 클러스터에 없으면 edge
         if (!clusterPixelSet.has(neighborKey)) {
           isEdge = true;
           break;
@@ -1001,7 +1252,29 @@ export class DefectDetector {
       }
     }
     
-    return edgePixels.length > 0 ? edgePixels : cluster.slice(0, 10); // 최소 10개는 보장
+    // edge 픽셀을 찾지 못한 경우 클러스터의 경계 픽셀들을 사용
+    if (edgePixels.length === 0) {
+      // 클러스터의 경계 박스 계산
+      let minX = cluster[0].x, maxX = cluster[0].x;
+      let minY = cluster[0].y, maxY = cluster[0].y;
+      
+      for (const pixel of cluster) {
+        minX = Math.min(minX, pixel.x);
+        maxX = Math.max(maxX, pixel.x);
+        minY = Math.min(minY, pixel.y);
+        maxY = Math.max(maxY, pixel.y);
+      }
+      
+      // 경계 픽셀들을 edge로 사용
+      for (const pixel of cluster) {
+        if (pixel.x === minX || pixel.x === maxX || 
+            pixel.y === minY || pixel.y === maxY) {
+          edgePixels.push(pixel);
+        }
+      }
+    }
+    
+    return edgePixels.length > 0 ? edgePixels : cluster.slice(0, 10);
   }
 
   /**
@@ -1094,15 +1367,7 @@ export class DefectDetector {
     this.ctx.save();
     
     this.defectRegions.forEach((defect, index) => {
-      // 1. 실제 감지된 픽셀들을 빨간색으로 채워서 표시 (감지 과정 시각화)
-      if (defect.edgePixels && defect.edgePixels.length > 0) {
-        this.ctx.fillStyle = 'rgba(255, 0, 0, 0.8)'; // 더 진한 빨간색으로 채우기
-        for (const edgePixel of defect.edgePixels) {
-          this.ctx.fillRect(edgePixel.x - 0.5, edgePixel.y - 0.5, 1, 1);
-        }
-      }
-      
-      // 2. 정확한 타원형 테두리 표시 (색칠 없이 녹색 선만)
+      // 1. 먼저 녹색 타원형 테두리 표시 (색칠 없이 녹색 선만)
       this.ctx.strokeStyle = '#00ff00';
       this.ctx.lineWidth = 2;
       this.ctx.setLineDash([]);
@@ -1117,7 +1382,7 @@ export class DefectDetector {
       );
       this.ctx.stroke();
       
-      // 3. 불량 번호 표시 (원 가운데에만)
+      // 2. 불량 번호 표시 (원 가운데에만)
       this.ctx.fillStyle = '#00ff00';
       this.ctx.font = 'bold 12px Arial';
       this.ctx.textAlign = 'center';
@@ -1126,9 +1391,86 @@ export class DefectDetector {
         defect.centerX, 
         defect.centerY + 4
       );
+      
+      // 3. 마지막에 실제 감지된 픽셀들의 edge를 빨간색 선으로 표시 (위에 오도록)
+      if (defect.edgePixels && defect.edgePixels.length > 0) {
+        this.drawDefectEdgePixels(defect.edgePixels);
+      }
     });
     
     this.ctx.restore();
+  }
+
+  /**
+   * 감지된 픽셀들의 edge를 빨간색 선으로 표시 (간단한 바깥쪽 경계선 방식)
+   */
+  drawDefectEdgePixels(edgePixels) {
+    if (!edgePixels || edgePixels.length === 0) return;
+    
+    this.ctx.save();
+    this.ctx.strokeStyle = '#ff0000';
+    this.ctx.lineWidth = 2;
+    this.ctx.setLineDash([]);
+    
+    // 클러스터의 바깥쪽 경계선만 간단하게 그리기
+    const boundaryLines = this.findClusterBoundaryLines(edgePixels);
+    
+    for (const line of boundaryLines) {
+      this.ctx.beginPath();
+      this.ctx.moveTo(line.start.x, line.start.y);
+      this.ctx.lineTo(line.end.x, line.end.y);
+      this.ctx.stroke();
+    }
+    
+    this.ctx.restore();
+  }
+
+  /**
+   * 클러스터의 바깥쪽 경계선 찾기 (간단한 방식)
+   */
+  findClusterBoundaryLines(edgePixels) {
+    if (edgePixels.length === 0) return [];
+    
+    const boundaryLines = [];
+    const pixelSet = new Set();
+    
+    // 모든 edge 픽셀을 Set에 저장
+    for (const pixel of edgePixels) {
+      pixelSet.add(`${pixel.x},${pixel.y}`);
+    }
+    
+    // 각 edge 픽셀에 대해 바깥쪽 방향의 선분 찾기
+    for (const pixel of edgePixels) {
+      // 4방향 (상, 하, 좌, 우) 확인
+      const directions = [
+        { dx: 0, dy: -1, name: 'up' },    // 상
+        { dx: 0, dy: 1, name: 'down' },   // 하
+        { dx: -1, dy: 0, name: 'left' },  // 좌
+        { dx: 1, dy: 0, name: 'right' }   // 우
+      ];
+      
+      for (const dir of directions) {
+        const neighborX = pixel.x + dir.dx;
+        const neighborY = pixel.y + dir.dy;
+        const neighborKey = `${neighborX},${neighborY}`;
+        
+        // 이웃 픽셀이 클러스터에 없으면 바깥쪽 경계선
+        if (!pixelSet.has(neighborKey)) {
+          // 바깥쪽 방향으로 선분 생성
+          const startX = pixel.x;
+          const startY = pixel.y;
+          const endX = pixel.x + dir.dx * 2; // 바깥쪽으로 2픽셀 연장
+          const endY = pixel.y + dir.dy * 2;
+          
+          boundaryLines.push({
+            start: { x: startX, y: startY },
+            end: { x: endX, y: endY }
+          });
+        }
+      }
+    }
+    
+    return boundaryLines;
   }
 
   /**
@@ -1142,10 +1484,10 @@ export class DefectDetector {
       this.ctx.putImageData(this.backupImageData, 0, 0);
     }
     
-    // 1. 직접 감지한 영역을 빨간색으로 채워서 표시 (감지 과정 시각화)
-    this.drawDetectedPixelAreas();
+    // 1. 직접 감지한 영역을 빨간색으로 채워서 표시 (감지 과정 시각화) - 제거
+    // this.drawDetectedPixelAreas(); // 이 줄을 주석 처리하여 빨간색 채우기 제거
     
-    // 2. 불량 영역 녹색 타원 테두리 표시 (최종 결과)
+    // 2. 불량 영역 녹색 타원 테두리와 빨간 edge 선 표시 (최종 결과)
     this.drawExistingDefects();
     
     // console.log('최종 불량 영역 결과:', this.defectRegions);
@@ -1503,35 +1845,29 @@ export class DefectDetector {
       }
     };
     
-    // 8방향 인접 픽셀 확인 및 클러스터링 (최적화된 버전)
+    // 8방향 인접 픽셀 확인 및 클러스터링 (개선된 버전)
     const directions = [
       [-1, -1], [-1, 0], [-1, 1],  // 좌상, 좌, 좌하
       [0, -1],           [0, 1],     // 상, 하
       [1, -1],  [1, 0],  [1, 1]     // 우상, 우, 우하
     ];
     
-    // 대용량 데이터의 경우 배치 처리로 성능 향상
-    const batchSize = Math.min(1000, Math.ceil(pixels.length / 10));
-    
-    for (let batchStart = 0; batchStart < pixels.length; batchStart += batchSize) {
-      const batchEnd = Math.min(batchStart + batchSize, pixels.length);
+    // 모든 픽셀에 대해 8방향 인접 픽셀 확인
+    for (let i = 0; i < pixels.length; i++) {
+      const pixel = pixels[i];
       
-      for (let i = batchStart; i < batchEnd; i++) {
-        const pixel = pixels[i];
+      // 8방향 인접 픽셀 확인
+      for (const [dx, dy] of directions) {
+        const neighborX = pixel.x + dx;
+        const neighborY = pixel.y + dy;
+        const neighborKey = `${neighborX},${neighborY}`;
         
-        // 8방향 인접 픽셀 확인
-        for (const [dx, dy] of directions) {
-          const neighborX = pixel.x + dx;
-          const neighborY = pixel.y + dy;
-          const neighborKey = `${neighborX},${neighborY}`;
-          
-          // 인접 픽셀이 감지된 픽셀인지 확인
-          const neighborIndex = pixelMap.get(neighborKey);
-          
-          if (neighborIndex !== undefined && neighborIndex !== i) {
-            // 인접한 감지 픽셀들을 하나로 클러스터링
-            union(i, neighborIndex);
-          }
+        // 인접 픽셀이 감지된 픽셀인지 확인
+        const neighborIndex = pixelMap.get(neighborKey);
+        
+        if (neighborIndex !== undefined && neighborIndex !== i) {
+          // 인접한 감지 픽셀들을 하나로 클러스터링
+          union(i, neighborIndex);
         }
       }
     }
@@ -1546,7 +1882,11 @@ export class DefectDetector {
       clusters.get(root).push(pixels[i]);
     }
     
-    return Array.from(clusters.values()).filter(cluster => cluster.length >= minClusterSize);
+    const validClusters = Array.from(clusters.values()).filter(cluster => cluster.length >= minClusterSize);
+    
+    // console.log(`간단한 클러스터링 완료: ${validClusters.length}개 클러스터 발견`);
+    
+    return validClusters;
   }
 }
 

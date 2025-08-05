@@ -2543,13 +2543,11 @@ export default {
             const radiusX = defect.radiusX || defect.width / 2;
             const radiusY = defect.radiusY || defect.height / 2;
             
-            // 1. 실제 불량 영역의 edge 픽셀들을 작은 녹색 점으로 표시
+            // 1. 실제 불량 영역의 edge 픽셀들을 빨간색 점으로 표시 (간단한 방식)
             if (defect.edgePixels && defect.edgePixels.length > 0) {
-              this.ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+              this.ctx.fillStyle = '#ff0000';
               for (const edgePixel of defect.edgePixels) {
-                this.ctx.beginPath();
-                this.ctx.arc(edgePixel.x, edgePixel.y, 0.8, 0, 2 * Math.PI);
-                this.ctx.fill();
+                this.ctx.fillRect(edgePixel.x - 1, edgePixel.y - 1, 2, 2);
               }
             }
             
@@ -2572,13 +2570,11 @@ export default {
             this.ctx.fillStyle = '#00ff00';
             this.ctx.font = 'bold 12px Arial';
             this.ctx.textAlign = 'center';
-            // console.log(`🎨 캔버스 표시 - 불량 인덱스: ${index}, ID: ${defect.id}`);
             this.ctx.fillText(
               `${defect.id}`, 
               centerX, 
               centerY + 4
             );
-            
             
             this.ctx.restore();
           });
