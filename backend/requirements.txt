@@ -37,3 +37,5 @@ motor
 sqlalchemy
 pymysql
 opencv-python
+torch
+torchvision

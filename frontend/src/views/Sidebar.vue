@@ -25,6 +25,10 @@
           <i class="fas fa-table"></i>
           <span v-if="!isCollapsed">Table Management</span>
         </router-link>
+        <router-link to="/contribute" class="nav-item" active-class="active">
+          <i class="fas fa-people-carry"></i>
+          <span v-if="!isCollapsed">Contribute</span>
+        </router-link>
       </nav>
 
       <div v-if="isAdmin" class="section-title">ADMIN</div>

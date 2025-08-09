@@ -294,35 +294,29 @@ export default {
       }
     },
     async checkAuthentication() {
+      // 이미 인증 확인 중이거나 완료된 경우 중복 실행 방지
+      if (this.authChecking || this.authChecked) {
+        return;
+      }
+      
+      this.authChecking = true;
+      
       const useSSO = process.env.VUE_APP_USE_SSO === 'true'
       const id_token = localStorage.getItem('id_token');
 
-      // // API 호출
-      //   const response_ssd = await fetch('https://ssd.pds.samsungds.net/api/v0/count/add', {
-      //     method: 'POST',
-      //     headers: {
-      //       'Content-Type': 'application/json',
-      //       'Accept' : '*/*'
-      //     },
-      //     body:  JSON.stringify({"appId": "8d190441-6458-43f8-bb3e-c98d411b0911"})
-      //   });
-
-      // API 호출
-        const response = await fetch('http://localhost:8000/api/msa6/save-with-table-name', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(requestData)
-        });
-      
+      // SSO가 활성화되어 있고 토큰이 없는 경우에만 리다이렉트
       if (!id_token) {
         if (useSSO) {
           this.isAuthenticated = false;
           this.currentUser = null;
           this.authChecked = true;
-          // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-          window.location.href = 'http://localhost:8000/api/auth/samsung/login';
+          this.authChecking = false;
+          
+          // 세션 스토리지에 리다이렉트 상태 저장 (페이지 새로고침 시에도 유지)
+          if (!sessionStorage.getItem('redirectingToSSO')) {
+            sessionStorage.setItem('redirectingToSSO', 'true');
+            window.location.href = 'http://localhost:8000/api/auth/google/login';
+          }
           return;
         } else {
           // 개발 환경에서는 개발용 토큰 설정
@@ -341,9 +335,11 @@ export default {
           this.isAuthenticated = true;
           this.currentUser = devUser;
           this.authChecked = true;
+          this.authChecking = false;
+          
           const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
           if (!hasSeenPatchNote) {
-            console.log('패치노트 표시 (개발 환경) → 최초 표시');  // ← 여기에 로그 추가
+            console.log('패치노트 표시 (개발 환경) → 최초 표시');
             this.showPatchNote = true;
             localStorage.setItem('patchNoteSeen', 'true');
           }
@@ -364,12 +360,13 @@ export default {
         if (response.data.authenticated) {
           this.isAuthenticated = true;
           this.currentUser = response.data.user;
-          // 로그인 상태가 확인되면 로그인 모달이 표시되지 않도록 설정
           this.showLoginModal = false;
-          // 최초 로그인 시에만 패치노트 표시 (localStorage로 확인)
+          // 리다이렉트 상태 초기화
+          sessionStorage.removeItem('redirectingToSSO');
+          
           const hasSeenPatchNote = localStorage.getItem('patchNoteSeen');
           if (!hasSeenPatchNote) {
-            console.log('패치노트 표시 (개발 환경) → 최초 표시');  // ← 여기에 로그 추가
+            console.log('패치노트 표시 (SSO 로그인 성공) → 최초 표시');
             this.showPatchNote = true;
             localStorage.setItem('patchNoteSeen', 'true');
           }
@@ -377,10 +374,14 @@ export default {
           if (useSSO) {
             this.isAuthenticated = false;
             this.currentUser = null;
-            localStorage.removeItem('token');
+            localStorage.removeItem('id_token');
             localStorage.removeItem('user');
-            // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-            window.location.href = 'http://localhost:8000/api/auth/samsung/login';
+            
+            // 세션 스토리지에 리다이렉트 상태 저장
+            if (!sessionStorage.getItem('redirectingToSSO')) {
+              sessionStorage.setItem('redirectingToSSO', 'true');
+              window.location.href = 'http://localhost:8000/api/auth/google/login';
+            }
           } else {
             // 개발 환경에서는 개발용 토큰 재설정
             console.log('개발 환경: 토큰 검증 실패, 개발용 토큰 재설정')
@@ -405,15 +406,18 @@ export default {
         if (useSSO) {
           this.isAuthenticated = false;
           this.currentUser = null;
-          localStorage.removeItem('token');
+          localStorage.removeItem('id_token');
           localStorage.removeItem('user');
           
           // Check if it's a network error
           if (error.code === 'ERR_NETWORK') {
             this.serverError = true;
           } else {
-            // /main 경로이므로 바로 SSO 로그인으로 리다이렉트
-            window.location.href = 'http://localhost:8000/api/auth/samsung/login';
+            // 세션 스토리지에 리다이렉트 상태 저장
+            if (!sessionStorage.getItem('redirectingToSSO')) {
+              sessionStorage.setItem('redirectingToSSO', 'true');
+              window.location.href = 'http://localhost:8000/api/auth/google/login';
+            }
           }
         } else {
           // 개발 환경에서는 네트워크 오류 시에도 개발용 토큰 설정
@@ -435,6 +439,7 @@ export default {
       }
       
       this.authChecked = true;
+      this.authChecking = false;
     },
     handleLoginSuccess(user) {
       this.isAuthenticated = true;

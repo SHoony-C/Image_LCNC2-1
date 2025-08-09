@@ -2,11 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router'
 import MainView from '@/views/side_1_main.vue'
 import AnalysisView from '@/views/side_2_analysis.vue'
 import TableManagementView from '@/views/side_3_Table Management.vue'
+import ContributeView from '@/views/side_4_contribute.vue'
 import login_modal from '@/components/login_modal.vue'
 import UserManagement from '@/views/side_admin2_users.vue'
 import SettingsView from '@/views/side_admin3_settings.vue'
 import UserCountView from '@/views/side_admin4_user-count.vue'
-import UserManagementView from '@/views/side_4_management.vue'
 import store from '@/store'
 import LogService from '../utils/logService'
 
@@ -29,6 +29,11 @@ const routes = [
     path: '/table-management',
     name: 'TableManagementView',
     component: TableManagementView
+  },
+  {
+    path: '/contribute',
+    name: 'ContributeView',
+    component: ContributeView
   },
   {
     path: '/admin',
@@ -56,12 +61,6 @@ const routes = [
     path: '/admin/user-count',
     name: 'UserCount',
     component: UserCountView,
-    meta: { requiresAuth: true, requiresAdmin: true }
-  },
-  {
-    path: '/management',
-    name: 'UserManagementView',
-    component: UserManagementView,
     meta: { requiresAuth: true, requiresAdmin: true }
   }
 ]

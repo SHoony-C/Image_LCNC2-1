@@ -18,7 +18,7 @@ from msa5_workLCNC import router as msa5_work_router
 # 사이드 모듈 라우터 임포트
 from side_2_analysis import router as side_2_router
 from side_3_tablemanage import router as side_3_tablemanage
-from side_4_management import router as management_router
+from side_4_contribute import router as contribute_router
 from side_5_settings import router as settings_router
 from side_6_help import router as help_router
 
@@ -147,7 +147,7 @@ app.include_router(msa6_router, prefix="/api/msa6", tags=["msa6"])
 # 사이드 모듈 라우터 등록
 app.include_router(side_2_router, prefix="/api/side2", tags=["side2"])
 app.include_router(side_3_tablemanage, prefix="/api/side3", tags=["side3"])
-app.include_router(management_router, prefix="/api/management", tags=["management"])
+app.include_router(contribute_router, prefix="/api/contribute", tags=["contribute"])
 app.include_router(settings_router, prefix="/api/settings", tags=["settings"])
 app.include_router(help_router, prefix="/api/help", tags=["help"])
 
