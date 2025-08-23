@@ -519,6 +519,8 @@ import LogService from '../utils/logService'
 import TableNameSelector from './TableNameSelector.vue';
 import PopupDebug from '../utils/popupDebug';
 import { createBoundedSegments, createAreaMeasurements  } from '@/utils/msa6_measures.js';
+import { trimMeasurementBetweenTwoReferences } from '@/utils/msa6_reference_trimmer.js';
+
 // 기준선 기반 자르기 기능을 위한 import 추가
 import { 
   trimMeasurementByReferenceLine, 
@@ -2191,11 +2193,15 @@ export default {
             measurement.subItemId = `${this.nextId}-${this.subItemPrefix}1`;
             
             // 단일 선 측정 - 기준선 기반 자르기 기능 복원
-            // 모든 기준선을 순회하면서 측정선을 자르기
             if (this.referenceLines.length > 0) {
-              // 모든 기준선에 대해 순차적으로 자르기 적용
-              for (const referenceLine of this.referenceLines) {
-                measurement = this.trimSingleMeasurementByReferenceLine(measurement, referenceLine);
+              if (this.referenceLines.length === 2) {
+                // 기준선이 2개인 경우 두 기준선 사이의 측정선만 사용
+                measurement = trimMeasurementBetweenTwoReferences(measurement, this.referenceLines);
+              } else {
+                // 기준선이 1개 또는 3개 이상인 경우 기존 로직 사용
+                for (const referenceLine of this.referenceLines) {
+                  measurement = this.trimSingleMeasurementByReferenceLine(measurement, referenceLine);
+                }
               }
               // 자른 후 값 다시 계산
               measurement.value = this.calculateValue(measurement.start, measurement.end);
@@ -2212,6 +2218,13 @@ export default {
             this.nextId++; // 측정선 ID만 증가
           }
         }
+        
+        // 선 측정 완료 후 무조건 상태 초기화
+        this.currentMeasurement = null;
+        this.isMeasuring = false;
+        this.render();
+        return;
+      
       } else if (this.areaStart && this.areaEnd) {
         const width = Math.abs(this.areaEnd.x - this.areaStart.x);
         const height = Math.abs(this.areaEnd.y - this.areaStart.y);

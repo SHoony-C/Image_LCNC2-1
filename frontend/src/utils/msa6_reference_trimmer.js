@@ -275,3 +275,65 @@ export function setReferenceTrimmingEnabled(enabled) {
   
   return config;
 } 
+
+/**
+ * 기준선이 2개인 경우 두 기준선 사이의 측정선만 남깁니다.
+ * @param {Object} measurement - 측정 데이터 {start: {x, y}, end: {x, y}, ...}
+ * @param {Array} referenceLines - 기준선 배열 (2개)
+ * @returns {Object} 조정된 측정 데이터
+ */
+export function trimMeasurementBetweenTwoReferences(measurement, referenceLines) {
+  if (!referenceLines || referenceLines.length !== 2) {
+    return { ...measurement };
+  }
+
+  const result = {
+    ...measurement,
+    start: { ...measurement.start },
+    end: { ...measurement.end }
+  };
+
+  // 첫 번째와 두 번째 기준선과의 교차점 계산
+  const intersection1 = calculateLineIntersection(measurement, referenceLines[0]);
+  const intersection2 = calculateLineIntersection(measurement, referenceLines[1]);
+
+  // 두 교차점이 모두 존재하는 경우
+  if (intersection1 && intersection2) {
+    // 측정선의 시작점과 끝점에서 각 교차점까지의 거리 계산
+    const distStart1 = calculateDistance(measurement.start, intersection1);
+    const distStart2 = calculateDistance(measurement.start, intersection2);
+    const distEnd1 = calculateDistance(measurement.end, intersection1);
+    const distEnd2 = calculateDistance(measurement.end, intersection2);
+
+    // 시작점에 가까운 교차점과 끝점에 가까운 교차점 결정
+    let startIntersection, endIntersection;
+    
+    if (distStart1 < distStart2) {
+      startIntersection = intersection1;
+      endIntersection = intersection2;
+    } else {
+      startIntersection = intersection2;
+      endIntersection = intersection1;
+    }
+
+    // 두 교차점 사이의 선분으로 측정선 조정
+    result.start = {
+      x: startIntersection.x,
+      y: startIntersection.y
+    };
+    result.end = {
+      x: endIntersection.x,
+      y: endIntersection.y
+    };
+
+    console.log(`[trimMeasurementBetweenTwoReferences] 두 기준선 사이 측정: (${result.start.x.toFixed(0)}, ${result.start.y.toFixed(0)}) - (${result.end.x.toFixed(0)}, ${result.end.y.toFixed(0)})`);
+  }
+  // 하나의 교차점만 있는 경우 기존 로직 사용
+  else if (intersection1) {
+    return trimMeasurementByReferenceLine(measurement, referenceLines[0]);
+  } else if (intersection2) {
+    return trimMeasurementByReferenceLine(measurement, referenceLines[1]);
+  }
+
+  return result;
+}

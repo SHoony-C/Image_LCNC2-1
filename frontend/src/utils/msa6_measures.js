@@ -3,6 +3,7 @@
 
 // 기준선 기반 자르기 기능을 위한 import 추가
 import { trimMeasurementByReferenceLine } from './msa6_reference_trimmer.js';
+import { trimMeasurementBetweenTwoReferences } from './msa6_reference_trimmer.js';
 
 export function createAreaMeasurements() {
     // console.log(`[createAreaMeasurements] >>> 시작 - 모드: ${this.measurementMode}, 기준선 있음: ${!!this.activeReferenceLine}`);
@@ -39,11 +40,15 @@ export function createAreaMeasurements() {
         };
         
         // 기준선이 있는 경우 측정선을 기준선으로 자르기
-        // 모든 기준선을 순회하면서 측정선을 자르기
         if (this.referenceLines.length > 0) {
-          // 모든 기준선에 대해 순차적으로 자르기 적용
-          for (const referenceLine of this.referenceLines) {
-            measurement = trimMeasurementByReferenceLine(measurement, referenceLine);
+          if (this.referenceLines.length === 2) {
+            // 기준선이 2개인 경우 두 기준선 사이의 측정선만 사용
+            measurement = trimMeasurementBetweenTwoReferences(measurement, this.referenceLines);
+          } else {
+            // 기준선이 1개 또는 3개 이상인 경우 기존 로직 사용
+            for (const referenceLine of this.referenceLines) {
+              measurement = trimMeasurementByReferenceLine(measurement, referenceLine);
+            }
           }
           // 마지막 기준선의 ID를 참조로 설정 (기존 호환성 유지)
           measurement.relativeToReference = this.activeReferenceLine?.itemId;
@@ -84,11 +89,15 @@ export function createAreaMeasurements() {
         };
         
         // 기준선이 있는 경우 측정선을 기준선으로 자르기
-        // 모든 기준선을 순회하면서 측정선을 자르기
         if (this.referenceLines.length > 0) {
-          // 모든 기준선에 대해 순차적으로 자르기 적용
-          for (const referenceLine of this.referenceLines) {
-            measurement = trimMeasurementByReferenceLine(measurement, referenceLine);
+          if (this.referenceLines.length === 2) {
+            // 기준선이 2개인 경우 두 기준선 사이의 측정선만 사용
+            measurement = trimMeasurementBetweenTwoReferences(measurement, this.referenceLines);
+          } else {
+            // 기준선이 1개 또는 3개 이상인 경우 기존 로직 사용
+            for (const referenceLine of this.referenceLines) {
+              measurement = trimMeasurementByReferenceLine(measurement, referenceLine);
+            }
           }
           // 마지막 기준선의 ID를 참조로 설정 (기존 호환성 유지)
           measurement.relativeToReference = this.activeReferenceLine?.itemId;
