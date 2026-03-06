@@ -671,11 +671,15 @@ export function useCanvas(deps) {
     image.value.crossOrigin = 'anonymous';
     image.value.src = url;
 
-    scalebarManager.value.restoreScaleBarSettings();
-    const { hasValidManualScaleBar } = scalebarManager.value.validateScaleBarSettings();
+    let hasValidManualScaleBar = false;
+    if (scalebarManager.value) {
+      scalebarManager.value.restoreScaleBarSettings();
+      const validation = scalebarManager.value.validateScaleBarSettings();
+      hasValidManualScaleBar = validation.hasValidManualScaleBar;
 
-    if (hasValidManualScaleBar) {
-      deps.scaleBarDetected.value = true;
+      if (hasValidManualScaleBar) {
+        deps.scaleBarDetected.value = true;
+      }
     }
 
     image.value.onload = async () => {
@@ -715,7 +719,7 @@ export function useCanvas(deps) {
         if (needScaleDetection) {
           sessionStorage.removeItem('msa6_need_scale_detection');
         }
-        scalebarManager.value.detectScaleBar(true);
+        if (scalebarManager.value) scalebarManager.value.detectScaleBar(true);
       }
 
       if (initialLoadDone.value && deps.localMeasurements.value.length > 0) {
@@ -779,7 +783,7 @@ export function useCanvas(deps) {
       !initialLoadDone.value &&
       !(deps.manualScaleBarSet.value && deps.scaleBarValue.value && deps.scaleBarUnit.value)
     ) {
-      scalebarManager.value.detectScaleBar();
+      if (scalebarManager.value) scalebarManager.value.detectScaleBar();
     }
 
     if (!initialLoadDone.value) {

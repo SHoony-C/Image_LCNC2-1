@@ -104,7 +104,8 @@ export function useMeasurement(deps) {
 
     if (
       (mode === 'area' || mode === 'area-vertical' || mode === 'area-horizontal' || mode === 'defect') &&
-      deps.scaleMethod.value === 'scaleBar'
+      deps.scaleMethod.value === 'scaleBar' &&
+      deps.scalebarManager.value
     ) {
       const { hasValidManualScaleBar } = deps.scalebarManager.value.validateScaleBarSettings();
 
@@ -360,8 +361,10 @@ export function useMeasurement(deps) {
         };
 
         deps.scaleBarDetected.value = true;
-        deps.scalebarManager.value.saveScaleBarSettings();
-        deps.scalebarManager.value.showScaleBarValueDialog();
+        if (deps.scalebarManager.value) {
+          deps.scalebarManager.value.saveScaleBarSettings();
+          deps.scalebarManager.value.showScaleBarValueDialog();
+        }
 
         deps.isDrawingScaleBar.value = false;
 

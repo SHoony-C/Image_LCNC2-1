@@ -821,6 +821,7 @@ const measurementDeps = {
   lineCount: canvasDeps.lineCount,
   isDefectDetecting,
   selectedDefects: selectedDefectsRef,
+  selectedRows: ref([]),
   selectedMeasurement: ref(null),
   selectedSegment: ref(null),
   referenceId,
@@ -913,6 +914,9 @@ const {
 // Wire selection refs back
 historyDeps.selectedRows = selectedRows;
 historyDeps.selectedMeasurement = selectedMeasurement;
+measurementDeps.selectedRows = selectedRows;
+measurementDeps.selectedMeasurement = selectedMeasurement;
+measurementDeps.selectedSegment = selectedSegment;
 defectDeps.newItemId = newItemId;
 defectDeps.newSubId = newSubId;
 
