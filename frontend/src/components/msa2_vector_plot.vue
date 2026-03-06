@@ -293,8 +293,13 @@ export default {
     vectors: {
       handler(newVectors) {
         if (newVectors) {
-          this.markerSizes = Array(newVectors.length).fill(6);
-          this.markerColors = Array(newVectors.length).fill('#1f77b4');
+          // 기존 배열 크기와 같으면 재생성 스킵 (메모리 최적화)
+          if (!this.markerSizes || this.markerSizes.length !== newVectors.length) {
+            this.markerSizes = Array(newVectors.length).fill(6);
+          }
+          if (!this.markerColors || this.markerColors.length !== newVectors.length) {
+            this.markerColors = Array(newVectors.length).fill('#1f77b4');
+          }
           // this.initializePlot();
         }
       },
@@ -2604,9 +2609,7 @@ export default {
       const canvases = document.querySelectorAll('canvas');
       const container = this.$refs.plotlyContainer;
       const plotlyCanvases = Array.from(canvases).filter(canvas => {
-        // plotly-visualization 내부에 없는 캔버스는 제외
-        const parent = canvas.closest('#plotly-visualization');
-        return !parent && canvas.id.includes('gl-canvas');
+        // plotly-visualization 내부에 있는 캔버스는 제외
         const insidePlot = container && container.contains(canvas);
         return !insidePlot && canvas.id.includes('gl-canvas');
       });
@@ -2650,6 +2653,7 @@ export default {
     window.removeEventListener('keydown', this.handleKeyDown);
     document.removeEventListener('msa1-to-msa4-image', this.handleImageUpdate);
     document.removeEventListener('msa1-to-msa2-similar-images', this.handleSimilarImagesFromMSA1);
+    document.removeEventListener('backend-to-msa2-similar-image', this.handleSimilarImageFromBackend);
     document.removeEventListener('msa5-to-msa4-similar-images', this.handleSimilarImagesFromMSA5);
     
     // ResizeObserver 정리
@@ -2665,7 +2669,13 @@ export default {
     if (this.$eventBus) {
       this.$eventBus.off('select-image-by-filename', this.handleSelectImageByFilename);
     }
-    
+
+    // 이미지 데이터 정리 (메모리 해제)
+    this.lastImageData = null;
+    this.currentImageData = null;
+    this.plotData = [];
+    this.plotOriginalIndices = [];
+
     // logDebug('MSA4 event listeners and observers cleaned up');
   },
 }

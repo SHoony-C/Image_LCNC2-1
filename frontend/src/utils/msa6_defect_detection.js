@@ -123,8 +123,8 @@ export class DefectDetector {
     // console.log('=== 간단 박스 수축 불량 감지 시작 ===', boundingBox);
     
     if (this.isDetecting || this.isProcessing) {
-      console.warn('이미 감지 또는 처리가 진행 중입니다.');
-      return;
+      // 기존 감지가 진행 중이면 먼저 중단 후 재시작
+      this.stopDetection();
     }
 
     // 이미지 데이터 특성 분석 (디버깅용)
@@ -163,6 +163,9 @@ export class DefectDetector {
       this.isDetecting = false;
       this.isProcessing = false;
       this.isCompleting = false;
+      // Promise 내 ImageData 참조 해제
+      this.currentBox = null;
+      this.originalBox = null;
     }
   }
 
@@ -493,7 +496,9 @@ export class DefectDetector {
     }
     
     // console.log(`클러스터링 완료 - ${clusters.length}개 클러스터 발견`);
-    
+
+    // 클러스터링 완료 후 임시 참조 정리는 아래 루프 후에 수행
+
     // 불량 영역이 100개를 초과하는 경우 경고
     if (clusters.length > 100) {
       console.warn(`⚠️ 불량 영역이 ${clusters.length}개로 과도하게 감지되었습니다.`);
@@ -569,6 +574,9 @@ export class DefectDetector {
       console.warn('밝기 임계값을 조정하거나 다른 영역을 선택해보세요.');
     }
     
+    // 클러스터링 임시 데이터 정리 (메모리 해제)
+    clusters.length = 0;
+
     // 처리 완료
     this.isProcessing = false;
     // console.log('불량 영역 분석 완료');
@@ -1682,12 +1690,13 @@ export class DefectDetector {
     // 데이터 초기화
     this.stoppedPixels = [];
     this.defectRegions = [];
-    
+    this.backupImageData = null;
+
     // 캔버스 초기화
     if (this.originalImageData) {
       this.ctx.putImageData(this.originalImageData, 0, 0);
     }
-    
+
     // console.log('감지 중단 완료 - 모든 상태 초기화됨');
   }
 
@@ -1887,6 +1896,24 @@ export class DefectDetector {
     // console.log(`간단한 클러스터링 완료: ${validClusters.length}개 클러스터 발견`);
     
     return validClusters;
+  }
+
+  /**
+   * 인스턴스 완전 파괴 - 모든 참조 해제 (메모리 누수 방지)
+   */
+  destroy() {
+    this.stopDetection();
+    this.backupImageData = null;
+    this.ctx = null;
+    this.canvas = null;
+    this.imageData = null;
+    this.originalImageData = null;
+    this.sourceImage = null;
+    this.stoppedPixels = [];
+    this.defectRegions = [];
+    this.currentBox = null;
+    this.originalBox = null;
+    this.scaleBarExclusionArea = null;
   }
 }
 

@@ -323,6 +323,12 @@ export function  createBoundedSegments(measurement) {
       // console.log(`[createBoundedSegments] 보정 후 세그먼트 합계: ${newSum.toFixed(2)}`);
     }
     
+    // 세그먼트 상한선 적용 (메모리 누수 방지 - 최대 500개)
+    const MAX_SEGMENTS = 500;
+    if (this.segmentedMeasurements.length + segments.length > MAX_SEGMENTS) {
+      const overflow = (this.segmentedMeasurements.length + segments.length) - MAX_SEGMENTS;
+      this.segmentedMeasurements.splice(0, overflow);
+    }
     this.segmentedMeasurements.push(...segments);
     // console.log(`[createBoundedSegments] 종료 - 세그먼트 ${segments.length}개 생성, 총 ${this.segmentedMeasurements.length}개`);
     
@@ -330,4 +336,11 @@ export function  createBoundedSegments(measurement) {
     segments.forEach((segment, idx) => {
       // console.log(`  세그먼트 #${idx+1}: ID=${segment.itemId}, SubID=${segment.subItemId}, 값=${segment.value.toFixed(2)}, 밝기=${segment.isBright ? '밝음' : '어두움'}`);
     });
+  }
+
+/**
+ * 세그먼트 측정값 전체 초기화 (메모리 해제)
+ */
+export function clearMeasurements() {
+    this.segmentedMeasurements = [];
   }

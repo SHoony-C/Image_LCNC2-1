@@ -134,8 +134,8 @@ export class MSA6ScalebarManager {
     this.context.$nextTick(() => {
       // console.log('[showScaleDetectionFailurePopup] $nextTick 1단계 - DOM 업데이트 후 팝업 요소 찾기 시도');
       
-      // 약간의 추가 지연 후 DOM 요소 찾기
-      setTimeout(() => {
+      // 약간의 추가 지연 후 DOM 요소 찾기 (타이머 ID 저장하여 destroy 시 정리)
+      this._failurePopupTimer = setTimeout(() => {
         const popupElement = document.querySelector('.scale-choice-popup');
         // console.log('[showScaleDetectionFailurePopup] 팝업 요소 검색 결과:', popupElement ? '찾음' : '못찾음');
         
@@ -163,15 +163,10 @@ export class MSA6ScalebarManager {
         } else {
           console.error('[showScaleDetectionFailurePopup] 팝업 요소를 찾을 수 없음 - DOM 구조 확인');
           
-          // 전체 DOM에서 관련 요소들 찾기 시도
-          const allPopups = document.querySelectorAll('[class*="popup"], [class*="modal"], [class*="overlay"]');
-          // console.log('[showScaleDetectionFailurePopup] 전체 팝업/모달 요소들:', allPopups.length, '개');
-          
-          // showScaleChoicePopup 상태 다시 확인
-          // console.log('[showScaleDetectionFailurePopup] 현재 showScaleChoicePopup 상태:', this.context.showScaleChoicePopup);
-          
-          // 강제로 Vue 컴포넌트 업데이트 트리거
-          this.context.$forceUpdate();
+          // showScaleChoicePopup 상태 다시 확인 후 필요 시에만 $forceUpdate 호출
+          if (this.context.showScaleChoicePopup && this.context.$forceUpdate) {
+            this.context.$forceUpdate();
+          }
         }
       }, 100);
     });
@@ -225,7 +220,10 @@ export class MSA6ScalebarManager {
       // 1. 현재 이미지에 대한 설정 저장
       localStorage.setItem(`msa6_scalebar_${imageKey}`, JSON.stringify(settings));
       // console.log(`[saveScaleBarSettings] 현재 이미지 설정 저장 완료 -> localStorage[msa6_scalebar_${imageKey}]`);
-      
+
+      // localStorage 프루닝: 이미지별 키가 최대 50개를 초과하지 않도록 관리
+      this._pruneLocalStorageScalebarKeys(50);
+
       // 2. 마지막 사용 이미지 키 저장 (다른 이미지에서 재사용하기 위함)
       localStorage.setItem('msa6_last_image_key', imageKey);
       // console.log(`[saveScaleBarSettings] 마지막 이미지 키 저장 완료 -> localStorage[msa6_last_image_key] = ${imageKey}`);
@@ -682,9 +680,55 @@ export class MSA6ScalebarManager {
       this.context.scaleMethod = 'scaleBar';
       
       // console.log('[clearScalebarSettings] 스케일바 설정 전체 초기화 완료');
-      
+
     } catch (error) {
       console.error('[clearScalebarSettings] 스케일바 설정 초기화 중 오류:', error);
     }
   }
-} 
+
+  /**
+   * localStorage의 msa6_scalebar_ 이미지별 키를 최대 maxKeys개로 프루닝
+   * 오래된 항목(savedAt 기준)을 삭제
+   */
+  _pruneLocalStorageScalebarKeys(maxKeys = 50) {
+    try {
+      const prefix = 'msa6_scalebar_';
+      const excludeKeys = [`${prefix}global`];
+      const entries = [];
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(prefix) && !excludeKeys.includes(key)) {
+          try {
+            const data = JSON.parse(localStorage.getItem(key));
+            entries.push({ key, savedAt: data.savedAt || '1970-01-01T00:00:00.000Z' });
+          } catch {
+            entries.push({ key, savedAt: '1970-01-01T00:00:00.000Z' });
+          }
+        }
+      }
+
+      if (entries.length > maxKeys) {
+        // savedAt 기준 오름차순 정렬 (오래된 순)
+        entries.sort((a, b) => a.savedAt.localeCompare(b.savedAt));
+        const toRemove = entries.slice(0, entries.length - maxKeys);
+        for (const entry of toRemove) {
+          localStorage.removeItem(entry.key);
+        }
+      }
+    } catch (e) {
+      // 프루닝 실패는 무시 (핵심 기능에 영향 없음)
+    }
+  }
+
+  /**
+   * 인스턴스 완전 파괴 - 타이머 정리 및 참조 해제 (메모리 누수 방지)
+   */
+  destroy() {
+    if (this._failurePopupTimer) {
+      clearTimeout(this._failurePopupTimer);
+      this._failurePopupTimer = null;
+    }
+    this.context = null;
+  }
+}

@@ -123,6 +123,7 @@ export default {
       isProcessingSimilarImages: false,
       isProcessingMSA1Data: false, // MSA1 데이터 처리 중 플래그 추가
       lastMSA1ProcessTime: null, // 최근 MSA1 데이터 처리 시간 저장
+      abortController: null, // fetch 요청 취소용 AbortController
     }
   },
   computed: {
@@ -132,7 +133,7 @@ export default {
         .filter(image => this.isIAppTag(image.filename))
         .slice(0, 3);
     },
-    
+
     // Analysis 태그 유사 이미지 (최대 3개)
     analysisSimilarImages() {
       return this.similarImages
@@ -140,10 +141,22 @@ export default {
         .slice(0, 3);
     }
   },
+  watch: {
+    // similarImages 배열 상한선 제한 (최대 100개)
+    similarImages(newVal) {
+      if (newVal && newVal.length > 100) {
+        // 오래된 항목 제거 (뒤쪽이 오래된 것)
+        this.similarImages = newVal.slice(0, 100);
+      }
+    }
+  },
   created() {
     try {
       //console.log('MSA3 컴포넌트 초기화 시작...');
       
+      // fetch 요청 취소용 AbortController 초기화
+      this.abortController = new AbortController();
+
       // 가장 먼저 데이터 완전 초기화 (MSA1과 동일하게)
       this.mainImage = null;
       this.similarImages = [];
@@ -151,7 +164,7 @@ export default {
       this.selectedImage = null;
       this.errorMessage = '';
       this.layoutInitialized = false;
-      
+
       // 전역 데이터도 초기화
       if (typeof window !== 'undefined') {
         if (!window.MSASharedData) {
@@ -215,22 +228,39 @@ export default {
   },
   beforeDestroy() {
     try {
+      // 진행 중인 fetch 요청 취소
+      if (this.abortController) {
+        this.abortController.abort();
+        this.abortController = null;
+      }
+
       // 커스텀 이벤트 리스너 정리
       this.removeEventListeners();
-      
+
       // 전역 이벤트 버스 리스너 정리
       if (window.MSAEventBus) {
         window.MSAEventBus.off('msa2-image-selected', this.handleImageSelected);
         window.MSAEventBus.off('msa2-similar-images', this.handleSimilarImagesFound);
       }
-      
+
       // 리사이즈 이벤트 리스너 제거
       window.removeEventListener('resize', this.resizeHandler);
-      
+
       // 데이터 폴링 인터벌 정리 (혹시 있을 경우)
       if (this.dataPollingInterval) {
         clearInterval(this.dataPollingInterval);
       }
+
+      // window.MSASharedData 정리
+      if (typeof window !== 'undefined' && window.MSASharedData) {
+        window.MSASharedData.currentImage = null;
+        window.MSASharedData.similarImages = [];
+      }
+
+      // similarImages 배열 정리
+      this.similarImages = [];
+      this.mainImage = null;
+      this.selectedImage = null;
     } catch (error) {
       // console.error('MSA3: beforeDestroy 라이프사이클 오류:', error);
     }
@@ -817,9 +847,10 @@ export default {
               headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
-              }
+              },
+              signal: this.abortController ? this.abortController.signal : undefined
             });
-            
+
             if (response.ok) {
               const result = await response.json();
               if (result.status === 'success' && result.textContent) {
@@ -932,9 +963,10 @@ export default {
           headers: {
             'Accept': 'application/json',
             'Content-Type': 'application/json'
-          }
+          },
+          signal: this.abortController ? this.abortController.signal : undefined
         });
-        
+
         if (response.ok) {
           const result = await response.json();
           if (result.status === 'success' && result.textContent) {
@@ -1149,7 +1181,8 @@ export default {
       
       // API 요청 - I-app 이미지 워크플로우 정보
       //console.log('MSA3: Sending fetch request to API');
-      fetch(apiUrl)
+      const fetchOptions = this.abortController ? { signal: this.abortController.signal } : {};
+      fetch(apiUrl, fetchOptions)
         .then(response => {
           //console.log(`MSA3: Workflow API response status: ${response.status}, statusText: ${response.statusText}`);
           
@@ -1178,7 +1211,7 @@ export default {
               // 대체 방법으로 직접 이름만 사용해서 다시 시도
               const simpleNameUrl = `http://localhost:8000/api/imageanalysis/workflow/by-image/${searchFilename}`;
               // console.log(`MSA3: Trying alternative URL: ${simpleNameUrl}`);
-              return fetch(simpleNameUrl)
+              return fetch(simpleNameUrl, fetchOptions)
                 .then(altResponse => {
                   //console.log(`MSA3: Alternative API response status: ${altResponse.status}, statusText: ${altResponse.statusText}`);
                   return altResponse;
