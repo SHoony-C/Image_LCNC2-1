@@ -360,55 +360,6 @@
       </div>
     </Teleport>
 
-    <!-- 워크플로우 저장 다이얼로그 -->
-    <Teleport to="body">
-      <div class="save-workflow-modal" v-if="showSaveWorkflowDialog">
-        <div class="save-workflow-content">
-          <div class="save-workflow-header">
-            <h2>워크플로우 저장</h2>
-            <button class="close-btn" @click="showSaveWorkflowDialog = false">&times;</button>
-          </div>
-          <div class="save-workflow-body">
-            <div class="form-group">
-              <label for="workflow-name">워크플로우 이름</label>
-              <input type="text" id="workflow-name" v-model="workflowName" ref="workflowNameInput" />
-            </div>
-
-            <div class="workflow-preview">
-              <h3>워크플로우 정보</h3>
-              <div v-if="getNodeSummary(elements).length > 0" class="workflow-summary">
-                <div class="workflow-nodes">
-                  <div v-for="(node, index) in getNodeSummary(elements)" :key="index" class="node-summary-item">
-                    <div class="node-icon" v-if="node.icon">
-                      <i :class="node.icon"></i>
-                    </div>
-                    <div class="node-info">
-                      <div class="node-label">{{ node.label }}</div>
-                      <div class="node-params" v-if="node.params && Object.keys(node.params).length > 0">
-                        <div v-for="(value, key) in node.params" :key="key" class="param-item">
-                          <span class="param-name">{{ key }}:</span>
-                          <span class="param-value">{{ value }}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="node-connector" v-if="index < getNodeSummary(elements).length - 1">
-                      <i class="fas fa-arrow-right"></i>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-else class="no-workflow-data">
-                워크플로우 정보가 없습니다.
-              </div>
-            </div>
-          </div>
-          <div class="save-workflow-footer">
-            <button class="cancel-btn" @click="showSaveWorkflowDialog = false">취소</button>
-            <button class="save-btn" @click="saveWorkflowToServer">저장</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
