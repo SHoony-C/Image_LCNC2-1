@@ -1,0 +1,13 @@
+[    3713ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8080/favicon.ico:0
+[    6007ms] [ERROR] [LogService] 액션 로깅 실패: AxiosError: Network Error
+    at XMLHttpRequest.handleError (webpack-internal:///./node_modules/axios/lib/adapters/xhr.js:136:21)
+    at Axios.request (webpack-internal:///./node_modules/axios/lib/core/Axios.js:59:41) @ webpack-internal:///./src/main.js:141
+[    6031ms] [ERROR] 토큰 검증 실패 @ webpack-internal:///./src/main.js:141
+[    6036ms] [WARNING] [Vue warn]: Property "process" was accessed during render but is not defined on instance. 
+  at <LoginModal key=1 show=true onClose=fn  ... > 
+  at <App> @ webpack-internal:///./node_modules/@vue/runtime-core/dist/runtime-core.esm-bundler.js:201
+[    6333ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/api/users/log-action-noauth:0
+[    6342ms] [ERROR] [LogService] 액션 로깅 실패: AxiosError: Network Error
+    at XMLHttpRequest.handleError (webpack-internal:///./node_modules/axios/lib/adapters/xhr.js:136:21)
+    at Axios.request (webpack-internal:///./node_modules/axios/lib/core/Axios.js:59:41) @ webpack-internal:///./src/main.js:141
+[    6342ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:8000/api/users/log-action-noauth:0

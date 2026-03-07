@@ -1,0 +1,24 @@
+[    3775ms] [ERROR] 토큰 검증 실패 @ webpack-internal:///./src/main.js:141
+[    3777ms] [WARNING] [Vue warn]: Property "process" was accessed during render but is not defined on instance. 
+  at <LoginModal key=1 show=true onClose=fn  ... > 
+  at <App> @ webpack-internal:///./node_modules/@vue/runtime-core/dist/runtime-core.esm-bundler.js:201
+[    3986ms] [ERROR] Access to fetch at 'http://localhost:8000/api/msa5/nodes' from origin 'http://localhost:8080' has been blocked by CORS policy: The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'. @ http://localhost:8080/main:0
+[    3987ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost:8000/api/msa5/nodes:0
+[    3987ms] [ERROR] fetch 호출 오류: TypeError: Failed to fetch
+    at _callee$ (webpack-internal:///./src/composables/msa5_useLifecycle.js:54:20)
+    at eval (webpack-internal:///./node_modules/@babel/runtime/helpers/esm/regeneratorRuntime.js:71:18)
+    at Generator.eval (webpack-internal:///./node_modules/@babel/runtime/helpers/esm/regenerator.js:77:51)
+    at Generator.eval [as next] (webpack-internal:///./node_modules/@babel/runtime/helpers/esm/regeneratorDefine.js:17:21)
+    at asyncGeneratorStep (webpack-internal:///./node_modules/@babel/runtime/helpers/esm/asyncToGenerator.js:9:17)
+    at _next (webpack-internal:///./node_modules/@babel/runtime/helpers/esm/asyncToGenerator.js:23:9)
+    at eval (webpack-internal:///./node_modules/@babel/runtime/helpers/esm/asyncToGenerator.js:28:7)
+    at new Promise (<anonymous>)
+    at eval (webpack-internal:///./node_modules/@babel/runtime/helpers/esm/asyncToGenerator.js:20:12)
+    at loadAvailableNodes (webpack-internal:///./src/composables/msa5_useLifecycle.js:123:19) @ webpack-internal:///./src/main.js:141
+[    3987ms] [ERROR] 오류 세부 정보: {name: TypeError, message: Failed to fetch, stack: TypeError: Failed to fetch
+    at _callee$ (webpac…///./src/composables/msa5_useLifecycle.js:123:19)} @ webpack-internal:///./src/main.js:141
+[    3994ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:8000/api/health:0
+[    3994ms] [ERROR] Server connection test failed: AxiosError: Request failed with status code 404
+    at settle (webpack-internal:///./node_modules/axios/lib/core/settle.js:25:7)
+    at XMLHttpRequest.onloadend (webpack-internal:///./node_modules/axios/lib/adapters/xhr.js:76:68)
+    at Axios.request (webpack-internal:///./node_modules/axios/lib/core/Axios.js:59:41) @ webpack-internal:///./src/main.js:141
